@@ -1,0 +1,164 @@
+# Project Instructions
+
+## Code Style
+
+- Always fully document every function with purpose, inputs and outputs, errors, etc.
+
+## Architecture
+
+- Keep business logic in service layers
+
+# High-level intent
+
+You are working in a production web application with both frontend and backend code.
+
+Always:
+- Prefer TypeScript on the JS/TS side.
+- Use strong typing, clear API boundaries, and explicit documentation for every exported symbol and HTTP endpoint.
+- Optimize for maintainability and readability over brevity.
+
+## Documentation requirements
+
+When creating or modifying code, ensure all **public or exported** items are documented:
+
+### 1. Functions / methods / class members
+
+Add a doc comment (`/** ... */` or language equivalent) that includes:
+- One-line summary of what it does.
+- `@param` for each argument: name, type, units or expected shape, and constraints.
+- `@returns` (or equivalent) with type and meaning.
+- `@throws` (if relevant) with conditions.
+- Note any important side-effects (I/O, DB writes, external calls).
+
+### 2. HTTP endpoints / RPC handlers
+
+Add a doc block near the handler or controller that specifies:
+- HTTP method and full route (e.g. `GET /api/users/:id`).
+- Authentication / authorization requirements.
+- Request schema: path params, query params, headers, body shape.
+- Response schema(s) with status codes and JSON structure.
+- Error model: common error codes and JSON error shape.
+- Idempotency and rate limiting considerations (if relevant).
+
+### 3. Modules / files
+
+At the top of complex modules, include a brief description of the module's purpose and how it fits into the rest of the system.
+
+### 4. When editing existing undocumented code
+
+- Add or improve doc comments as you touch the code.
+- If behavior is unclear, state assumptions and mark with a `TODO` in the comment.
+
+#### Example (TypeScript endpoint)
+
+```ts
+/**
+ * GET /api/users/:id
+ *
+ * Fetch a single user by ID.
+ *
+ * Auth:
+ * - Requires a valid session; user must be admin or requesting self.
+ *
+ * Request:
+ * - Path params:
+ *   - id: string (UUID of the user)
+ *
+ * Response:
+ * - 200: { id: string; email: string; createdAt: string; ... }
+ * - 404: { error: "USER_NOT_FOUND"; message: string }
+ * - 401: { error: "UNAUTHORIZED"; message: string }
+ */
+export async function getUserHandler(req: Request, res: Response) { ... }
+```
+
+## Backend best practices
+
+When working on backend code (APIs, services, jobs):
+
+### Layering
+
+- Keep routing/controllers thin.
+- Put business logic into services/use-cases.
+- Keep data access in repositories/DAOs with clear interfaces.
+
+### Types and schemas
+
+- Use runtime validation for inputs (e.g. Zod / Joi / Pydantic / serde types).
+- Define request/response DTOs or types and reuse them across layers.
+- Never rely on "any" / untyped objects at API boundaries.
+
+### Error handling
+
+- Prefer explicit error types or error codes.
+- Don't leak internal error messages or stack traces to clients.
+- Centralize HTTP error mapping where possible.
+
+### Side effects
+
+- Wrap DB and external calls in small, composable functions.
+- Make transaction boundaries explicit.
+- Ensure retries/backoff are safe and idempotent where applicable.
+
+### Security
+
+- Validate and sanitize all external input.
+- Enforce authz checks close to the business logic (not just at the router).
+- Avoid logging secrets, tokens, or sensitive PII.
+- For crypto / payments, never invent schemes; stick to existing libraries and patterns.
+
+## Frontend best practices
+
+When working on React/TSX or other frontend code:
+
+### Components
+
+- Prefer functional components with hooks.
+- Keep components small and focused; lift complex logic into hooks or services.
+- Document complex components with a short comment explaining:
+  - What data they expect.
+  - What side-effects they trigger (fetching, subscriptions, routing, etc.).
+
+### Props and state
+
+- Strongly type props and state.
+- Use discriminated unions for branching UI states (loading / error / empty / ready).
+- Avoid prop drilling; use composition or context when appropriate.
+
+### Data fetching
+
+- Centralize API calls in a small set of client utilities or hooks.
+- Type responses using shared DTOs from the backend when possible.
+- Handle loading, error, and empty states explicitly in the UI.
+
+### UX and accessibility
+
+- Use semantic HTML and ARIA attributes where needed.
+- Ensure interactive elements are keyboard accessible.
+- Preserve user feedback on async actions (spinners, toasts, disabled buttons, etc.).
+
+## Cross-cutting guidelines
+
+### Consistency
+
+- Match existing naming conventions, folder structure, and coding style.
+- Prefer clarity over cleverness in naming and control flow.
+
+### Testing
+
+For new logic-heavy functions/services, add at least minimal tests:
+- Happy-path unit tests.
+- Key edge cases and failure modes.
+- For endpoints, prefer tests that assert both status codes and response shapes.
+
+### Refactoring
+
+- When you touch messy code, opportunistically improve it (naming, structure, docs) if possible without changing behavior.
+- If a big refactor is needed, note it in a TODO with a short rationale.
+
+## What to do when unsure
+
+If requirements are ambiguous:
+- State assumptions explicitly in comments.
+- Prefer conservative, secure behavior.
+- Structure code so that future changes are easy (clear seams and interfaces).
