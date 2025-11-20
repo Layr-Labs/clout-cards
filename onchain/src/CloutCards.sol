@@ -66,10 +66,10 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     ///////////////////////////////////////////////////////////////////////////
 
     struct Table {
+        uint256 minimumBuyIn;            // The minimum buy-in amount for the table (in wei)
+        uint256 maximumBuyIn;            // The maximum buy-in amount for the table         
         bool    isActive;                // Whether the table is active (true) or not (false)
         uint8   maxSeats;                // The maximum number of seats at the table (1-8)
-        uint256 minimumBuyIn;            // The minimum buy-in amount for the table (in wei)
-        uint256 maximumBuyIn;            // The maximum buy-in amount for the table
         uint16  perHandRake;             // The rake percentage for each hand (0-10000)
         mapping(uint8 seatNumber => address seatOwner) seats; // The seats at the table (1-8)
     }
