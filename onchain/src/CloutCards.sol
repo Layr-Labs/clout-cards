@@ -221,7 +221,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @dev Throws if called by any account other than the house
      */
     modifier onlyHouse() {
-        require(msg.sender == house, UnauthorizedHouse(msg.sender));
+        if (msg.sender != house) revert UnauthorizedHouse(msg.sender);
         _;
     }
 
@@ -263,7 +263,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     function initialize(address initialOwner, address house_) public initializer {
         __Ownable_init(initialOwner);
         __EIP712_init("CloutCards", "1");
-        require(house_ != address(0), InvalidHouseAddress(address(0)));
+        if (house_ == address(0)) revert InvalidHouseAddress(address(0));
         house = house_;
         emit CloutCardsInitialized(initialOwner, house_);
     }
@@ -308,14 +308,14 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         uint256 bigBlind,
         uint16 perHandRake
     ) public onlyHouse {
-        require(maxSeats >= 1 && maxSeats <= 8, InvalidMaxSeats(maxSeats));
-        require(minimumBuyIn > 0, InvalidMinimumBuyIn(minimumBuyIn));
-        require(minimumBuyIn <= maximumBuyIn, InvalidBuyInRange(minimumBuyIn, maximumBuyIn));
-        require(smallBlind > 0, InvalidSmallBlind(smallBlind));
-        require(smallBlind <= bigBlind, InvalidBlindRange(smallBlind, bigBlind));
-        require(bigBlind <= maximumBuyIn, BigBlindExceedsMaxBuyIn(bigBlind, maximumBuyIn));
-        require(perHandRake <= 10000, InvalidRakePercentage(perHandRake));
-        require(!tables[tableId].isActive, TableAlreadyExists(tableId));
+        if (maxSeats < 1 || maxSeats > 8) revert InvalidMaxSeats(maxSeats);
+        if (minimumBuyIn == 0) revert InvalidMinimumBuyIn(minimumBuyIn);
+        if (minimumBuyIn > maximumBuyIn) revert InvalidBuyInRange(minimumBuyIn, maximumBuyIn);
+        if (smallBlind == 0) revert InvalidSmallBlind(smallBlind);
+        if (smallBlind > bigBlind) revert InvalidBlindRange(smallBlind, bigBlind);
+        if (bigBlind > maximumBuyIn) revert BigBlindExceedsMaxBuyIn(bigBlind, maximumBuyIn);
+        if (perHandRake > 10000) revert InvalidRakePercentage(perHandRake);
+        if (tables[tableId].isActive) revert TableAlreadyExists(tableId);
 
         Table storage table = tables[tableId];
         table.isActive = true;
@@ -344,7 +344,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * Emits a {HouseUpdated} event.
      */
     function setHouse(address newHouse) public onlyOwner {
-        require(newHouse != address(0), InvalidHouseAddress(address(0)));
+        if (newHouse == address(0)) revert InvalidHouseAddress(address(0));
         address oldHouse = house;
         house = newHouse;
         emit HouseUpdated(oldHouse, newHouse, msg.sender);
@@ -370,7 +370,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      */
     function setTableState(uint256 tableId, bool isActive) public onlyHouse {
         Table storage t = tables[tableId];
-        require(t.maxSeats != 0, TableDoesNotExist(tableId));
+        if (t.maxSeats == 0) revert TableDoesNotExist(tableId);
         bool previousState = t.isActive;
         t.isActive = isActive;
         emit TableStateChanged(tableId, previousState, isActive, msg.sender);
@@ -479,21 +479,22 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         bytes32 s
     ) external payable {
         Table storage t = tables[tableId];
-        require(t.isActive, TableNotActive(tableId));
-        require(seatIndex < t.maxSeats, InvalidSeatIndex(seatIndex, t.maxSeats));
-        require(block.timestamp <= expiry, SitSignatureExpired(expiry, block.timestamp));
+        if (!t.isActive) revert TableNotActive(tableId);
+        if (seatIndex >= t.maxSeats) revert InvalidSeatIndex(seatIndex, t.maxSeats);
+        if (block.timestamp > expiry) revert SitSignatureExpired(expiry, block.timestamp);
 
-        require(
-            msg.value >= t.minimumBuyIn && msg.value <= t.maximumBuyIn,
-            InvalidBuyInAmount(msg.value, t.minimumBuyIn, t.maximumBuyIn)
-        );
+        if (msg.value < t.minimumBuyIn || msg.value > t.maximumBuyIn) {
+            revert InvalidBuyInAmount(msg.value, t.minimumBuyIn, t.maximumBuyIn);
+        }
 
         bytes32 digest = computeSitDigest(tableId, seatIndex, msg.sender, expiry);
 
         address recovered = ECDSA.recover(digest, v, r, s);
-        require(recovered == house, InvalidSitSignature(recovered, house));
+        if (recovered != house) revert InvalidSitSignature(recovered, house);
 
-        require(t.seats[seatIndex] == prevPlayer, SeatChanged(seatIndex, prevPlayer, t.seats[seatIndex]));
+        if (t.seats[seatIndex] != prevPlayer) {
+            revert SeatChanged(seatIndex, prevPlayer, t.seats[seatIndex]);
+        }
         t.seats[seatIndex] = msg.sender;
     }
 
