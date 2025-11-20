@@ -52,6 +52,11 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InvalidBuyInRange(uint256 minimumBuyIn, uint256 maximumBuyIn);
 
     /**
+     * @dev The big blind is larger than the maximum buy-in
+     */
+    error BigBlindExceedsMaxBuyIn(uint256 bigBlind, uint256 maximumBuyIn);
+
+    /**
      * @dev The rake percentage is invalid (must be between 0 and 10000)
      */
     error InvalidRakePercentage(uint16 perHandRake);
@@ -60,6 +65,16 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @dev The table already exists
      */
     error TableAlreadyExists(uint256 tableId);
+
+    /**
+     * @dev The small blind is zero or invalid
+     */
+    error InvalidSmallBlind(uint256 smallBlind);
+
+    /**
+     * @dev The blind range is invalid (small blind must be <= big blind)
+     */
+    error InvalidBlindRange(uint256 smallBlind, uint256 bigBlind);
 
     ///////////////////////////////////////////////////////////////////////////
     // 2) Events
@@ -86,6 +101,8 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @param maxSeats The maximum number of seats at the table
      * @param minimumBuyIn The minimum buy-in amount for the table
      * @param maximumBuyIn The maximum buy-in amount for the table
+     * @param smallBlind The small blind amount for the table
+     * @param bigBlind The big blind amount for the table
      * @param perHandRake The rake percentage for each hand
      */
     event TableCreated(
@@ -93,6 +110,8 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint8 maxSeats,
         uint256 minimumBuyIn,
         uint256 maximumBuyIn,
+        uint256 smallBlind,
+        uint256 bigBlind,
         uint16 perHandRake
     );
 
@@ -103,6 +122,8 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     struct Table {
         uint256 minimumBuyIn;            // The minimum buy-in amount for the table (in wei)
         uint256 maximumBuyIn;            // The maximum buy-in amount for the table         
+        uint256 smallBlind;              // The small blind amount for the table (in wei)
+        uint256 bigBlind;                // The big blind amount for the table (in wei)
         bool    isActive;                // Whether the table is active (true) or not (false)
         uint8   maxSeats;                // The maximum number of seats at the table (1-8)
         uint16  perHandRake;             // The rake percentage for each hand (0-10000)
@@ -125,6 +146,13 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @notice The key is the table ID, and the value is the table struct
      */
     mapping(uint256 tableId => Table table) tables;
+
+    /**
+     * @dev The next withdrawal nonce for each player
+     * @notice This mapping stores the next withdrawal nonce for each player
+     * @notice The key is the player address, and the value is the next withdrawal nonce
+     */
+    mapping(address player => uint256 nonce) public nextWithdrawalNonce;
 
     ///////////////////////////////////////////////////////////////////////////
     // 5) Modifiers
@@ -190,6 +218,8 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @param maxSeats The maximum number of seats at the table (1-8)
      * @param minimumBuyIn The minimum buy-in amount for the table (in wei)
      * @param maximumBuyIn The maximum buy-in amount for the table (in wei)
+     * @param smallBlind The small blind amount for the table (in wei)
+     * @param bigBlind The big blind amount for the table (in wei)
      * @param perHandRake The rake percentage for each hand (0-10000, where 10000 = 100%)
      *
      * Requirements:
@@ -198,6 +228,9 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * - `maxSeats` must be between 1 and 8
      * - `minimumBuyIn` must be greater than zero
      * - `minimumBuyIn` must be less than or equal to `maximumBuyIn`
+     * - `smallBlind` must be greater than zero
+     * - `smallBlind` must be less than or equal to `bigBlind`
+     * - `bigBlind` must be less than or equal to `maximumBuyIn`
      * - `perHandRake` must be between 0 and 10000
      *
      * Emits a {TableCreated} event.
@@ -207,11 +240,16 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint8 maxSeats,
         uint256 minimumBuyIn,
         uint256 maximumBuyIn,
+        uint256 smallBlind,
+        uint256 bigBlind,
         uint16 perHandRake
     ) public onlyHouse {
         require(maxSeats >= 1 && maxSeats <= 8, InvalidMaxSeats(maxSeats));
         require(minimumBuyIn > 0, InvalidMinimumBuyIn(minimumBuyIn));
         require(minimumBuyIn <= maximumBuyIn, InvalidBuyInRange(minimumBuyIn, maximumBuyIn));
+        require(smallBlind > 0, InvalidSmallBlind(smallBlind));
+        require(smallBlind <= bigBlind, InvalidBlindRange(smallBlind, bigBlind));
+        require(bigBlind <= maximumBuyIn, BigBlindExceedsMaxBuyIn(bigBlind, maximumBuyIn));
         require(perHandRake <= 10000, InvalidRakePercentage(perHandRake));
         require(!tables[tableId].isActive, TableAlreadyExists(tableId));
 
@@ -220,9 +258,11 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         table.maxSeats = maxSeats;
         table.minimumBuyIn = minimumBuyIn;
         table.maximumBuyIn = maximumBuyIn;
+        table.smallBlind = smallBlind;
+        table.bigBlind = bigBlind;
         table.perHandRake = perHandRake;
 
-        emit TableCreated(tableId, maxSeats, minimumBuyIn, maximumBuyIn, perHandRake);
+        emit TableCreated(tableId, maxSeats, minimumBuyIn, maximumBuyIn, smallBlind, bigBlind, perHandRake);
     }
 
     /**
