@@ -23,7 +23,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     
     ///////////////////////////////////////////////////////////////////////////
-    // Errors
+    // 1) Errors
     ///////////////////////////////////////////////////////////////////////////
 
     /**
@@ -62,37 +62,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error TableAlreadyExists(uint256 tableId);
 
     ///////////////////////////////////////////////////////////////////////////
-    // Structs
-    ///////////////////////////////////////////////////////////////////////////
-
-    struct Table {
-        uint256 minimumBuyIn;            // The minimum buy-in amount for the table (in wei)
-        uint256 maximumBuyIn;            // The maximum buy-in amount for the table         
-        bool    isActive;                // Whether the table is active (true) or not (false)
-        uint8   maxSeats;                // The maximum number of seats at the table (1-8)
-        uint16  perHandRake;             // The rake percentage for each hand (0-10000)
-        mapping(uint8 seatNumber => address seatOwner) seats; // The seats at the table (1-8)
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    // State Variables
-    ///////////////////////////////////////////////////////////////////////////
-
-    /**
-     * @dev The public address of the TEE (Trusted Execution Environment) authorizer
-     * @notice This address represents the "house" that authorizes certain operations
-     */
-    address public house;
-
-    /**
-     * @dev The tables at the casino
-     * @notice This mapping stores the tables at the casino
-     * @notice The key is the table ID, and the value is the table struct
-     */
-    mapping(uint256 tableId => Table table) tables; // The tables at the casino
-
-    ///////////////////////////////////////////////////////////////////////////
-    // Events
+    // 2) Events
     ///////////////////////////////////////////////////////////////////////////
 
     /**
@@ -127,7 +97,49 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     );
 
     ///////////////////////////////////////////////////////////////////////////
-    // Constructor
+    // 3) Structs/Enums
+    ///////////////////////////////////////////////////////////////////////////
+
+    struct Table {
+        uint256 minimumBuyIn;            // The minimum buy-in amount for the table (in wei)
+        uint256 maximumBuyIn;            // The maximum buy-in amount for the table         
+        bool    isActive;                // Whether the table is active (true) or not (false)
+        uint8   maxSeats;                // The maximum number of seats at the table (1-8)
+        uint16  perHandRake;             // The rake percentage for each hand (0-10000)
+        mapping(uint8 seatNumber => address seatOwner) seats; // The seats at the table (1-8)
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // 4) Storage Variables
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @dev The public address of the TEE (Trusted Execution Environment) authorizer
+     * @notice This address represents the "house" that authorizes certain operations
+     */
+    address public house;
+
+    /**
+     * @dev The tables at the casino
+     * @notice This mapping stores the tables at the casino
+     * @notice The key is the table ID, and the value is the table struct
+     */
+    mapping(uint256 tableId => Table table) tables;
+
+    ///////////////////////////////////////////////////////////////////////////
+    // 5) Modifiers
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @dev Throws if called by any account other than the house
+     */
+    modifier onlyHouse() {
+        require(msg.sender == house, UnauthorizedHouse(msg.sender));
+        _;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // 6) Constructor and Initializer
     ///////////////////////////////////////////////////////////////////////////
 
     /**
@@ -165,19 +177,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     ///////////////////////////////////////////////////////////////////////////
-    // Modifiers
-    ///////////////////////////////////////////////////////////////////////////
-
-    /**
-     * @dev Throws if called by any account other than the house
-     */
-    modifier onlyHouse() {
-        require(msg.sender == house, UnauthorizedHouse(msg.sender));
-        _;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    // Functions
+    // 7) External/Public Functions
     ///////////////////////////////////////////////////////////////////////////
 
     /**
@@ -246,6 +246,10 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit HouseUpdated(oldHouse, newHouse, msg.sender);
     }
 
+    ///////////////////////////////////////////////////////////////////////////
+    // 8) Internal/Private Functions
+    ///////////////////////////////////////////////////////////////////////////
+
     /**
      * @dev Authorizes an upgrade to a new implementation
      *
@@ -266,4 +270,3 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(newImplementation != address(0), "CloutCards: invalid implementation");
     }
 }
-
