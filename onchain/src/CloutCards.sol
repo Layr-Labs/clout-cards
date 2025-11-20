@@ -57,6 +57,26 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error BigBlindExceedsMaxBuyIn(uint256 bigBlind, uint256 maximumBuyIn);
 
     /**
+     * @dev The sit signature has expired
+     */
+    error SitSignatureExpired(uint256 expiry, uint256 currentTimestamp);
+
+    /**
+     * @dev The sit signature is invalid (not signed by house)
+     */
+    error InvalidSitSignature(address recovered, address house);
+
+    /**
+     * @dev The seat has changed since the signature was created
+     */
+    error SeatChanged(uint8 seatIndex, address expectedPlayer, address currentPlayer);
+
+    /**
+     * @dev The buy-in amount is invalid (must be between minimumBuyIn and maximumBuyIn)
+     */
+    error InvalidBuyInAmount(uint256 providedAmount, uint256 minimumBuyIn, uint256 maximumBuyIn);
+
+    /**
      * @dev The rake percentage is invalid (must be between 0 and 10000)
      */
     error InvalidRakePercentage(uint16 perHandRake);
@@ -284,6 +304,121 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address oldHouse = house;
         house = newHouse;
         emit HouseUpdated(oldHouse, newHouse, msg.sender);
+    }
+
+    /**
+     * @dev Computes the digest for a sit signature
+     *
+     * This function allows external sources (frontends, RPC clients) to compute
+     * the exact digest that will be used for signature verification. This enables
+     * clients to craft the signature off-chain and verify it matches before submitting.
+     *
+     * The function reads the current seat occupant from storage, so the digest
+     * reflects the actual state of the seat at the time of computation.
+     *
+     * @param tableId The unique identifier for the table
+     * @param seatIndex The seat number (1-8) the player wants to sit at
+     * @param player The address of the player who will sit
+     * @param expiry The timestamp when the signature expires
+     *
+     * @return The keccak256 digest that should be signed by the house
+     *
+     * @notice The digest includes chainid and contract address to prevent replay attacks
+     *         across different chains or contract deployments
+     * @notice The digest uses the current seat occupant from storage (address(0) if empty)
+     */
+    function computeSitDigest(
+        uint256 tableId,
+        uint8 seatIndex,
+        address player,
+        uint256 expiry
+    ) public view returns (bytes32) {
+        address prevPlayer = tables[tableId].seats[seatIndex];
+        return keccak256(
+            abi.encode(
+                "CloutCardsSit",
+                block.chainid,
+                address(this),
+                tableId,
+                seatIndex,
+                player,
+                prevPlayer,
+                expiry
+            )
+        );
+    }
+
+    /**
+     * @dev Allows a player to sit at a table seat
+     *
+     * This function enables a player to claim a seat at a table. The player must provide
+     * a valid signature from the house (TEE) authorizing the sit action. The signature
+     * includes protection against replay attacks (chainid, contract address, expiry)
+     * and prevents race conditions (prevPlayer check).
+     *
+     * Presumably, the TEE will only provide the signature if a user can sit there,
+     * even if the onchain contract thinks the seat is taken. The TEE knows if that player
+     * has stood up and left the table, so semantically the user can use the signature to
+     * "punch out" the existing player - because the TEE knows the seat is empty.
+     *
+     * The player must send ETH with the transaction equal to their buy-in amount.
+     * The buy-in amount must be within the table's minimumBuyIn and maximumBuyIn range.
+     *
+     * @param tableId The unique identifier for the table
+     * @param seatIndex The seat number (1-8) the player wants to sit at
+     * @param prevPlayer The address of the player currently in the seat (or address(0) if empty)
+     * @param expiry The timestamp when the signature expires
+     * @param v The recovery byte of the signature
+     * @param r The r component of the signature
+     * @param s The s component of the signature
+     *
+     * Requirements:
+     * - Signature must not be expired (block.timestamp <= expiry)
+     * - Signature must be valid and signed by the house
+     * - The seat must match the expected previous player (prevPlayer check prevents race conditions)
+     * - Table must exist and be active
+     * - msg.value must be >= table.minimumBuyIn and <= table.maximumBuyIn
+     *
+     * Errors:
+     * - {SitSignatureExpired} - If the signature has expired
+     * - {InvalidSitSignature} - If the signature is invalid or not signed by house
+     * - {SeatChanged} - If the seat has changed since the signature was created
+     * - {InvalidBuyInAmount} - If the provided ETH amount is not within the table's buy-in range
+     *
+     * Side effects:
+     * - Updates the seat mapping to assign the seat to msg.sender
+     * - Accepts ETH payment (via payable modifier) as the player's buy-in
+     * - The ETH is held by the contract and represents the player's chip stack
+     *
+     * @notice Players can call computeSitDigest() via RPC to get the digest before signing
+     * @notice The prevPlayer check ensures atomic seat assignment and prevents double-sitting
+     * @notice computeSitDigest() reads prevPlayer from storage automatically, but sit() still
+     *         requires it as a parameter to verify the seat hasn't changed between digest computation and execution
+     */
+    function sit(
+        uint256 tableId,
+        uint8 seatIndex,
+        address prevPlayer,
+        uint256 expiry,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external payable {
+        Table storage t = tables[tableId];
+        require(block.timestamp <= expiry, SitSignatureExpired(expiry, block.timestamp));
+
+        require(
+            msg.value >= t.minimumBuyIn && msg.value <= t.maximumBuyIn,
+            InvalidBuyInAmount(msg.value, t.minimumBuyIn, t.maximumBuyIn)
+        );
+
+        bytes32 digest = computeSitDigest(tableId, seatIndex, msg.sender, expiry);
+
+        address recovered = ecrecover(digest, v, r, s);
+        require(recovered == house, InvalidSitSignature(recovered, house));
+
+        require(t.seats[seatIndex] == prevPlayer, SeatChanged(seatIndex, prevPlayer, t.seats[seatIndex]));
+        t.seats[seatIndex] = msg.sender;
     }
 
     ///////////////////////////////////////////////////////////////////////////
