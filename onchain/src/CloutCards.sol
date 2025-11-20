@@ -31,11 +31,42 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      */
     error InvalidHouseAddress(address house);
 
+    /**
+     * @dev The caller is not authorized to perform this operation (not the house)
+     */
+    error UnauthorizedHouse(address caller);
+
+    /**
+     * @dev The maximum seats value is invalid (must be between 1 and 8)
+     */
+    error InvalidMaxSeats(uint8 maxSeats);
+
+    /**
+     * @dev The minimum buy-in is zero or invalid
+     */
+    error InvalidMinimumBuyIn(uint256 minimumBuyIn);
+
+    /**
+     * @dev The buy-in range is invalid (minimum must be <= maximum)
+     */
+    error InvalidBuyInRange(uint256 minimumBuyIn, uint256 maximumBuyIn);
+
+    /**
+     * @dev The rake percentage is invalid (must be between 0 and 10000)
+     */
+    error InvalidRakePercentage(uint16 perHandRake);
+
+    /**
+     * @dev The table already exists
+     */
+    error TableAlreadyExists(uint256 tableId);
+
     ///////////////////////////////////////////////////////////////////////////
     // Structs
     ///////////////////////////////////////////////////////////////////////////
 
     struct Table {
+        bool    isActive;                // Whether the table is active (true) or not (false)
         uint8   maxSeats;                // The maximum number of seats at the table (1-8)
         uint256 minimumBuyIn;            // The minimum buy-in amount for the table (in wei)
         uint256 maximumBuyIn;            // The maximum buy-in amount for the table
@@ -79,6 +110,22 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      */
     event HouseUpdated(address indexed previousHouse, address indexed newHouse, address indexed owner);
 
+    /**
+     * @dev Emitted when a new table is created
+     * @param tableId The unique identifier for the table
+     * @param maxSeats The maximum number of seats at the table
+     * @param minimumBuyIn The minimum buy-in amount for the table
+     * @param maximumBuyIn The maximum buy-in amount for the table
+     * @param perHandRake The rake percentage for each hand
+     */
+    event TableCreated(
+        uint256 indexed tableId,
+        uint8 maxSeats,
+        uint256 minimumBuyIn,
+        uint256 maximumBuyIn,
+        uint16 perHandRake
+    );
+
     ///////////////////////////////////////////////////////////////////////////
     // Constructor
     ///////////////////////////////////////////////////////////////////////////
@@ -118,8 +165,65 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     ///////////////////////////////////////////////////////////////////////////
+    // Modifiers
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @dev Throws if called by any account other than the house
+     */
+    modifier onlyHouse() {
+        require(msg.sender == house, UnauthorizedHouse(msg.sender));
+        _;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
     // Functions
     ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @dev Creates a new table
+     *
+     * Allows the house to create a new table with specified configuration.
+     * The table is initialized as active and ready for players to join.
+     *
+     * @param tableId The unique identifier for the table
+     * @param maxSeats The maximum number of seats at the table (1-8)
+     * @param minimumBuyIn The minimum buy-in amount for the table (in wei)
+     * @param maximumBuyIn The maximum buy-in amount for the table (in wei)
+     * @param perHandRake The rake percentage for each hand (0-10000, where 10000 = 100%)
+     *
+     * Requirements:
+     * - Caller must be the house (enforced by `onlyHouse` modifier)
+     * - `tableId` must not already exist
+     * - `maxSeats` must be between 1 and 8
+     * - `minimumBuyIn` must be greater than zero
+     * - `minimumBuyIn` must be less than or equal to `maximumBuyIn`
+     * - `perHandRake` must be between 0 and 10000
+     *
+     * Emits a {TableCreated} event.
+     */
+    function createTable(
+        uint256 tableId,
+        uint8 maxSeats,
+        uint256 minimumBuyIn,
+        uint256 maximumBuyIn,
+        uint16 perHandRake
+    ) public onlyHouse {
+        require(maxSeats >= 1 && maxSeats <= 8, InvalidMaxSeats(maxSeats));
+        require(minimumBuyIn > 0, InvalidMinimumBuyIn(minimumBuyIn));
+        require(minimumBuyIn <= maximumBuyIn, InvalidBuyInRange(minimumBuyIn, maximumBuyIn));
+        require(perHandRake <= 10000, InvalidRakePercentage(perHandRake));
+        require(!tables[tableId].isActive, TableAlreadyExists(tableId));
+
+        Table storage table = tables[tableId];
+        table.isActive = true;
+        table.maxSeats = maxSeats;
+        table.minimumBuyIn = minimumBuyIn;
+        table.maximumBuyIn = maximumBuyIn;
+        table.perHandRake = perHandRake;
+
+        emit TableCreated(tableId, maxSeats, minimumBuyIn, maximumBuyIn, perHandRake);
+    }
 
     /**
      * @dev Updates the house address
