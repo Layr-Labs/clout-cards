@@ -77,6 +77,11 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InvalidBuyInAmount(uint256 providedAmount, uint256 minimumBuyIn, uint256 maximumBuyIn);
 
     /**
+     * @dev The table is not active
+     */
+    error TableNotActive(uint256 tableId);
+
+    /**
      * @dev The rake percentage is invalid (must be between 0 and 10000)
      */
     error InvalidRakePercentage(uint16 perHandRake);
@@ -133,6 +138,20 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 smallBlind,
         uint256 bigBlind,
         uint16 perHandRake
+    );
+
+    /**
+     * @dev Emitted when a table's active state is changed
+     * @param tableId The unique identifier for the table
+     * @param previousState The previous active state of the table
+     * @param newState The new active state of the table
+     * @param house The address of the house that changed the state
+     */
+    event TableStateChanged(
+        uint256 indexed tableId,
+        bool previousState,
+        bool newState,
+        address indexed house
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -307,6 +326,28 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /**
+     * @dev Sets the active state of a table
+     *
+     * Allows the house to activate or deactivate a table. When active, players can sit at the table.
+     * When inactive, new players cannot sit, but existing players remain seated.
+     *
+     * @param tableId The unique identifier for the table
+     * @param isActive The desired active state (true to activate, false to deactivate)
+     *
+     * Requirements:
+     * - Caller must be the house (enforced by `onlyHouse` modifier)
+     * - Table must exist (created via `createTable`)
+     *
+     * Emits a {TableStateChanged} event with the previous and new state.
+     */
+    function setTableState(uint256 tableId, bool isActive) public onlyHouse {
+        Table storage t = tables[tableId];
+        bool previousState = t.isActive;
+        t.isActive = isActive;
+        emit TableStateChanged(tableId, previousState, isActive, msg.sender);
+    }
+
+    /**
      * @dev Computes the digest for a sit signature
      *
      * This function allows external sources (frontends, RPC clients) to compute
@@ -373,13 +414,14 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @param s The s component of the signature
      *
      * Requirements:
+     * - Table must be active
      * - Signature must not be expired (block.timestamp <= expiry)
      * - Signature must be valid and signed by the house
      * - The seat must match the expected previous player (prevPlayer check prevents race conditions)
-     * - Table must exist and be active
      * - msg.value must be >= table.minimumBuyIn and <= table.maximumBuyIn
      *
      * Errors:
+     * - {TableNotActive} - If the table is not active
      * - {SitSignatureExpired} - If the signature has expired
      * - {InvalidSitSignature} - If the signature is invalid or not signed by house
      * - {SeatChanged} - If the seat has changed since the signature was created
@@ -405,6 +447,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bytes32 s
     ) external payable {
         Table storage t = tables[tableId];
+        require(t.isActive, TableNotActive(tableId));
         require(block.timestamp <= expiry, SitSignatureExpired(expiry, block.timestamp));
 
         require(
