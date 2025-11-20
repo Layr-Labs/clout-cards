@@ -10,6 +10,14 @@ eigenx
 /bin/
 /out/
 
+# Foundry / Forge
+# Build artifacts and cache
+**/out/
+**/cache/
+**/broadcast/
+**/.forge/
+# Note: onchain/lib/ contains git submodules and should be tracked
+
 # Dependency directories (if you're not committing vendor)
 vendor/
 
