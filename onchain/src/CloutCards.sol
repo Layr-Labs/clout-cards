@@ -428,7 +428,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         if (smallBlind > bigBlind) revert InvalidBlindRange(smallBlind, bigBlind);
         if (bigBlind > maximumBuyIn) revert BigBlindExceedsMaxBuyIn(bigBlind, maximumBuyIn);
         if (perHandRake > 10000) revert InvalidRakePercentage(perHandRake);
-        if (tables[tableId].isActive) revert TableAlreadyExists(tableId);
+        if (tables[tableId].maxSeats != 0) revert TableAlreadyExists(tableId);
 
         Table storage table = tables[tableId];
         table.isActive = true;
