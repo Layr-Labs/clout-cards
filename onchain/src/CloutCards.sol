@@ -105,6 +105,11 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     error TableDoesNotExist(uint256 tableId);
 
     /**
+     * @dev The implementation address is invalid (zero address)
+     */
+    error InvalidImplementation(address implementation);
+
+    /**
      * @dev The small blind is zero or invalid
      */
     error InvalidSmallBlind(uint256 smallBlind);
@@ -113,6 +118,36 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @dev The blind range is invalid (small blind must be <= big blind)
      */
     error InvalidBlindRange(uint256 smallBlind, uint256 bigBlind);
+
+        /**
+     * @dev The caller is not the current owner of the seat
+     */
+    error NotSeatOwner(uint256 tableId, uint8 seatIndex, address caller, address seatOwner);
+
+    /**
+     * @dev The withdrawal signature has expired
+     */
+    error WithdrawalSignatureExpired(uint256 expiry, uint256 currentTimestamp);
+
+    /**
+     * @dev The withdrawal signature is invalid (not signed by house)
+     */
+    error InvalidWithdrawalSignature(address recovered, address house);
+
+    /**
+     * @dev The withdrawal nonce is invalid
+     */
+    error InvalidWithdrawalNonce(address player, uint256 expectedNonce, uint256 providedNonce);
+
+    /**
+     * @dev The withdrawal amount is invalid (must be > 0)
+     */
+    error InvalidWithdrawalAmount(uint256 amount);
+
+    /**
+     * @dev The withdrawal recipient address is invalid (zero address)
+     */
+    error InvalidWithdrawalRecipient(address to);
 
     ///////////////////////////////////////////////////////////////////////////
     // 2) Events
@@ -167,6 +202,50 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         address indexed house
     );
 
+    /**
+     * @dev Emitted when a player sits at a table
+     * @param tableId The unique identifier for the table
+     * @param seatIndex The seat index the player sat at (0 to maxSeats-1)
+     * @param player The address of the player who sat down
+     * @param prevPlayer The address of the previous player in the seat (address(0) if empty)
+     * @param amount The buy-in amount (in wei) the player deposited
+     */
+    event PlayerSat(
+        uint256 indexed tableId,
+        uint8 indexed seatIndex,
+        address indexed player,
+        address prevPlayer,
+        uint256 amount
+    );
+
+    /**
+     * @dev Emitted when a player stands up from a table seat
+     * @param tableId The unique identifier for the table
+     * @param seatIndex The seat index the player stood up from
+     * @param player The address of the player who stood up
+     * @param timestamp The block timestamp when the player stood up
+     */
+    event PlayerStood(
+        uint256 indexed tableId,
+        uint8 indexed seatIndex,
+        address indexed player,
+        uint256 timestamp
+    );
+
+    /**
+     * @dev Emitted when a withdrawal is executed
+     * @param player The logical player identity whose escrow is being withdrawn
+     * @param to The recipient address of the withdrawal
+     * @param amount The amount of ETH withdrawn (in wei)
+     * @param nonce The withdrawal nonce used
+     */
+    event WithdrawalExecuted(
+        address indexed player,
+        address indexed to,
+        uint256 amount,
+        uint256 nonce
+    );
+
     ///////////////////////////////////////////////////////////////////////////
     // 3) Structs/Enums
     ///////////////////////////////////////////////////////////////////////////
@@ -193,6 +272,12 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     bytes32 private constant SIT_TYPEHASH =
         keccak256("Sit(uint256 tableId,uint8 seatIndex,address player,address prevPlayer,uint256 expiry)");
 
+     /**
+     * @dev The typehash for the Withdraw struct used in EIP-712 signing
+     * @notice Must match: Withdraw(address player,address to,uint256 amount,uint256 nonce,uint256 expiry)
+     */
+    bytes32 private constant WITHDRAW_TYPEHASH =
+        keccak256("Withdraw(address player,address to,uint256 amount,uint256 nonce,uint256 expiry)");
     /**
      * @dev The public address of the TEE (Trusted Execution Environment) authorizer
      * @notice This address represents the "house" that authorizes certain operations
@@ -259,6 +344,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @notice The EIP-712 domain is initialized with name "CloutCards" and version "1".
      *         The chain ID is automatically included from `block.chainid` by the EIP712Upgradeable contract,
      *         so signatures are automatically chain-specific and prevent cross-chain replay attacks.
+     * @notice UUPSUpgradeable does not require initialization as it is stateless.
      */
     function initialize(address initialOwner, address house_) public initializer {
         __Ownable_init(initialOwner);
@@ -397,6 +483,16 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      *         to prevent replay attacks across different chains or contract deployments
      * @notice The digest uses the current seat occupant from storage (address(0) if empty)
      * @notice This function is EIP-712 compliant and can be used with eth_signTypedDataV4
+     *
+     * Requirements:
+     * - Table must exist (created via `createTable`) - validated via `_validateTableAndSeat()`
+     * - Table must be active - validated via `_validateTableAndSeat()`
+     * - seatIndex must be between 0 and table.maxSeats - 1 (inclusive) - validated via `_validateTableAndSeat()`
+     *
+     * Errors:
+     * - {TableDoesNotExist} - If the table does not exist (maxSeats is zero)
+     * - {TableNotActive} - If the table is not active
+     * - {InvalidSeatIndex} - If the seatIndex is out of range
      */
     function computeSitDigest(
         uint256 tableId,
@@ -404,18 +500,9 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         address player,
         uint256 expiry
     ) public view returns (bytes32) {
+        _validateTableAndSeat(tableId, seatIndex);
         address prevPlayer = tables[tableId].seats[seatIndex];
-        bytes32 structHash = keccak256(
-            abi.encode(
-                SIT_TYPEHASH,
-                tableId,
-                seatIndex,
-                player,
-                prevPlayer,
-                expiry
-            )
-        );
-        return _hashTypedDataV4(structHash);
+        return _computeSitDigest(tableId, seatIndex, player, prevPlayer, expiry);
     }
 
     /**
@@ -443,14 +530,16 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @param s The s component of the signature
      *
      * Requirements:
-     * - Table must be active
-     * - seatIndex must be between 0 and table.maxSeats - 1 (inclusive)
+     * - Table must exist (created via `createTable`) - validated via `_validateTableAndSeat()`
+     * - Table must be active - validated via `_validateTableAndSeat()`
+     * - seatIndex must be between 0 and table.maxSeats - 1 (inclusive) - validated via `_validateTableAndSeat()`
      * - Signature must not be expired (block.timestamp <= expiry)
      * - Signature must be valid and signed by the house
      * - The seat must match the expected previous player (prevPlayer check prevents race conditions)
      * - msg.value must be >= table.minimumBuyIn and <= table.maximumBuyIn
      *
      * Errors:
+     * - {TableDoesNotExist} - If the table does not exist (maxSeats is zero)
      * - {TableNotActive} - If the table is not active
      * - {InvalidSeatIndex} - If the seatIndex is out of range
      * - {SitSignatureExpired} - If the signature has expired
@@ -463,10 +552,13 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * - Accepts ETH payment (via payable modifier) as the player's buy-in
      * - The ETH is held by the contract and represents the player's chip stack
      *
+     * Emits a {PlayerSat} event.
+     *
      * @notice Players can call computeSitDigest() via RPC to get the EIP-712 digest before signing
-     * @notice The prevPlayer check ensures atomic seat assignment and prevents double-sitting
-     * @notice computeSitDigest() reads prevPlayer from storage automatically, but sit() still
-     *         requires it as a parameter to verify the seat hasn't changed between digest computation and execution
+     * @notice The prevPlayer parameter is used to compute the digest for signature verification.
+     *         This ensures the signature was created with the expected seat state.
+     * @notice The prevPlayer check after signature verification ensures atomic seat assignment
+     *         and prevents double-sitting by verifying the seat hasn't changed since the signature was created
      * @notice This function uses EIP-712 compliant signature verification via ECDSA.recover
      */
     function sit(
@@ -479,15 +571,14 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         bytes32 s
     ) external payable {
         Table storage t = tables[tableId];
-        if (!t.isActive) revert TableNotActive(tableId);
-        if (seatIndex >= t.maxSeats) revert InvalidSeatIndex(seatIndex, t.maxSeats);
+        _validateTableAndSeat(tableId, seatIndex);
         if (block.timestamp > expiry) revert SitSignatureExpired(expiry, block.timestamp);
 
         if (msg.value < t.minimumBuyIn || msg.value > t.maximumBuyIn) {
             revert InvalidBuyInAmount(msg.value, t.minimumBuyIn, t.maximumBuyIn);
         }
 
-        bytes32 digest = computeSitDigest(tableId, seatIndex, msg.sender, expiry);
+        bytes32 digest = _computeSitDigest(tableId, seatIndex, msg.sender, prevPlayer, expiry);
 
         address recovered = ECDSA.recover(digest, v, r, s);
         if (recovered != house) revert InvalidSitSignature(recovered, house);
@@ -496,11 +587,68 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
             revert SeatChanged(seatIndex, prevPlayer, t.seats[seatIndex]);
         }
         t.seats[seatIndex] = msg.sender;
+        emit PlayerSat(tableId, seatIndex, msg.sender, prevPlayer, msg.value);
     }
 
     ///////////////////////////////////////////////////////////////////////////
     // 8) Internal/Private Functions
     ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * @dev Computes the EIP-712 digest for a sit signature with a specific prevPlayer
+     *
+     * This internal function computes the digest using the provided prevPlayer value.
+     * It is used by both `computeSitDigest()` (which reads prevPlayer from storage)
+     * and `sit()` (which uses the prevPlayer parameter for signature verification).
+     *
+     * @param tableId The unique identifier for the table
+     * @param seatIndex The seat index (0 to maxSeats-1)
+     * @param player The address of the player who will sit
+     * @param prevPlayer The address of the previous player in the seat (or address(0) if empty)
+     * @param expiry The timestamp when the signature expires
+     *
+     * @return The EIP-712 typed data digest
+     */
+    function _computeSitDigest(
+        uint256 tableId,
+        uint8 seatIndex,
+        address player,
+        address prevPlayer,
+        uint256 expiry
+    ) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                SIT_TYPEHASH,
+                tableId,
+                seatIndex,
+                player,
+                prevPlayer,
+                expiry
+            )
+        );
+        return _hashTypedDataV4(structHash);
+    }
+
+    /**
+     * @dev Validates that a table exists and is active, and that the seat index is valid
+     *
+     * This internal function centralizes table validation logic used by both
+     * `computeSitDigest()` and `sit()` functions.
+     *
+     * @param tableId The unique identifier for the table
+     * @param seatIndex The seat index to validate
+     *
+     * Errors:
+     * - {TableDoesNotExist} - If the table does not exist (maxSeats is zero)
+     * - {TableNotActive} - If the table is not active
+     * - {InvalidSeatIndex} - If the seatIndex is out of range
+     */
+    function _validateTableAndSeat(uint256 tableId, uint8 seatIndex) internal view {
+        Table storage t = tables[tableId];
+        if (t.maxSeats == 0) revert TableDoesNotExist(tableId);
+        if (!t.isActive) revert TableNotActive(tableId);
+        if (seatIndex >= t.maxSeats) revert InvalidSeatIndex(seatIndex, t.maxSeats);
+    }
 
     /**
      * @dev Authorizes an upgrade to a new implementation
@@ -514,11 +662,14 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * - Caller must be the owner (enforced by `onlyOwner` modifier)
      * - `newImplementation` must be a valid contract address
      *
+     * Errors:
+     * - {InvalidImplementation} - If the newImplementation is the zero address
+     *
      * @custom:oz-upgrades-unsafe-allow-reachable delegatecall
      */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner view {
         // Additional validation can be added here if needed
         // For example, checking that newImplementation is a contract
-        require(newImplementation != address(0), "CloutCards: invalid implementation");
+        if (newImplementation == address(0)) revert InvalidImplementation(address(0));
     }
 }
