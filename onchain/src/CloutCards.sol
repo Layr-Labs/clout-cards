@@ -527,7 +527,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         address player,
         uint256 expiry
     ) public view returns (bytes32) {
-        _validateTableAndSeat(tableId, seatIndex);
+        _validateTableAndSeat(tableId, seatIndex, false);
         address prevPlayer = tables[tableId].seats[seatIndex];
         return _computeSitDigest(tableId, seatIndex, player, prevPlayer, expiry);
     }
@@ -646,7 +646,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         bytes32 s
     ) external payable {
         Table storage t = tables[tableId];
-        _validateTableAndSeat(tableId, seatIndex);
+        _validateTableAndSeat(tableId, seatIndex, false);
         if (isSeated[msg.sender]) revert PlayerAlreadySeated(msg.sender);
         if (block.timestamp > expiry) revert SitSignatureExpired(expiry, block.timestamp);
 
@@ -696,8 +696,8 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @param s         The s component of the ECDSA signature.
      *
      * Requirements:
-     * - Table must exist and be active, and seatIndex must be in range
-     *   (validated via _validateTableAndSeat).
+     * - Table must exist and seatIndex must be in range (validated via _validateTableAndSeat).
+     *   Table may be inactive (players can stand/withdraw from inactive tables).
      * - The caller must be seated at a table, otherwise {PlayerNotSeated}.
      * - The caller must be the current owner of (tableId, seatIndex),
      *   otherwise {NotSeatOwner}.
@@ -715,7 +715,6 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      *
      * Errors:
      * - {TableDoesNotExist} - If the table does not exist
-     * - {TableNotActive} - If the table is not active
      * - {InvalidSeatIndex} - If the seatIndex is out of range
      * - {PlayerNotSeated} - If the caller is not seated at any table
      * - {NotSeatOwner} - If the caller is not the current seat owner
@@ -741,7 +740,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         bytes32 r,
         bytes32 s
     ) external {
-        _validateTableAndSeat(tableId, seatIndex);
+        _validateTableAndSeat(tableId, seatIndex, true);
         if (!isSeated[msg.sender]) revert PlayerNotSeated(msg.sender);
 
         Table storage t = tables[tableId];
@@ -929,23 +928,25 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     }
 
     /**
-     * @dev Validates that a table exists and is active, and that the seat index is valid
+     * @dev Validates that a table exists and optionally checks if it's active, and that the seat index is valid
      *
-     * This internal function centralizes table validation logic used by both
-     * `computeSitDigest()` and `sit()` functions.
+     * This internal function centralizes table validation logic used by
+     * `computeSitDigest()`, `sit()`, and `standAndWithdrawal()` functions.
      *
      * @param tableId The unique identifier for the table
      * @param seatIndex The seat index to validate
+     * @param allowInactive If true, allows operations on inactive tables (e.g., standing/withdrawing).
+     *                      If false, requires the table to be active (e.g., sitting).
      *
      * Errors:
      * - {TableDoesNotExist} - If the table does not exist (maxSeats is zero)
-     * - {TableNotActive} - If the table is not active
+     * - {TableNotActive} - If the table is not active and allowInactive is false
      * - {InvalidSeatIndex} - If the seatIndex is out of range
      */
-    function _validateTableAndSeat(uint256 tableId, uint8 seatIndex) internal view {
+    function _validateTableAndSeat(uint256 tableId, uint8 seatIndex, bool allowInactive) internal view {
         Table storage t = tables[tableId];
         if (t.maxSeats == 0) revert TableDoesNotExist(tableId);
-        if (!t.isActive) revert TableNotActive(tableId);
+        if (!allowInactive && !t.isActive) revert TableNotActive(tableId);
         if (seatIndex >= t.maxSeats) revert InvalidSeatIndex(seatIndex, t.maxSeats);
     }
 
