@@ -125,6 +125,21 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     error NotSeatOwner(uint256 tableId, uint8 seatIndex, address caller, address seatOwner);
 
     /**
+     * @dev The player is already seated at a table
+     */
+    error PlayerAlreadySeated(address player);
+
+    /**
+     * @dev The player is not seated at any table
+     */
+    error PlayerNotSeated(address player);
+
+    /**
+     * @dev The player is still seated and cannot withdraw
+     */
+    error PlayerStillSeated(address player);
+
+    /**
      * @dev The withdrawal signature has expired
      */
     error WithdrawalSignatureExpired(uint256 expiry, uint256 currentTimestamp);
@@ -148,6 +163,11 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @dev The withdrawal recipient address is invalid (zero address)
      */
     error InvalidWithdrawalRecipient(address to);
+
+    /**
+     * @dev ETH transfer failed
+     */
+    error ETHTransferFailed(address to, uint256 amount);
 
     ///////////////////////////////////////////////////////////////////////////
     // 2) Events
@@ -289,7 +309,14 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @notice This mapping stores the tables at the casino
      * @notice The key is the table ID, and the value is the table struct
      */
-    mapping(uint256 tableId => Table table) tables;
+    mapping(uint256 tableId => Table table) public tables;
+
+
+    /**
+     * @dev A Global mapping to track if a player is seated at any table
+     * @notice The key is the player address, and the value is a boolean indicating if the player is seated
+     */
+    mapping(address player => bool isSeated) public isSeated;
 
     /**
      * @dev The next withdrawal nonce for each player
@@ -506,6 +533,52 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     }
 
     /**
+     * @dev Computes the EIP-712 digest for a withdrawal signature
+     *
+     * This function allows external sources (frontends, RPC clients) to compute
+     * the exact digest that will be used for signature verification. This enables
+     * clients to craft the signature off-chain and verify it matches before submitting.
+     *
+     * The digest includes protection against replay attacks through:
+     * - Chain ID (via EIP-712 domain separator)
+     * - Contract address (via EIP-712 domain separator)
+     * - Expiry timestamp
+     * - Nonce (prevents reuse of the same signature)
+     *
+     * @param player The logical player identity whose escrow is being withdrawn
+     * @param to The recipient address that will receive the withdrawn funds
+     * @param amount The amount of ETH to withdraw (in wei)
+     * @param nonce The withdrawal nonce to prevent replay attacks
+     * @param expiry The timestamp when the signature expires
+     *
+     * @return The EIP-712 typed data digest that should be signed by the house
+     *
+     * @notice The digest uses EIP-712 domain separator which includes chainid and contract address
+     *         to prevent replay attacks across different chains or contract deployments
+     * @notice The nonce ensures that each withdrawal signature can only be used once
+     * @notice This function is EIP-712 compliant and can be used with eth_signTypedDataV4
+     */
+    function computeWithdrawDigest(
+        address player,
+        address to,
+        uint256 amount,
+        uint256 nonce,
+        uint256 expiry
+    ) public view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                WITHDRAW_TYPEHASH,
+                player,
+                to,
+                amount,
+                nonce,
+                expiry
+            )
+        );
+        return _hashTypedDataV4(structHash);
+    }
+
+    /**
      * @dev Allows a player to sit at a table seat
      *
      * This function enables a player to claim a seat at a table. The player must provide
@@ -533,6 +606,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * - Table must exist (created via `createTable`) - validated via `_validateTableAndSeat()`
      * - Table must be active - validated via `_validateTableAndSeat()`
      * - seatIndex must be between 0 and table.maxSeats - 1 (inclusive) - validated via `_validateTableAndSeat()`
+     * - Player must not already be seated at any table
      * - Signature must not be expired (block.timestamp <= expiry)
      * - Signature must be valid and signed by the house
      * - The seat must match the expected previous player (prevPlayer check prevents race conditions)
@@ -542,6 +616,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * - {TableDoesNotExist} - If the table does not exist (maxSeats is zero)
      * - {TableNotActive} - If the table is not active
      * - {InvalidSeatIndex} - If the seatIndex is out of range
+     * - {PlayerAlreadySeated} - If the player is already seated at another table
      * - {SitSignatureExpired} - If the signature has expired
      * - {InvalidSitSignature} - If the signature is invalid or not signed by house
      * - {SeatChanged} - If the seat has changed since the signature was created
@@ -572,6 +647,7 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
     ) external payable {
         Table storage t = tables[tableId];
         _validateTableAndSeat(tableId, seatIndex);
+        if (isSeated[msg.sender]) revert PlayerAlreadySeated(msg.sender);
         if (block.timestamp > expiry) revert SitSignatureExpired(expiry, block.timestamp);
 
         if (msg.value < t.minimumBuyIn || msg.value > t.maximumBuyIn) {
@@ -586,8 +662,231 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         if (t.seats[seatIndex] != prevPlayer) {
             revert SeatChanged(seatIndex, prevPlayer, t.seats[seatIndex]);
         }
+        
+        // Punch out previous player if they exist
+        if (prevPlayer != address(0)) {
+            isSeated[prevPlayer] = false;
+        }
+        
         t.seats[seatIndex] = msg.sender;
+        isSeated[msg.sender] = true;
         emit PlayerSat(tableId, seatIndex, msg.sender, prevPlayer, msg.value);
+    }
+
+    /**
+     * @dev Stands up from a seat and executes a TEE-authorized withdrawal in a single transaction.
+     *
+     * This is the "happy path" UX: the player clicks "Stand / Cash Out" and:
+     * - Their seat is cleared on-chain.
+     * - Their escrow balance (as determined by the TEE) is withdrawn to `to`.
+     *
+     * The TEE signs a typed Withdraw struct:
+     *   Withdraw(address player,address to,uint256 amount,uint256 nonce,uint256 expiry)
+     *
+     * For this function, `player` is implicitly `msg.sender`.
+     *
+     * @param tableId   The unique identifier for the table.
+     * @param seatIndex The seat index (0 to maxSeats-1) the caller is standing from.
+     * @param to        The recipient address of the withdrawn ETH (often msg.sender).
+     * @param amount    The amount of ETH to withdraw (in wei).
+     * @param nonce     The withdrawal nonce, must equal nextWithdrawalNonce[msg.sender].
+     * @param expiry    The timestamp when the signature expires.
+     * @param v         The recovery byte of the ECDSA signature.
+     * @param r         The r component of the ECDSA signature.
+     * @param s         The s component of the ECDSA signature.
+     *
+     * Requirements:
+     * - Table must exist and be active, and seatIndex must be in range
+     *   (validated via _validateTableAndSeat).
+     * - The caller must be seated at a table, otherwise {PlayerNotSeated}.
+     * - The caller must be the current owner of (tableId, seatIndex),
+     *   otherwise {NotSeatOwner}.
+     * - block.timestamp <= expiry, otherwise {WithdrawalSignatureExpired}.
+     * - amount > 0, otherwise {InvalidWithdrawalAmount}.
+     * - to != address(0), otherwise {InvalidWithdrawalRecipient}.
+     * - nonce == nextWithdrawalNonce[msg.sender], otherwise {InvalidWithdrawalNonce}.
+     * - Signature must be valid and signed by `house`, otherwise {InvalidWithdrawalSignature}.
+     *
+     * Effects:
+     * - Clears the seat (sets seats[seatIndex] = address(0)).
+     * - Clears the player's seated flag (sets isSeated[msg.sender] = false).
+     * - Increments nextWithdrawalNonce[msg.sender].
+     * - Transfers `amount` ETH to `to`.
+     *
+     * Errors:
+     * - {TableDoesNotExist} - If the table does not exist
+     * - {TableNotActive} - If the table is not active
+     * - {InvalidSeatIndex} - If the seatIndex is out of range
+     * - {PlayerNotSeated} - If the caller is not seated at any table
+     * - {NotSeatOwner} - If the caller is not the current seat owner
+     * - {WithdrawalSignatureExpired} - If the signature has expired
+     * - {InvalidWithdrawalAmount} - If the withdrawal amount is zero
+     * - {InvalidWithdrawalRecipient} - If the recipient address is zero
+     * - {InvalidWithdrawalNonce} - If the nonce doesn't match the expected value
+     * - {InvalidWithdrawalSignature} - If the signature is invalid or not signed by house
+     * - {ETHTransferFailed} - If the ETH transfer fails
+     *
+     * Emits:
+     * - {PlayerStood}.
+     * - {WithdrawalExecuted}.
+     */
+    function standAndWithdrawal(
+        uint256 tableId,
+        uint8 seatIndex,
+        address to,
+        uint256 amount,
+        uint256 nonce,
+        uint256 expiry,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        _validateTableAndSeat(tableId, seatIndex);
+        if (!isSeated[msg.sender]) revert PlayerNotSeated(msg.sender);
+
+        Table storage t = tables[tableId];
+        if (t.seats[seatIndex] != msg.sender) {
+            revert NotSeatOwner(tableId, seatIndex, msg.sender, t.seats[seatIndex]);
+        }
+
+        if (block.timestamp > expiry) {
+            revert WithdrawalSignatureExpired(expiry, block.timestamp);
+        }
+        if (amount == 0) {
+            revert InvalidWithdrawalAmount(amount);
+        }
+        if (to == address(0)) {
+            revert InvalidWithdrawalRecipient(to);
+        }
+
+        uint256 expectedNonce = nextWithdrawalNonce[msg.sender];
+        if (nonce != expectedNonce) {
+            revert InvalidWithdrawalNonce(msg.sender, expectedNonce, nonce);
+        }
+
+        // Canonical EIP-712 digest using msg.sender as player.
+        bytes32 digest = computeWithdrawDigest(msg.sender, to, amount, nonce, expiry);
+
+        address recovered = ECDSA.recover(digest, v, r, s);
+        if (recovered != house) {
+            revert InvalidWithdrawalSignature(recovered, house);
+        }
+
+        // --- Effects before interaction ---
+
+        // 1) Clear seat and seated flag
+        t.seats[seatIndex] = address(0);
+        isSeated[msg.sender] = false;
+        emit PlayerStood(tableId, seatIndex, msg.sender, block.timestamp);
+
+        // 2) Bump nonce
+        nextWithdrawalNonce[msg.sender] = expectedNonce + 1;
+
+        // --- Interaction ---
+
+        (bool success, ) = to.call{value: amount}("");
+        if (!success) revert ETHTransferFailed(to, amount);
+
+        emit WithdrawalExecuted(msg.sender, to, amount, nonce);
+    }
+
+    /**
+     * @dev Executes a TEE-authorized withdrawal for a player's escrow balance
+     *
+     * This function allows a player (or authorized party) to withdraw escrow balance
+     * that has been authorized by the house (TEE). Unlike `standAndWithdrawal()`,
+     * this function does not require the player to be at a specific seat - it only
+     * requires that the player is not currently seated at any table.
+     *
+     * The TEE signs a typed Withdraw struct:
+     *   Withdraw(address player,address to,uint256 amount,uint256 nonce,uint256 expiry)
+     *
+     * This function allows withdrawals to be executed by anyone (not just the player),
+     * as long as they have a valid signature from the house. This enables use cases
+     * like relayer services or batch withdrawals.
+     *
+     * @param player The logical player identity whose escrow is being withdrawn
+     * @param to The recipient address that will receive the withdrawn funds
+     * @param amount The amount of ETH to withdraw (in wei)
+     * @param nonce The withdrawal nonce, must equal nextWithdrawalNonce[player]
+     * @param expiry The timestamp when the signature expires
+     * @param v The recovery byte of the ECDSA signature
+     * @param r The r component of the ECDSA signature
+     * @param s The s component of the ECDSA signature
+     *
+     * Requirements:
+     * - `player` must not be seated at any table (critical invariant)
+     * - block.timestamp <= expiry
+     * - amount > 0
+     * - to != address(0)
+     * - nonce == nextWithdrawalNonce[player]
+     * - Signature must be valid and signed by `house`
+     *
+     * Effects:
+     * - Increments nextWithdrawalNonce[player]
+     * - Transfers `amount` ETH to `to`
+     *
+     * Errors:
+     * - {PlayerStillSeated} - If the player is currently seated at a table
+     * - {WithdrawalSignatureExpired} - If the signature has expired
+     * - {InvalidWithdrawalAmount} - If the withdrawal amount is zero
+     * - {InvalidWithdrawalRecipient} - If the recipient address is zero
+     * - {InvalidWithdrawalNonce} - If the nonce doesn't match the expected value
+     * - {InvalidWithdrawalSignature} - If the signature is invalid or not signed by house
+     * - {ETHTransferFailed} - If the ETH transfer fails
+     *
+     * Emits:
+     * - {WithdrawalExecuted}
+     *
+     * @notice This function enforces a critical invariant: players cannot withdraw
+     *         while seated. They must first stand up (via `standAndWithdrawal()` or
+     *         a future `stand()` function) before withdrawing their escrow balance.
+     * @notice The signature can be created off-chain using `computeWithdrawDigest()`
+     *         via RPC to get the exact digest that will be used for verification.
+     * @notice This function uses EIP-712 compliant signature verification via ECDSA.recover
+     */
+    function withdraw(
+        address player,
+        address to,
+        uint256 amount,
+        uint256 nonce,
+        uint256 expiry,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        // Critical invariant: cannot withdraw while seated.
+        if (isSeated[player]) {
+            revert PlayerStillSeated(player);
+        }
+
+        if (block.timestamp > expiry) {
+            revert WithdrawalSignatureExpired(expiry, block.timestamp);
+        }
+        if (amount == 0) {
+            revert InvalidWithdrawalAmount(amount);
+        }
+        if (to == address(0)) {
+            revert InvalidWithdrawalRecipient(to);
+        }
+
+        uint256 expectedNonce = nextWithdrawalNonce[player];
+        if (nonce != expectedNonce) {
+            revert InvalidWithdrawalNonce(player, expectedNonce, nonce);
+        }
+
+        bytes32 digest = computeWithdrawDigest(player, to, amount, nonce, expiry);
+        address recovered = ECDSA.recover(digest, v, r, s);
+        if (recovered != house) {
+            revert InvalidWithdrawalSignature(recovered, house);
+        }
+
+        nextWithdrawalNonce[player] = expectedNonce + 1;
+
+        (bool success, ) = to.call{value: amount}("");
+        if (!success) revert ETHTransferFailed(to, amount);
+
+        emit WithdrawalExecuted(player, to, amount, nonce);
     }
 
     ///////////////////////////////////////////////////////////////////////////
