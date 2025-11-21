@@ -23,10 +23,13 @@ function App() {
 
       {/* Hero Section */}
       <section className="hero">
-        <img 
-          src="/hero5.jpeg" 
-          alt="CloutCards Hero" 
+        <video 
+          src="/hero.m4a" 
           className="hero-image"
+          autoPlay
+          loop
+          muted
+          playsInline
         />
         <div className="hero-content">
           <motion.img 
@@ -187,13 +190,13 @@ function App() {
             <div className="step-number">2</div>
             <div className="step-icon">
               <FaWallet size={48} />
-            </div>
+      </div>
             <div className="step-content">
               <h3 className="step-title">Deposit Funds</h3>
               <p className="step-description">
                 Add ETH to your escrow account. Your funds are held securely on-chain and can be withdrawn anytime with TEE authorization.
-              </p>
-            </div>
+        </p>
+      </div>
           </motion.div>
 
           <motion.div 
