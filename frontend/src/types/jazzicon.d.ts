@@ -1,4 +1,4 @@
-declare module 'jazzicon' {
+declare module '@metamask/jazzicon' {
   export default function jazzicon(diameter: number, seed: number): HTMLElement
 }
 

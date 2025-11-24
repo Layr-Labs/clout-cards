@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import jazzicon from 'jazzicon'
+import jazzicon from '@metamask/jazzicon'
 
 /**
  * Wallet avatar component using Jazzicon
