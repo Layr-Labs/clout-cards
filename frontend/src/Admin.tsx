@@ -1,9 +1,10 @@
 import './App.css'
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
 import { WalletAvatar } from './components/WalletAvatar'
 import { formatAddress } from './utils/formatAddress'
+import { isAdmin } from './services/admin'
 
 /**
  * Admin page component for CloutCards
@@ -16,6 +17,8 @@ function Admin() {
   const [activeTab, setActiveTab] = useState<'tables' | 'metadata'>('tables')
   const [isConnecting, setIsConnecting] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
+  const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null)
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState(false)
 
   /**
    * Handles wallet connection with error handling
@@ -39,12 +42,38 @@ function Admin() {
     setIsDisconnecting(true)
     try {
       await disconnectWallet()
+      setIsAdminUser(null) // Reset admin status on disconnect
     } catch (error) {
       console.error('Failed to disconnect wallet:', error)
     } finally {
       setIsDisconnecting(false)
     }
   }
+
+  /**
+   * Checks if the connected wallet is an admin
+   */
+  useEffect(() => {
+    async function checkAdminStatus() {
+      if (!isConnected || !address) {
+        setIsAdminUser(null)
+        return
+      }
+
+      setIsCheckingAdmin(true)
+      try {
+        const adminStatus = await isAdmin(address)
+        setIsAdminUser(adminStatus)
+      } catch (error) {
+        console.error('Failed to check admin status:', error)
+        setIsAdminUser(false) // Default to false on error
+      } finally {
+        setIsCheckingAdmin(false)
+      }
+    }
+
+    checkAdminStatus()
+  }, [isConnected, address])
 
   return (
     <div className="app">
@@ -94,44 +123,57 @@ function Admin() {
                 </button>
               </div>
 
-              {/* Tabs */}
-              <div className="admin-tabs">
-                <button
-                  className={`admin-tab ${activeTab === 'tables' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('tables')}
-                >
-                  Tables
-                </button>
-                <button
-                  className={`admin-tab ${activeTab === 'metadata' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('metadata')}
-                >
-                  Metadata
-                </button>
-              </div>
-
-              {/* Tab Content */}
-              <div className="admin-tab-content">
-                {activeTab === 'tables' && (
-                  <div className="admin-tab-panel">
-                    <h2 className="admin-tab-title">Tables</h2>
-                    <p className="admin-tab-description">
-                      Manage casino tables and game settings
-                    </p>
-                    {/* Tables content will go here */}
+              {/* Admin Status Check */}
+              {isCheckingAdmin ? (
+                <div className="admin-status-message">
+                  <p>Checking admin status...</p>
+                </div>
+              ) : isAdminUser === false ? (
+                <div className="admin-status-message">
+                  <p>Connected Wallet is not an Administrator.</p>
+                </div>
+              ) : isAdminUser === true ? (
+                <>
+                  {/* Tabs */}
+                  <div className="admin-tabs">
+                    <button
+                      className={`admin-tab ${activeTab === 'tables' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('tables')}
+                    >
+                      Tables
+                    </button>
+                    <button
+                      className={`admin-tab ${activeTab === 'metadata' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('metadata')}
+                    >
+                      Metadata
+                    </button>
                   </div>
-                )}
 
-                {activeTab === 'metadata' && (
-                  <div className="admin-tab-panel">
-                    <h2 className="admin-tab-title">Metadata</h2>
-                    <p className="admin-tab-description">
-                      View and manage system metadata
-                    </p>
-                    {/* Metadata content will go here */}
+                  {/* Tab Content */}
+                  <div className="admin-tab-content">
+                    {activeTab === 'tables' && (
+                      <div className="admin-tab-panel">
+                        <h2 className="admin-tab-title">Tables</h2>
+                        <p className="admin-tab-description">
+                          Manage casino tables and game settings
+                        </p>
+                        {/* Tables content will go here */}
+                      </div>
+                    )}
+
+                    {activeTab === 'metadata' && (
+                      <div className="admin-tab-panel">
+                        <h2 className="admin-tab-title">Metadata</h2>
+                        <p className="admin-tab-description">
+                          View and manage system metadata
+                        </p>
+                        {/* Metadata content will go here */}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              ) : null}
             </>
           )}
         </div>

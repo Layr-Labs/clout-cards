@@ -12,6 +12,8 @@
   "dependencies": {
     "@metamask/detect-provider": "^2.0.0",
     "@metamask/jazzicon": "^2.0.0",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.5",
     "ethers": "^6.15.0",
     "framer-motion": "^12.23.24",
     "react": "^19.2.0",

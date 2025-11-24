@@ -41,3 +41,26 @@ model Event {
   @@index([digest])
   @@map("events")
 }
+
+/**
+ * Poker table configuration
+ * 
+ * Represents a poker table with its game parameters (blinds, buy-ins, rake, seat count).
+ * Tables can be created, activated/deactivated, and searched by buy-in ranges.
+ */
+model PokerTable {
+  id            Int      @id @default(autoincrement()) @map("poker_table_id")
+  name          String   @unique @db.VarChar(255) // Unique table name/identifier
+  minimumBuyIn  BigInt   @map("minimum_buy_in") // Minimum buy-in in gwei
+  maximumBuyIn  BigInt   @map("maximum_buy_in") // Maximum buy-in in gwei
+  perHandRake   Int      @map("per_hand_rake") // Rake per hand in basis points (bps), e.g., 100 = 1% (must be >= 0)
+  maxSeatCount  Int      @map("max_seat_count") // Maximum number of seats (0-8)
+  smallBlind    BigInt   @map("small_blind") // Small blind amount in gwei
+  bigBlind      BigInt   @map("big_blind") // Big blind amount in gwei
+  isActive      Boolean  @default(true) @map("is_active") // Whether the table is currently active
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([minimumBuyIn, maximumBuyIn]) // Composite index for buy-in range searches
+  @@map("poker_tables")
+}

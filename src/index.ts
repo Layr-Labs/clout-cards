@@ -8,9 +8,10 @@
  * Environment configuration is loaded from .env file before server startup.
  */
 import express, { Request, Response } from 'express';
+import cors, { CorsOptions } from 'cors';
 import './config/env'; // Loads dotenv.config() and initializes environment
 import { getAdminAddresses } from './services/admins';
-import { parseIntEnv } from './config/env';
+import { parseIntEnv, isProduction } from './config/env';
 
 /**
  * Express application instance
@@ -18,6 +19,24 @@ import { parseIntEnv } from './config/env';
  * Handles HTTP requests and routing. Configured with middleware and route handlers.
  */
 const app = express();
+
+/**
+ * CORS configuration
+ *
+ * Allows cross-origin requests from the frontend application.
+ * In development, allows requests from Vite dev server (localhost:5173).
+ * In production, should be configured to allow only specific origins.
+ */
+const corsOptions: CorsOptions = {
+  origin: isProduction()
+    ? process.env.CORS_ORIGIN?.split(',') || [] // Production: use CORS_ORIGIN env var (comma-separated)
+    : ['http://localhost:5173', 'http://localhost:3000'], // Development: allow Vite and common dev ports
+  credentials: true, // Allow cookies/auth headers if needed in the future
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 
 /**
  * Server port number
