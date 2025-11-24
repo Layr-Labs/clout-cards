@@ -4,6 +4,8 @@
 
 This project uses **PostgreSQL** for both development and production. For local development, **no environment variables are required** - the application uses hardcoded defaults that match the Docker Compose setup.
 
+**Note**: This documentation is for the **backend** database configuration. For frontend configuration, see `README-CONFIGURATION.md`.
+
 The Docker Compose setup also includes **Anvil** (Foundry's local Ethereum node) for local blockchain testing. Anvil runs on chain ID 31337 by default, which matches the application's default `CHAIN_ID` for local development.
 
 ## Environment Detection

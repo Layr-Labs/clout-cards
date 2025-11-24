@@ -125,15 +125,17 @@
   align-items: center;
   padding: 0;
   background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+  min-height: 100vh;
+  overflow: hidden;
 }
 
 .hero-image {
   width: 100%;
-  max-width: 100%;
-  height: auto;
-  display: block;
+  height: 100vh;
   object-fit: cover;
+  object-position: center;
   opacity: 0.5;
+  display: block;
 }
 
 .hero-content {
@@ -148,11 +150,14 @@
   gap: 16px;
   z-index: 1;
   width: 100%;
+  padding: 0 24px;
+  box-sizing: border-box;
 }
 
 .hero-title {
   max-width: 60%;
   height: auto;
+  width: auto;
 }
 
 .hero-buttons {
@@ -160,6 +165,8 @@
   gap: 16px;
   flex-wrap: wrap;
   justify-content: center;
+  width: 100%;
+  max-width: 600px;
 }
 
 .cta-button {
@@ -340,18 +347,38 @@
 }
 
 @media (max-width: 768px) {
+  .hero {
+    min-height: 100vh;
+  }
+
+  .hero-image {
+    height: 100vh;
+    object-fit: cover;
+  }
+
+  .hero-content {
+    padding: 0 16px;
+    gap: 24px;
+  }
+
+  .hero-title {
+    max-width: 80%;
+    width: auto;
+  }
+
   .hero-buttons {
     flex-direction: column;
     width: 100%;
-    max-width: 280px;
+    max-width: 100%;
+    gap: 12px;
+    padding: 0 16px;
   }
 
   .cta-button {
     width: 100%;
-  }
-
-  .hero-title {
-    max-width: 50%;
+    max-width: 100%;
+    padding: 14px 32px;
+    font-size: 1rem;
   }
 
   .how-to-play {
@@ -376,6 +403,25 @@
 }
 
 @media (max-width: 480px) {
+  .hero-content {
+    padding: 0 12px;
+    gap: 20px;
+  }
+
+  .hero-title {
+    max-width: 85%;
+  }
+
+  .hero-buttons {
+    padding: 0 8px;
+    gap: 10px;
+  }
+
+  .cta-button {
+    padding: 12px 24px;
+    font-size: 0.9rem;
+  }
+
   .how-to-play-title {
     font-size: 1.75rem;
   }
@@ -488,8 +534,9 @@
   min-height: 100vh;
   padding-top: 80px; /* Account for fixed header */
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-bottom: 64px;
 }
 
 .admin-container {
@@ -507,6 +554,178 @@
   background-clip: text;
   text-align: center;
   margin-bottom: 48px;
+}
+
+/* Wallet Connection Section */
+.admin-connect-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 64px 32px;
+}
+
+.admin-connect-message {
+  font-size: 1.25rem;
+  color: #b0b0b0;
+  text-align: center;
+  margin: 0;
+}
+
+.admin-connect-button {
+  padding: 16px 48px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s linear;
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #8b5cf6 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  border: 2px solid #a78bfa;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4), 0 0 20px rgba(167, 139, 250, 0.2);
+}
+
+.admin-connect-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s linear;
+}
+
+.admin-connect-button:hover::before {
+  left: 100%;
+}
+
+.admin-connect-button:hover {
+  background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 50%, #a78bfa 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6), 0 0 30px rgba(167, 139, 250, 0.4);
+}
+
+.admin-connect-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Wallet Info */
+.admin-wallet-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.admin-wallet-address {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+}
+
+.admin-disconnect-button {
+  padding: 8px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #4a4a4a;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  color: #b0b0b0;
+  cursor: pointer;
+  transition: all 0.3s linear;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-disconnect-button:hover {
+  background: linear-gradient(135deg, rgba(255, 77, 77, 0.1) 0%, rgba(255, 77, 77, 0.05) 100%);
+  border-color: #ff4d4d;
+  color: #ff6b6b;
+  transform: translateY(-1px);
+}
+
+/* Tabs */
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 32px;
+  border-bottom: 2px solid #2a2a2a;
+  padding-bottom: 0;
+}
+
+.admin-tab {
+  padding: 16px 32px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #b0b0b0;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s linear;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: -2px;
+}
+
+.admin-tab:hover {
+  color: #ffffff;
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.admin-tab.active {
+  color: #d4af37;
+  border-bottom-color: #d4af37;
+  background: rgba(212, 175, 55, 0.05);
+}
+
+/* Tab Content */
+.admin-tab-content {
+  background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 48px;
+  min-height: 400px;
+}
+
+.admin-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-tab-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.admin-tab-description {
+  font-size: 1.1rem;
+  color: #b0b0b0;
+  margin: 0;
+  line-height: 1.6;
 }
 
 /* Responsive Design */
@@ -541,5 +760,69 @@
 
   .feature-description {
     font-size: 0.9rem;
+  }
+
+  .admin-container {
+    padding: 32px 16px;
+  }
+
+  .admin-title {
+    font-size: 2rem;
+  }
+
+  .admin-connect-section {
+    padding: 48px 16px;
+  }
+
+  .admin-connect-message {
+    font-size: 1.1rem;
+  }
+
+  .admin-connect-button {
+    padding: 14px 40px;
+    font-size: 1rem;
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .admin-wallet-info {
+    flex-direction: column;
+    padding: 20px;
+    gap: 12px;
+  }
+
+  .admin-wallet-address {
+    font-size: 1rem;
+  }
+
+  .admin-disconnect-button {
+    width: 100%;
+    max-width: 200px;
+    padding: 10px 20px;
+  }
+
+  .admin-tabs {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .admin-tab {
+    width: 100%;
+    padding: 14px 24px;
+    font-size: 1rem;
+    text-align: left;
+  }
+
+  .admin-tab-content {
+    padding: 32px 24px;
+    min-height: 300px;
+  }
+
+  .admin-tab-title {
+    font-size: 1.5rem;
+  }
+
+  .admin-tab-description {
+    font-size: 1rem;
   }
 }
