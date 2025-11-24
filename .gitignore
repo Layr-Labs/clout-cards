@@ -93,4 +93,12 @@ Cargo.lock
 # Misc
 *.log
 
+# Database files (SQLite, PostgreSQL dumps, etc.)
+*.db
+*.db-shm
+*.db-wal
+dev.db*
+prisma/dev.db*
+**/dev.db*
+
 /src/generated/prisma
