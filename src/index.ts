@@ -9,6 +9,7 @@
  */
 import express, { Request, Response } from 'express';
 import cors, { CorsOptions } from 'cors';
+import { ethers } from 'ethers';
 import './config/env'; // Loads dotenv.config() and initializes environment
 import { getAdminAddresses } from './services/admins';
 import { parseIntEnv, isProduction } from './config/env';
@@ -117,6 +118,69 @@ app.get('/admins', (req: Request, res: Response): void => {
     console.error('Error getting admin addresses:', error);
     res.status(500).json({
       error: 'Failed to retrieve admin addresses',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /sessionMessage
+ *
+ * Returns a session message for wallet signature authentication.
+ * The message includes the Ethereum address and should be signed by the wallet
+ * to establish a session. The signature is stored client-side in localStorage.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - Query params:
+ *   - address: string (required) - Ethereum address to generate message for
+ *
+ * Response:
+ * - 200: { message: string }
+ *   - Message format: "Sign on to Clout Cards with address #{ETH_ADDRESS}"
+ *   - The address will be in checksum format
+ *
+ * Error model:
+ * - 400: { error: string, message: string } - Invalid or missing address parameter
+ * - 500: { error: string, message: string } - Server error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/sessionMessage', (req: Request, res: Response): void => {
+  try {
+    const { address } = req.query;
+
+    if (!address || typeof address !== 'string') {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'Address query parameter is required',
+      });
+      return;
+    }
+
+    // Validate Ethereum address format
+    if (!ethers.isAddress(address)) {
+      res.status(400).json({
+        error: 'Invalid address',
+        message: 'Address must be a valid Ethereum address',
+      });
+      return;
+    }
+
+    // Convert to checksum format for consistent display
+    const checksumAddress = ethers.getAddress(address);
+    const message = `Sign on to Clout Cards with address ${checksumAddress}`;
+
+    res.status(200).json({ message });
+  } catch (error) {
+    console.error('Error generating session message:', error);
+    res.status(500).json({
+      error: 'Failed to generate session message',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }

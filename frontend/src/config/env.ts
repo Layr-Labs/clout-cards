@@ -76,3 +76,28 @@ export function getTeeApiVersion(): string {
   return getStringEnv(import.meta.env.VITE_TEE_API_VERSION, 'v1');
 }
 
+/**
+ * Gets the CloutCards backend endpoint URL
+ *
+ * For local development, defaults to http://localhost:8000 if not set.
+ * For production, requires VITE_BACKEND_URL to be explicitly set.
+ *
+ * @returns CloutCards backend endpoint URL
+ * @throws {Error} If VITE_BACKEND_URL is not set in production
+ */
+export function getBackendUrl(): string {
+  const isProd = isProduction();
+  const url = import.meta.env.VITE_BACKEND_URL;
+
+  if (!url) {
+    if (isProd) {
+      throw new Error('VITE_BACKEND_URL environment variable is required in production');
+    } else {
+      // Local development: use default
+      return 'http://localhost:8000';
+    }
+  }
+
+  return normalizeUrl(url);
+}
+

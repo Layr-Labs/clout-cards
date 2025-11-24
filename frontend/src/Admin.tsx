@@ -13,7 +13,7 @@ import { isAdmin } from './services/admin'
  * Features tab-based navigation for Tables and Metadata management.
  */
 function Admin() {
-  const { address, isConnected, connectWallet, disconnectWallet } = useWallet()
+  const { address, isConnected, isLoggedIn, connectWallet, disconnectWallet } = useWallet()
   const [activeTab, setActiveTab] = useState<'tables' | 'metadata'>('tables')
   const [isConnecting, setIsConnecting] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
@@ -52,10 +52,11 @@ function Admin() {
 
   /**
    * Checks if the connected wallet is an admin
+   * Only checks if wallet is logged in (connected AND has signature)
    */
   useEffect(() => {
     async function checkAdminStatus() {
-      if (!isConnected || !address) {
+      if (!isLoggedIn || !address) {
         setIsAdminUser(null)
         return
       }
@@ -73,7 +74,7 @@ function Admin() {
     }
 
     checkAdminStatus()
-  }, [isConnected, address])
+  }, [isLoggedIn, address])
 
   return (
     <div className="app">
@@ -92,18 +93,20 @@ function Admin() {
         <div className="admin-container">
           <h1 className="admin-title">Admin</h1>
 
-          {!isConnected ? (
-            /* Wallet Not Connected */
+          {!isLoggedIn ? (
+            /* Wallet Not Logged In */
             <div className="admin-connect-section">
               <p className="admin-connect-message">
-                Connect your wallet to access admin features
+                {isConnected
+                  ? 'Please sign the message to complete login'
+                  : 'Connect your wallet to access admin features'}
               </p>
               <button
                 className="admin-connect-button"
                 onClick={handleConnect}
                 disabled={isConnecting}
               >
-                {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                {isConnecting ? 'Connecting...' : isConnected ? 'Sign Message' : 'Connect Wallet'}
               </button>
             </div>
           ) : (
@@ -154,10 +157,17 @@ function Admin() {
                   <div className="admin-tab-content">
                     {activeTab === 'tables' && (
                       <div className="admin-tab-panel">
-                        <h2 className="admin-tab-title">Tables</h2>
-                        <p className="admin-tab-description">
-                          Manage casino tables and game settings
-                        </p>
+                        <div className="admin-tab-header">
+                          <div className="admin-tab-header-left">
+                            <h2 className="admin-tab-title">Tables</h2>
+                            <p className="admin-tab-description">
+                              Manage casino tables and game settings
+                            </p>
+                          </div>
+                          <button className="admin-add-table-button">
+                            Add Table
+                          </button>
+                        </div>
                         {/* Tables content will go here */}
                       </div>
                     )}

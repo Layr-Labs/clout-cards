@@ -714,6 +714,22 @@
   gap: 24px;
 }
 
+.admin-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-tab-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .admin-tab-title {
   font-size: 2rem;
   font-weight: 700;
@@ -726,6 +742,48 @@
   color: #b0b0b0;
   margin: 0;
   line-height: 1.6;
+}
+
+.admin-add-table-button {
+  padding: 12px 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s linear;
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 50%, #fbbf24 100%);
+  color: #1a1a1a;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+  border: 2px solid #fcd34d;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.4), 0 0 15px rgba(252, 211, 77, 0.2);
+  white-space: nowrap;
+}
+
+.admin-add-table-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.5s linear;
+}
+
+.admin-add-table-button:hover::before {
+  left: 100%;
+}
+
+.admin-add-table-button:hover {
+  background: linear-gradient(135deg, #fcd34d 0%, #fde047 50%, #fcd34d 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.6), 0 0 25px rgba(252, 211, 77, 0.4);
 }
 
 .admin-status-message {
@@ -840,5 +898,16 @@
 
   .admin-tab-description {
     font-size: 1rem;
+  }
+
+  .admin-tab-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-add-table-button {
+    width: 100%;
+    padding: 10px 24px;
+    font-size: 0.95rem;
   }
 }
