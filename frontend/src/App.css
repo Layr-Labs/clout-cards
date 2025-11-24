@@ -483,6 +483,32 @@
   margin: 0;
 }
 
+/* Admin Page Styles */
+.admin-main {
+  min-height: 100vh;
+  padding-top: 80px; /* Account for fixed header */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-container {
+  max-width: 1400px;
+  width: 100%;
+  padding: 64px 32px;
+}
+
+.admin-title {
+  font-size: 3rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+  margin-bottom: 48px;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .features {

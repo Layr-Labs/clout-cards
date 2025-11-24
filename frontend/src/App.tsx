@@ -2,6 +2,8 @@ import './App.css'
 import { SiX } from 'react-icons/si'
 import { FaWallet, FaGamepad } from 'react-icons/fa'
 import { motion } from 'framer-motion'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import Admin from './Admin'
 
 /**
  * Landing page component for CloutCards
@@ -9,12 +11,13 @@ import { motion } from 'framer-motion'
  * Displays a hero section with the CloutCards hero image and three feature
  * sections describing the key aspects of the platform.
  */
-function App() {
+function LandingPage() {
   return (
     <div className="app">
       {/* Header */}
       <header className="header">
         <nav className="header-nav">
+          <a href="/" className="nav-link">Home</a>
           <a href="#leaderboard" className="nav-link">Leaderboard</a>
           <a href="#docs" className="nav-link">Docs</a>
           <button className="header-play-button">Play Now</button>
@@ -220,6 +223,22 @@ function App() {
         </div>
       </section>
     </div>
+  )
+}
+
+/**
+ * Main App component with routing
+ *
+ * Sets up React Router and defines routes for the application.
+ */
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/admin" element={<Admin />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
