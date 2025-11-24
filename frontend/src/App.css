@@ -69,11 +69,11 @@
   overflow: hidden;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
-  color: #1a1a1a;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
-  border: 2px solid #f4d03f;
-  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #8b5cf6 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  border: 2px solid #a78bfa;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 }
 
 .header-play-button::before {
@@ -92,9 +92,9 @@
 }
 
 .header-play-button:hover {
-  background: linear-gradient(135deg, #f4d03f 0%, #ffd700 50%, #f4d03f 100%);
+  background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 50%, #a78bfa 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5), 0 0 20px rgba(244, 208, 63, 0.3);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5), 0 0 20px rgba(167, 139, 250, 0.3);
 }
 
 @media (max-width: 768px) {
@@ -194,30 +194,30 @@
 }
 
 .cta-primary {
-  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
-  color: #1a1a1a;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
-  border: 2px solid #f4d03f;
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #8b5cf6 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  border: 2px solid #a78bfa;
 }
 
 .cta-primary:hover {
-  background: linear-gradient(135deg, #f4d03f 0%, #ffd700 50%, #f4d03f 100%);
+  background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 50%, #a78bfa 100%);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.6), 0 0 30px rgba(244, 208, 63, 0.4);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6), 0 0 30px rgba(167, 139, 250, 0.4);
 }
 
 .cta-secondary {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
   color: #ffffff;
-  border: 2px solid #d4af37;
+  border: 2px solid #8b5cf6;
   backdrop-filter: blur(10px);
 }
 
 .cta-secondary:hover {
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(244, 208, 63, 0.1) 100%);
-  border-color: #f4d03f;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(167, 139, 250, 0.1) 100%);
+  border-color: #a78bfa;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4), 0 0 20px rgba(244, 208, 63, 0.3);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4), 0 0 20px rgba(167, 139, 250, 0.3);
 }
 
 /* How to Play Section */

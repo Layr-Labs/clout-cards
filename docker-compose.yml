@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clout-cards-postgres
+    environment:
+      POSTGRES_USER: cloutcards
+      POSTGRES_PASSWORD: cloutcards
+      POSTGRES_DB: cloutcards_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloutcards"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: clout-cards-anvil
+    command: anvil --host 0.0.0.0 --chain-id 31337
+    ports:
+      - "8545:8545"  # JSON-RPC
+      - "8546:8546"  # WebSocket (optional)
+    environment:
+      - ANVIL_IP_ADDR=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+

@@ -92,3 +92,5 @@ Cargo.lock
 
 # Misc
 *.log
+
+/src/generated/prisma

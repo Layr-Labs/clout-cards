@@ -1,0 +1,43 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * Event table - append-only log of all RPC calls processed by the TEE
+ * 
+ * This table maintains an immutable audit trail of all RPC calls that mutate
+ * logical state. Each event represents a complete RPC call (not individual
+ * table mutations), providing higher-level control and easier verification.
+ * 
+ * Events are signed by the TEE using EIP-712 signatures on the payload_json.
+ * The digest is computed from the canonical JSON payload using typed data signing.
+ */
+model Event {
+  eventId       Int      @id @default(autoincrement()) @map("event_id")
+  blockTs       DateTime @map("block_ts") // When the event was finalized at the TEE
+  player        String?  @db.VarChar(42) // Optional - whoever the event concerns
+  kind          String   // Event kind: deposit, withdraw, bet, hand_start, hand_end, join_table, etc.
+  payloadJson   String   @map("payload_json") @db.Text // Raw canonical JSON input used to mutate logical state (stored as TEXT, can be migrated to JSONB later)
+  digest        String   @db.Char(66) // EIP-712 digest of payload_json, typed
+  sigR          String   @map("sig_r") @db.VarChar(66) // Signature component R (32 bytes, stored as hex string with 0x prefix)
+  sigS          String   @map("sig_s") @db.VarChar(66) // Signature component S (32 bytes, stored as hex string with 0x prefix)
+  sigV          Int      @map("sig_v") // Signature component V
+  nonce         BigInt?  // Monotonic per-player replay-protection nonce for withdrawal events only
+  teeVersion    Int      @map("tee_version") // Version of the TEE binary that generated this event
+  teePubkey     String   @map("tee_pubkey") @db.VarChar(66) // TEE public key that signed this event
+  ingestedAt    DateTime @default(now()) @map("ingested_at") // When the backend inserted it (not part of digest)
+
+  @@index([player])
+  @@index([kind])
+  @@index([blockTs])
+  @@index([digest])
+  @@map("events")
+}

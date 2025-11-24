@@ -1,0 +1,3 @@
+-- Genesis event will be created by the application layer using create-genesis-event.ts
+-- This migration is intentionally empty to ensure the genesis event is properly signed
+-- with EIP-712 signatures using the TEE's mnemonic
