@@ -14,7 +14,7 @@
  */
 
 import { prisma } from './client';
-import { signPayload, getTeeAddress, getTeePublicKey } from './eip712';
+import { signPayload, getTeeAddress, getTeePublicKey, computePayloadDigest } from './eip712';
 
 /**
  * Event kind enumeration
@@ -39,7 +39,9 @@ export enum EventKind {
  * This can be set via environment variable or hardcoded. It's included in
  * every event to allow verification against specific TEE versions.
  */
-const TEE_VERSION = parseInt(process.env.TEE_VERSION || '1', 10);
+import { parseIntEnv } from '../config/env';
+
+const TEE_VERSION = parseIntEnv('TEE_VERSION', 1, 1);
 
 /**
  * Creates an event in the event table
@@ -85,13 +87,11 @@ export async function createEvent(
   const timestamp = blockTs || new Date();
   const teePubkey = getTeePublicKey();
 
+  // Compute digest first (same as what will be signed)
+  const digest = computePayloadDigest(kind, payloadJson, nonce || undefined);
+
   // Sign the payload
   const signature = signPayload(kind, payloadJson, nonce || undefined);
-
-  // Compute digest (same as what was signed)
-  const digest = await import('./eip712').then((m) =>
-    m.computePayloadDigest(kind, payloadJson, nonce || undefined)
-  );
 
   // Create the event record
   const event = await prisma.event.create({

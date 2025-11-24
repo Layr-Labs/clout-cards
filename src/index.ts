@@ -8,17 +8,9 @@
  * Environment configuration is loaded from .env file before server startup.
  */
 import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
-
-/**
- * Loads environment variables from .env file into process.env
- *
- * Must be called before accessing any environment variables to ensure configuration
- * is available throughout the application.
- *
- * @throws {Error} If .env file is malformed (rare, dotenv handles gracefully)
- */
-dotenv.config();
+import './config/env'; // Loads dotenv.config() and initializes environment
+import { getAdminAddresses } from './services/admins';
+import { parseIntEnv } from './config/env';
 
 /**
  * Express application instance
@@ -31,11 +23,11 @@ const app = express();
  * Server port number
  *
  * Port on which the Express server will listen for incoming connections.
- * Reads from APP_PORT environment variable, defaults to 3000 if not set.
+ * Reads from APP_PORT environment variable, defaults to 8000 if not set.
  *
  * @type {number}
  */
-const APP_PORT: number = parseInt(process.env.APP_PORT || '3000', 10);
+const APP_PORT: number = parseIntEnv('APP_PORT', 8000);
 
 /**
  * GET /health
@@ -69,6 +61,46 @@ const APP_PORT: number = parseInt(process.env.APP_PORT || '3000', 10);
  */
 app.get('/health', (req: Request, res: Response): void => {
   res.status(200).json({ status: 'ok' });
+});
+
+/**
+ * GET /admins
+ *
+ * Returns a list of all valid admin addresses.
+ * No authentication required - this is public information.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - No path params, query params, headers, or body required
+ *
+ * Response:
+ * - 200: string[] - Array of admin addresses (checksum format)
+ *   - Local development: Returns Anvil's first default address
+ *   - Production: Returns addresses from ADMIN_ADDRESSES env var (or empty array)
+ *
+ * Error model:
+ * - 500: Server error if admin configuration is invalid
+ *
+ * @param {Request} req - Express request object (unused in this handler)
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ *
+ * @throws {Error} If admin configuration is invalid (caught and returned as 500)
+ */
+app.get('/admins', (req: Request, res: Response): void => {
+  try {
+    const admins = getAdminAddresses();
+    res.status(200).json(admins);
+  } catch (error) {
+    console.error('Error getting admin addresses:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve admin addresses',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 });
 
 /**

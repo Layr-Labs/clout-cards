@@ -7,11 +7,13 @@
  * Note: In Vite, environment variables must be prefixed with VITE_ to be exposed to the client.
  */
 
+import { parseIntEnv, getStringEnv, normalizeUrl } from './utils';
+
 /**
  * Determines if we're running in production
  *
  * Production is detected when:
- * - NODE_ENV === 'production', OR
+ * - import.meta.env.MODE === 'production', OR
  * - VITE_ENVIRONMENT === 'production'
  *
  * Otherwise, assumes local development.
@@ -49,8 +51,7 @@ export function getTeeEndpoint(): string {
     }
   }
 
-  // Ensure URL doesn't end with a slash
-  return endpoint.replace(/\/$/, '');
+  return normalizeUrl(endpoint);
 }
 
 /**
@@ -61,15 +62,7 @@ export function getTeeEndpoint(): string {
  * @returns Timeout in milliseconds
  */
 export function getTeeTimeout(): number {
-  const timeout = import.meta.env.VITE_TEE_TIMEOUT;
-  if (!timeout) {
-    return 30000; // 30 seconds default
-  }
-  const parsed = parseInt(timeout, 10);
-  if (isNaN(parsed) || parsed <= 0) {
-    throw new Error(`Invalid VITE_TEE_TIMEOUT: "${timeout}". Must be a positive integer.`);
-  }
-  return parsed;
+  return parseIntEnv(import.meta.env.VITE_TEE_TIMEOUT, 30000, 1);
 }
 
 /**
@@ -80,6 +73,6 @@ export function getTeeTimeout(): number {
  * @returns API version string
  */
 export function getTeeApiVersion(): string {
-  return import.meta.env.VITE_TEE_API_VERSION || 'v1';
+  return getStringEnv(import.meta.env.VITE_TEE_API_VERSION, 'v1');
 }
 

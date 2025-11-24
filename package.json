@@ -6,7 +6,10 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "ts-node src/index.ts",
+    "dev:full": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" --names \"backend,frontend\" --prefix-colors \"blue,green\""
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
@@ -21,6 +24,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",
+    "concurrently": "^9.2.1",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0"
   },

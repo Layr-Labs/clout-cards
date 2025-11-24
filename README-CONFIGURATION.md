@@ -26,6 +26,7 @@ The CloutCards application consists of:
 #### Optional
 - `DB_PORT` - PostgreSQL port (defaults to `5432`)
 - `TEE_VERSION` - TEE binary version (defaults to `1`)
+- `ADMIN_ADDRESSES` - Comma-separated list of admin addresses (production only, defaults to empty)
 - `NODE_ENV` - Set to `production` to enable production mode
 - `ENVIRONMENT` - Alternative to `NODE_ENV`, set to `production` for production mode
 
@@ -36,6 +37,7 @@ The backend uses hardcoded defaults for local development (no env vars needed):
 - **Database**: `localhost:5432` / `cloutcards` / `cloutcards` / `cloutcards_dev`
 - **Chain ID**: `31337` (Anvil default)
 - **Server Port**: `3000`
+- **Admin Addresses**: Anvil's first default address (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`)
 
 ### Backend Environment Detection
 
@@ -91,6 +93,9 @@ CHAIN_ID=84532
 
 # TEE (required in production)
 MNEMONIC=your twelve word mnemonic phrase here
+
+# Admins (optional - defaults to empty array if not set)
+ADMIN_ADDRESSES=0x1234567890123456789012345678901234567890,0xabcdefabcdefabcdefabcdefabcdefabcdefabcd
 
 # Server (optional)
 APP_PORT=3000
@@ -157,6 +162,7 @@ The frontend includes a TEE service layer (`frontend/src/services/tee.ts`) that:
   - `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`
   - `CHAIN_ID`
   - `MNEMONIC`
+  - `ADMIN_ADDRESSES` (optional - comma-separated list of admin addresses)
   - `NODE_ENV=production` or `ENVIRONMENT=production`
 
 **Frontend**:
@@ -177,6 +183,27 @@ Response:
 {
   "status": "ok"
 }
+```
+
+### Backend Admins Endpoint
+
+```bash
+curl http://localhost:8000/admins
+```
+
+Response (Local):
+```json
+["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"]
+```
+
+Response (Production):
+```json
+["0x1234567890123456789012345678901234567890","0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"]
+```
+
+Or empty array if `ADMIN_ADDRESSES` is not set:
+```json
+[]
 ```
 
 ### Frontend TEE Health Check
@@ -232,6 +259,7 @@ const isHealthy = await checkTeeHealth();
 | Chain ID | `31337` (Anvil) | `CHAIN_ID` |
 | TEE Mnemonic | N/A | `MNEMONIC` (for signing events) |
 | Server Port | `3000` | `APP_PORT` (optional) |
+| Admin Addresses | Anvil default (`0xf39Fd6...`) | `ADMIN_ADDRESSES` (comma-separated, optional) |
 | TEE Endpoint | **N/A** - Backend does not call TEE | **N/A** |
 | **Frontend** | | |
 | TEE Endpoint | `http://localhost:8000` | `VITE_TEE_ENDPOINT` |

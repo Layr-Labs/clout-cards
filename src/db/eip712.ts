@@ -1,3 +1,7 @@
+import { ethers } from 'ethers';
+import { isProduction } from '../config/env';
+import { LOCAL_DEFAULT_CHAIN_ID } from '../config/constants';
+
 /**
  * EIP-712 signature utilities for event signing
  *
@@ -8,38 +12,6 @@
  * The digest is computed from the canonical JSON payload, ensuring integrity
  * of the RPC call that mutated logical state.
  */
-
-import { ethers } from 'ethers';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-/**
- * Determines if we're running in production
- *
- * Production is detected when:
- * - NODE_ENV === 'production', OR
- * - ENVIRONMENT === 'production'
- *
- * Otherwise, assumes local development.
- *
- * @returns true if in production, false for local development
- */
-function isProduction(): boolean {
-  return (
-    process.env.NODE_ENV === 'production' ||
-    process.env.ENVIRONMENT === 'production'
-  );
-}
-
-/**
- * Default chain ID for local development
- *
- * Uses Anvil's default chain ID (31337) for local Ethereum node testing.
- * Anvil is Foundry's local Ethereum node - recommended for local development.
- * Can be overridden via CHAIN_ID environment variable.
- */
-const LOCAL_DEFAULT_CHAIN_ID = 31337; // Anvil default chain ID
 
 /**
  * Gets the chain ID from environment variables
