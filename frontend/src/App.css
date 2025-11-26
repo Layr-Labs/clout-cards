@@ -56,7 +56,8 @@
   width: 100%;
 }
 
-.header-play-button {
+.header-play-button,
+.header-login-button {
   padding: 10px 24px;
   font-size: 0.95rem;
   font-weight: 700;
@@ -78,7 +79,8 @@
   text-decoration: none;
 }
 
-.header-play-button::before {
+.header-play-button::before,
+.header-login-button::before {
   content: '';
   position: absolute;
   top: 0;
@@ -89,11 +91,13 @@
   transition: left 0.5s linear;
 }
 
-.header-play-button:hover::before {
+.header-play-button:hover::before,
+.header-login-button:hover::before {
   left: 100%;
 }
 
-.header-play-button:hover {
+.header-play-button:hover,
+.header-login-button:hover {
   background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 50%, #a78bfa 100%);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5), 0 0 20px rgba(167, 139, 250, 0.3);
@@ -112,7 +116,8 @@
     font-size: 0.9rem;
   }
 
-  .header-play-button {
+  .header-play-button,
+  .header-login-button {
     padding: 8px 16px;
     font-size: 0.85rem;
   }
@@ -1147,7 +1152,152 @@
   font-size: 1.25rem;
   color: rgba(255, 255, 255, 0.7);
   text-align: center;
+  margin: 0 0 48px 0;
+}
+
+.play-tables-loading,
+.play-tables-empty {
+  text-align: center;
+  padding: 64px 32px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.1rem;
+}
+
+.play-tables-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.play-table-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.3s linear;
+  display: flex;
+  flex-direction: column;
+}
+
+.play-table-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.play-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.play-table-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
   margin: 0;
+}
+
+.play-table-status {
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.play-table-status.active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.5);
+}
+
+.play-table-status.inactive {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.play-table-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex: 1;
+}
+
+.play-table-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.play-table-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.play-table-value {
+  font-size: 0.95rem;
+  color: #ffffff;
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.play-table-actions {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.play-table-join-button,
+.play-table-signin-button {
+  width: 100%;
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s linear;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.play-table-join-button {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #8b5cf6 100%);
+  color: #ffffff;
+}
+
+.play-table-join-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 50%, #a78bfa 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5);
+}
+
+.play-table-join-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.play-table-signin-button {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  color: #ffffff;
+  border: 2px solid #8b5cf6;
+}
+
+.play-table-signin-button:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.1) 100%);
+  border-color: #a78bfa;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 @media (max-width: 768px) {
@@ -1165,6 +1315,11 @@
 
   .play-description {
     font-size: 1rem;
+  }
+
+  .play-tables-list {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 }
 

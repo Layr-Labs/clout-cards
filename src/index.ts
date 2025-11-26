@@ -17,6 +17,7 @@ import { requireAdminAuth } from './middleware/adminAuth';
 import { createTable, CreateTableInput, getAllTables } from './services/tables';
 import { getRecentEvents } from './db/events';
 import { verifyEventSignature } from './services/eventVerification';
+import twitterAuthRoutes from './routes/twitterAuth';
 
 /**
  * Express application instance
@@ -43,6 +44,9 @@ const corsOptions: CorsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json()); // Parse JSON request bodies
+
+// Twitter OAuth routes
+app.use('/', twitterAuthRoutes);
 
 /**
  * Server port number
