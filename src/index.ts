@@ -19,6 +19,10 @@ import { getRecentEvents } from './db/events';
 import { verifyEventSignature } from './services/eventVerification';
 import twitterAuthRoutes from './routes/twitterAuth';
 import { getTeePublicKey } from './db/eip712';
+import { requireWalletAuth } from './middleware/walletAuth';
+import { getEscrowBalance } from './services/escrowBalance';
+import { startContractListener } from './services/contractListener';
+import { prisma } from './db/client';
 
 /**
  * Express application instance
@@ -458,6 +462,51 @@ app.get('/tee/publicKey', (req: Request, res: Response): void => {
 });
 
 /**
+ * GET /playerEscrowBalance
+ *
+ * Returns the escrow balance for a player's wallet address.
+ *
+ * Auth:
+ * - Requires wallet signature authentication via Authorization header
+ *
+ * Request:
+ * - Query params:
+ *   - walletAddress: string (Ethereum address)
+ * - Headers:
+ *   - Authorization: Bearer <signature> (session signature)
+ *
+ * Response:
+ * - 200: { balanceGwei: string }
+ *   - balanceGwei: Escrow balance in gwei (as string to handle large numbers)
+ *
+ * Error model:
+ * - 400: { error: "Invalid request"; message: string } - Missing or invalid walletAddress
+ * - 401: { error: "Unauthorized"; message: string } - Invalid or missing signature
+ * - 500: { error: "Failed to fetch balance"; message: string } - Server error
+ *
+ * @param {Request} req - Express request object with walletAddress attached
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/playerEscrowBalance', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const balanceGwei = await getEscrowBalance(walletAddress);
+    
+    res.status(200).json({
+      balanceGwei: balanceGwei.toString(),
+    });
+  } catch (error) {
+    console.error('Error fetching escrow balance:', error);
+    res.status(500).json({
+      error: 'Failed to fetch balance',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
  * Starts the Express server and begins listening for incoming connections
  *
  * Binds the Express application to the specified port and starts accepting HTTP requests.
@@ -487,4 +536,21 @@ app.get('/tee/publicKey', (req: Request, res: Response): void => {
  */
 app.listen(APP_PORT, (): void => {
   console.log(`Server is running on port ${APP_PORT}`);
+  
+  // Start listening to contract events if contract address is configured
+  const contractAddress = process.env.CLOUTCARDS_CONTRACT_ADDRESS;
+  if (contractAddress) {
+    try {
+      // For local development, always use Anvil default RPC (not from env)
+      // For production, use RPC_URL env var
+      const isProd = isProduction();
+      const rpcUrl = isProd ? process.env.RPC_URL : undefined; // undefined = use default Anvil
+      startContractListener(contractAddress, rpcUrl);
+    } catch (error) {
+      console.error('Failed to start contract listener:', error);
+      console.error('Contract events will not be processed. Set CLOUTCARDS_CONTRACT_ADDRESS to enable.');
+    }
+  } else {
+    console.log('⚠️  CLOUTCARDS_CONTRACT_ADDRESS not set - contract event listener not started');
+  }
 });

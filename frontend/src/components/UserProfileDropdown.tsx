@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useWallet } from '../contexts/WalletContext'
 import { formatAddress } from '../utils/formatAddress'
 import { type TwitterUser } from '../services/twitter'
@@ -111,9 +112,9 @@ export function UserProfileDropdown({
 
       {isOpen && (
         <div className="user-profile-menu">
-          <a href="#profile" className="user-profile-menu-item">
+          <Link to="/profile" className="user-profile-menu-item">
             Profile
-          </a>
+          </Link>
           <button
             className="user-profile-menu-item user-profile-menu-item-logout"
             onClick={handleLogout}

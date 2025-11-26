@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import Admin from './Admin'
 import Play from './Play'
+import Profile from './Profile'
 
 /**
  * Landing page component for CloutCards
@@ -240,6 +241,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/play" element={<Play />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </BrowserRouter>
   )

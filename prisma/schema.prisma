@@ -64,3 +64,18 @@ model PokerTable {
   @@index([minimumBuyIn, maximumBuyIn]) // Composite index for buy-in range searches
   @@map("poker_tables")
 }
+
+/**
+ * Player escrow balance
+ * 
+ * Tracks the on-chain escrow balance for each player wallet address.
+ * This balance is updated when Deposited() events are detected from the CloutCards contract.
+ * Balance is stored in gwei (wei / 10^9) for precision.
+ */
+model PlayerEscrowBalance {
+  walletAddress String   @id @db.VarChar(42) @map("wallet_address") // Ethereum address (primary key)
+  balanceGwei   BigInt   @map("balance_gwei") // Escrow balance in gwei
+  updatedAt     DateTime @updatedAt @map("updated_at") // Last update timestamp
+
+  @@map("player_escrow_balances")
+}
