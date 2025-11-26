@@ -18,6 +18,7 @@ import { createTable, CreateTableInput, getAllTables } from './services/tables';
 import { getRecentEvents } from './db/events';
 import { verifyEventSignature } from './services/eventVerification';
 import twitterAuthRoutes from './routes/twitterAuth';
+import { getTeePublicKey } from './db/eip712';
 
 /**
  * Express application instance
@@ -413,6 +414,44 @@ app.get('/events', requireAdminAuth({ addressSource: 'query' }), async (req: Req
     console.error('Error fetching events:', error);
     res.status(500).json({
       error: 'Failed to fetch events',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /tee/publicKey
+ *
+ * Returns the TEE's public key (Ethereum address) that is used to authorize
+ * withdrawals and other operations on the smart contract.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - No path params, query params, headers, or body required
+ *
+ * Response:
+ * - 200: { publicKey: string }
+ *   - publicKey: The TEE's Ethereum address (0x-prefixed hex string, 42 characters)
+ *   - This address should be used as the "house" address when deploying/upgrading the CloutCards contract
+ *
+ * Error model:
+ * - 500: { error: string; message: string } - Server error (e.g., MNEMONIC not configured)
+ *
+ * @param {Request} req - Express request object (unused in this handler)
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/tee/publicKey', (req: Request, res: Response): void => {
+  try {
+    const publicKey = getTeePublicKey();
+    res.status(200).json({ publicKey });
+  } catch (error) {
+    console.error('Error getting TEE public key:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve TEE public key',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }

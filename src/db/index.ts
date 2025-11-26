@@ -9,6 +9,5 @@ export { createEvent, withEvent, getLatestEventId, EventKind } from './events';
 export {
   computePayloadDigest,
   signPayload,
-  getTeeAddress,
   getTeePublicKey,
 } from './eip712';

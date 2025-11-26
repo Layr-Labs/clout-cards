@@ -150,25 +150,16 @@ export function signPayload(
 }
 
 /**
- * Gets the TEE's public address
- *
- * This address can be used to verify event signatures.
- *
- * @returns Public address of the TEE wallet
- */
-export function getTeeAddress(): string {
-  const wallet = getTeeWallet();
-  return wallet.address;
-}
-
-/**
  * Gets the TEE's public key (Ethereum address format)
  *
  * This public key is stored in events to allow third parties to verify signatures.
  * For Ethereum, we store the address (42 characters) rather than the full public key.
+ * This address can be used to verify event signatures and should be set as the
+ * house address when deploying the CloutCards contract.
  *
  * @returns TEE address as hex string (42 characters: 0x + 40 hex chars)
  */
 export function getTeePublicKey(): string {
-  return getTeeAddress();
+  const wallet = getTeeWallet();
+  return wallet.address;
 }

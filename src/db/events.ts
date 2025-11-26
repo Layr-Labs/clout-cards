@@ -14,7 +14,7 @@
  */
 
 import { prisma } from './client';
-import { signPayload, getTeeAddress, getTeePublicKey, computePayloadDigest } from './eip712';
+import { signPayload, getTeePublicKey, computePayloadDigest } from './eip712';
 
 /**
  * Event kind enumeration

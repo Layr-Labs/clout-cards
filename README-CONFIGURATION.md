@@ -27,6 +27,7 @@ The CloutCards application consists of:
 - `DB_PORT` - PostgreSQL port (defaults to `5432`)
 - `TEE_VERSION` - TEE binary version (defaults to `1`)
 - `ADMIN_ADDRESSES` - Comma-separated list of admin addresses (production only, defaults to empty)
+- `CLOUTCARDS_CONTRACT_ADDRESS` - Address of the deployed CloutCards proxy contract (required for contract interactions)
 - `NODE_ENV` - Set to `production` to enable production mode
 - `ENVIRONMENT` - Alternative to `NODE_ENV`, set to `production` for production mode
 
@@ -38,6 +39,7 @@ The backend uses hardcoded defaults for local development (no env vars needed):
 - **Chain ID**: `31337` (Anvil default)
 - **Server Port**: `3000`
 - **Admin Addresses**: Anvil's first default address (`0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`)
+- **Contract Address**: Not set by default - must be provided via `CLOUTCARDS_CONTRACT_ADDRESS` env var or command line
 
 ### Backend Environment Detection
 
@@ -100,6 +102,9 @@ ADMIN_ADDRESSES=0x1234567890123456789012345678901234567890,0xabcdefabcdefabcdefa
 # Server (optional)
 APP_PORT=3000
 TEE_VERSION=1
+
+# Contract Address (required for contract interactions)
+CLOUTCARDS_CONTRACT_ADDRESS=0x1234567890123456789012345678901234567890
 
 # Environment (optional - set to 'production' for production)
 NODE_ENV=production
@@ -260,6 +265,7 @@ const isHealthy = await checkTeeHealth();
 | TEE Mnemonic | N/A | `MNEMONIC` (for signing events) |
 | Server Port | `3000` | `APP_PORT` (optional) |
 | Admin Addresses | Anvil default (`0xf39Fd6...`) | `ADMIN_ADDRESSES` (comma-separated, optional) |
+| Contract Address | Not set (must provide) | `CLOUTCARDS_CONTRACT_ADDRESS` |
 | TEE Endpoint | **N/A** - Backend does not call TEE | **N/A** |
 | **Frontend** | | |
 | TEE Endpoint | `http://localhost:8000` | `VITE_TEE_ENDPOINT` |

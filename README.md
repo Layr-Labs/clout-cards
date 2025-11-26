@@ -3,10 +3,59 @@
 ## Development
 
 ### Setup & Local Testing
+
+1. **Install dependencies**:
 ```bash
 npm install
-cp .env.example .env
-npm run dev
+cd frontend && npm install && cd ..
+```
+
+2. **Start local blockchain** (Anvil):
+```bash
+anvil
+```
+
+3. **Deploy contract** (in a new terminal):
+```bash
+# Get TEE public key from backend (if running)
+TEE_PUBLIC_KEY=$(curl -s http://localhost:8000/tee/publicKey | jq -r '.publicKey' || echo "0x0487Ecf457cEAdc4Be25676EDE5F634fdcDdbF4d")
+
+# Deploy contract
+npx ts-node scripts/deploy-clout-cards.ts \
+  http://localhost:8545 \
+  $TEE_PUBLIC_KEY \
+  --default-anvil-key
+
+# Copy the proxy address from output
+```
+
+4. **Start full dev server** (backend + frontend):
+```bash
+# Option 1: Set inline (one-time use)
+CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress npm run dev:full
+
+# Option 2: Export for current shell session
+export CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress
+npm run dev:full
+
+# Option 3: One-liner with export
+export CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress && npm run dev:full
+
+# Option 4: Add to .env file (persists across sessions)
+echo "CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress" >> .env
+npm run dev:full
+```
+
+The `dev:full` script starts both backend (port 8000) and frontend (port 5173) concurrently.
+
+### Individual Services
+
+```bash
+# Backend only
+npm run dev:backend
+
+# Frontend only
+npm run dev:frontend
 ```
 
 ### Docker Testing
@@ -142,4 +191,7 @@ tls /path/to/cert.pem /path/to/key.pem
 
 ## Documentation
 
-[EigenX CLI Documentation](https://github.com/Layr-Labs/eigenx-cli/blob/main/README.md)
+- [Configuration Guide](./README-CONFIGURATION.md) - Environment variables and configuration
+- [Deployment Guide](./README-DEPLOYMENT.md) - Smart contract deployment instructions
+- [Database Guide](./README-DATABASE.md) - Database setup and migrations
+- [EigenX CLI Documentation](https://github.com/Layr-Labs/eigenx-cli/blob/main/README.md)
