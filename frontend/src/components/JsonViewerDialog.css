@@ -1,0 +1,146 @@
+.json-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.json-dialog-content {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.json-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.json-dialog-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.json-dialog-actions-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.json-dialog-copy,
+.json-dialog-close {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s linear;
+  font-family: inherit;
+}
+
+.json-dialog-copy:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.json-dialog-close {
+  font-size: 1.5rem;
+  padding: 4px 12px;
+  width: auto;
+  height: auto;
+  line-height: 1;
+}
+
+.json-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.json-dialog-body {
+  padding: 24px;
+  overflow: auto;
+  flex: 1;
+}
+
+.json-dialog-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #ef4444;
+}
+
+.json-dialog-error p {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+}
+
+.json-dialog-error-note {
+  font-size: 0.85rem;
+  color: #b0b0b0;
+}
+
+.json-dialog-pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow-x: auto;
+}
+
+.json-dialog-code {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+}
+
+/* JSON syntax highlighting (basic) */
+.json-dialog-code {
+  color: #e0e0e0;
+}
+
+@media (max-width: 768px) {
+  .json-dialog-content {
+    max-width: 100%;
+    max-height: 95vh;
+  }
+
+  .json-dialog-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .json-dialog-actions-header {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+

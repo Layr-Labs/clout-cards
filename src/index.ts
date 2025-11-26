@@ -9,10 +9,14 @@
  */
 import express, { Request, Response } from 'express';
 import cors, { CorsOptions } from 'cors';
-import { ethers } from 'ethers';
 import './config/env'; // Loads dotenv.config() and initializes environment
 import { getAdminAddresses } from './services/admins';
 import { parseIntEnv, isProduction } from './config/env';
+import { generateSessionMessage } from './utils/messages';
+import { requireAdminAuth } from './middleware/adminAuth';
+import { createTable, CreateTableInput, getAllTables } from './services/tables';
+import { getRecentEvents } from './db/events';
+import { verifyEventSignature } from './services/eventVerification';
 
 /**
  * Express application instance
@@ -38,6 +42,7 @@ const corsOptions: CorsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(express.json()); // Parse JSON request bodies
 
 /**
  * Server port number
@@ -163,24 +168,247 @@ app.get('/sessionMessage', (req: Request, res: Response): void => {
       return;
     }
 
-    // Validate Ethereum address format
-    if (!ethers.isAddress(address)) {
-      res.status(400).json({
-        error: 'Invalid address',
-        message: 'Address must be a valid Ethereum address',
-      });
-      return;
-    }
-
-    // Convert to checksum format for consistent display
-    const checksumAddress = ethers.getAddress(address);
-    const message = `Sign on to Clout Cards with address ${checksumAddress}`;
+    // Generate session message using reusable utility
+    const message = generateSessionMessage(address);
 
     res.status(200).json({ message });
   } catch (error) {
     console.error('Error generating session message:', error);
+    res.status(400).json({
+      error: 'Invalid address',
+      message: error instanceof Error ? error.message : 'Address must be a valid Ethereum address',
+    });
+  }
+});
+
+/**
+ * POST /createTable
+ *
+ * Creates a new poker table. Requires admin authentication via signature.
+ *
+ * Auth:
+ * - Requires admin signature in Authorization header
+ * - Signature must be valid for the admin's session message
+ * - Uses requireAdminAuth middleware to verify authentication
+ *
+ * Request:
+ * - Headers:
+ *   - Authorization: string (required) - Session signature from localStorage (Bearer token)
+ *   - Content-Type: application/json
+ * - Body:
+ *   - name: string (required) - Unique table name
+ *   - minimumBuyIn: string (required) - Minimum buy-in in gwei (as string to handle BigInt)
+ *   - maximumBuyIn: string (required) - Maximum buy-in in gwei (as string to handle BigInt)
+ *   - perHandRake: number (required) - Rake per hand in basis points (0-10000)
+ *   - maxSeatCount: number (required) - Maximum seats (0-8)
+ *   - smallBlind: string (required) - Small blind in gwei (as string to handle BigInt)
+ *   - bigBlind: string (required) - Big blind in gwei (as string to handle BigInt)
+ *   - isActive: boolean (optional) - Whether table is active (defaults to true)
+ *   - adminAddress: string (required) - Admin address creating the table
+ *
+ * Response:
+ * - 200: { id: number; name: string; ... } - Created table record
+ * - 400: { error: string; message: string } - Invalid input or validation error
+ * - 401: { error: string; message: string } - Unauthorized (not admin or invalid signature)
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object (with adminAddress attached by middleware)
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/createTable', requireAdminAuth(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Admin address is attached to req by requireAdminAuth middleware
+    const adminAddress = (req as Request & { adminAddress: string }).adminAddress;
+    const { adminAddress: _, ...tableInput } = req.body; // Remove adminAddress from tableInput
+
+    // Parse BigInt values from strings
+    const createTableInput: CreateTableInput = {
+      name: tableInput.name,
+      minimumBuyIn: BigInt(tableInput.minimumBuyIn),
+      maximumBuyIn: BigInt(tableInput.maximumBuyIn),
+      perHandRake: tableInput.perHandRake,
+      maxSeatCount: tableInput.maxSeatCount,
+      smallBlind: BigInt(tableInput.smallBlind),
+      bigBlind: BigInt(tableInput.bigBlind),
+      isActive: tableInput.isActive,
+    };
+
+    // Create the table (includes event logging in transaction)
+    const table = await createTable(createTableInput, adminAddress);
+
+    // Convert BigInt fields to strings for JSON response
+    res.status(200).json({
+      id: table.id,
+      name: table.name,
+      minimumBuyIn: table.minimumBuyIn.toString(),
+      maximumBuyIn: table.maximumBuyIn.toString(),
+      perHandRake: table.perHandRake,
+      maxSeatCount: table.maxSeatCount,
+      smallBlind: table.smallBlind.toString(),
+      bigBlind: table.bigBlind.toString(),
+      isActive: table.isActive,
+      createdAt: table.createdAt,
+      updatedAt: table.updatedAt,
+    });
+  } catch (error) {
+    console.error('Error creating table:', error);
+    const statusCode = error instanceof Error && error.message.includes('must be') ? 400 : 500;
+    res.status(statusCode).json({
+      error: 'Failed to create table',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /pokerTables
+ *
+ * Returns a list of all poker tables in the database.
+ * No authentication required - this is public information.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - No path params, query params, headers, or body required
+ *
+ * Response:
+ * - 200: Array of poker table objects
+ *   - Each table includes: id, name, minimumBuyIn, maximumBuyIn, perHandRake,
+ *     maxSeatCount, smallBlind, bigBlind, isActive, createdAt, updatedAt
+ *   - BigInt fields (minimumBuyIn, maximumBuyIn, smallBlind, bigBlind) are returned as strings
+ *   - Tables are ordered by creation date (newest first)
+ *
+ * Error model:
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object (unused in this handler)
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/pokerTables', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tables = await getAllTables();
+
+    // Convert BigInt fields to strings for JSON response
+    const tablesJson = tables.map((table) => ({
+      id: table.id,
+      name: table.name,
+      minimumBuyIn: table.minimumBuyIn.toString(),
+      maximumBuyIn: table.maximumBuyIn.toString(),
+      perHandRake: table.perHandRake,
+      maxSeatCount: table.maxSeatCount,
+      smallBlind: table.smallBlind.toString(),
+      bigBlind: table.bigBlind.toString(),
+      isActive: table.isActive,
+      createdAt: table.createdAt.toISOString(),
+      updatedAt: table.updatedAt.toISOString(),
+    }));
+
+    res.status(200).json(tablesJson);
+  } catch (error) {
+    console.error('Error fetching poker tables:', error);
     res.status(500).json({
-      error: 'Failed to generate session message',
+      error: 'Failed to fetch poker tables',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /events
+ *
+ * Returns the most recent events from the event table.
+ * Requires admin authentication via signature.
+ *
+ * Auth:
+ * - Requires admin signature in Authorization header
+ * - Uses requireAdminAuth middleware to verify authentication
+ *
+ * Request:
+ * - Headers:
+ *   - Authorization: string (required) - Session signature from localStorage (Bearer token)
+ *   - Content-Type: application/json
+ * - Query params:
+ *   - limit: number (optional) - Maximum number of events to return (default: 50, max: 100)
+ *
+ * Response:
+ * - 200: Array of event objects
+ *   - Each event includes: eventId, blockTs, player, kind, payloadJson, digest,
+ *     sigR, sigS, sigV, nonce, teeVersion, teePubkey, ingestedAt
+ *   - Events are ordered by eventId descending (newest first)
+ *   - BigInt fields (nonce) are returned as strings
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid limit parameter
+ * - 401: { error: string; message: string } - Unauthorized (not admin or invalid signature)
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object (with adminAddress attached by middleware)
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/events', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Parse limit from query params
+    const limitParam = req.query.limit;
+    let limit = 50; // Default limit
+
+    if (limitParam) {
+      const parsedLimit = parseInt(limitParam as string, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+        res.status(400).json({
+          error: 'Invalid request',
+          message: 'limit must be a number between 1 and 100',
+        });
+        return;
+      }
+      limit = parsedLimit;
+    }
+
+    const events = await getRecentEvents(limit);
+
+    // Convert BigInt fields to strings for JSON response and verify signatures
+    const eventsJson = events.map((event) => {
+      // Verify signature
+      const isValid = verifyEventSignature(
+        event.kind,
+        event.payloadJson,
+        event.digest,
+        event.sigR,
+        event.sigS,
+        event.sigV,
+        event.teePubkey,
+        event.nonce
+      );
+
+      return {
+        eventId: event.eventId,
+        blockTs: event.blockTs.toISOString(),
+        player: event.player,
+        kind: event.kind,
+        payloadJson: event.payloadJson,
+        digest: event.digest,
+        sigR: event.sigR,
+        sigS: event.sigS,
+        sigV: event.sigV,
+        nonce: event.nonce?.toString() || null,
+        teeVersion: event.teeVersion,
+        teePubkey: event.teePubkey,
+        ingestedAt: event.ingestedAt.toISOString(),
+        signatureValid: isValid,
+      };
+    });
+
+    res.status(200).json(eventsJson);
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    res.status(500).json({
+      error: 'Failed to fetch events',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
