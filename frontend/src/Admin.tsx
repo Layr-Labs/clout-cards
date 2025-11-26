@@ -2,7 +2,7 @@ import './App.css'
 import { Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
-import { WalletAvatar } from './components/WalletAvatar'
+import { WalletInfo } from './components/WalletInfo'
 import { formatAddress } from './utils/formatAddress'
 import { formatGwei } from './utils/formatGwei'
 import { JsonViewerDialog } from './components/JsonViewerDialog'
@@ -18,10 +18,9 @@ import { createTable, getPokerTables, type PokerTable } from './services/tables'
  * Features tab-based navigation for Tables and Metadata management.
  */
 function Admin() {
-  const { address, isConnected, isLoggedIn, connectWallet, disconnectWallet, signature } = useWallet()
+  const { address, isConnected, isLoggedIn, connectWallet, signature } = useWallet()
   const [activeTab, setActiveTab] = useState<'tables' | 'metadata'>('tables')
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null)
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false)
   const [tables, setTables] = useState<PokerTable[]>([])
@@ -49,18 +48,11 @@ function Admin() {
   }
 
   /**
-   * Handles wallet disconnection
+   * Handles wallet disconnection callback
+   * Resets admin status when wallet is disconnected
    */
-  async function handleDisconnect() {
-    setIsDisconnecting(true)
-    try {
-      await disconnectWallet()
-      setIsAdminUser(null) // Reset admin status on disconnect
-    } catch (error) {
-      console.error('Failed to disconnect wallet:', error)
-    } finally {
-      setIsDisconnecting(false)
-    }
+  function handleDisconnect() {
+    setIsAdminUser(null) // Reset admin status on disconnect
   }
 
   /**
@@ -217,16 +209,11 @@ function Admin() {
             <>
               {/* Wallet Info */}
               <div className="admin-wallet-info">
-                <WalletAvatar address={address!} size={48} />
-                <span className="admin-wallet-address">{formatAddress(address!)}</span>
-                <button
-                  className="admin-disconnect-button"
-                  onClick={handleDisconnect}
-                  disabled={isDisconnecting}
-                  title="Disconnect wallet"
-                >
-                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
-                </button>
+                <WalletInfo
+                  disconnectButtonClassName="admin-disconnect-button"
+                  onDisconnect={handleDisconnect}
+                  size={48}
+                />
               </div>
 
               {/* Admin Status Check */}

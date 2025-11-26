@@ -1,0 +1,48 @@
+.wallet-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wallet-info-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wallet-info-address {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.wallet-info-balance {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.wallet-info-disconnect-button {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  margin-left: auto;
+}
+
+.wallet-info-disconnect-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+}
+
+.wallet-info-disconnect-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
