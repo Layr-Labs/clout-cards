@@ -187,7 +187,7 @@ function Admin() {
           <Link to="/" className="nav-link">Home</Link>
           <a href="#leaderboard" className="nav-link">Leaderboard</a>
           <a href="#docs" className="nav-link">Docs</a>
-          <button className="header-play-button">Play Now</button>
+          <Link to="/play" className="header-play-button">Play Now</Link>
         </nav>
       </header>
 

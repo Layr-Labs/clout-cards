@@ -2,8 +2,9 @@ import './App.css'
 import { SiX } from 'react-icons/si'
 import { FaWallet, FaGamepad } from 'react-icons/fa'
 import { motion } from 'framer-motion'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import Admin from './Admin'
+import Play from './Play'
 
 /**
  * Landing page component for CloutCards
@@ -17,10 +18,10 @@ function LandingPage() {
       {/* Header */}
       <header className="header">
         <nav className="header-nav">
-          <a href="/" className="nav-link">Home</a>
+          <Link to="/" className="nav-link">Home</Link>
           <a href="#leaderboard" className="nav-link">Leaderboard</a>
           <a href="#docs" className="nav-link">Docs</a>
-          <button className="header-play-button">Play Now</button>
+          <Link to="/play" className="header-play-button">Play Now</Link>
         </nav>
       </header>
 
@@ -44,14 +45,15 @@ function LandingPage() {
             transition={{ duration: 0.8, ease: "linear" }}
           />
           <div className="hero-buttons">
-            <motion.button 
-              className="cta-button cta-primary"
+            <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, ease: "linear" }}
             >
-              Play Now
-            </motion.button>
+              <Link to="/play" className="cta-button cta-primary">
+                Play Now
+              </Link>
+            </motion.div>
             <motion.button 
               className="cta-button cta-secondary"
               initial={{ opacity: 0, y: 30 }}
@@ -237,6 +239,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/play" element={<Play />} />
       </Routes>
     </BrowserRouter>
   )
