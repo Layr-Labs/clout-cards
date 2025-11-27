@@ -109,20 +109,49 @@ export async function exchangeTwitterCode(
 }
 
 /**
+ * In-memory cache for Twitter user info keyed by access token
+ * Cache expires after 24 hours to minimize API calls and handle rate limiting
+ */
+const userInfoCache = new Map<string, { userInfo: { id: string; username: string; name: string; profile_image_url?: string }; expiresAt: number }>();
+
+// Clean up expired cache entries every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, cached] of userInfoCache.entries()) {
+    if (now > cached.expiresAt) {
+      userInfoCache.delete(token);
+    }
+  }
+}, 10 * 60 * 1000);
+
+/**
  * Gets Twitter user information from access token
  *
  * Retrieves the authenticated user's Twitter profile information.
+ * Uses caching to reduce API calls and handle rate limiting gracefully.
  *
  * @param accessToken - Twitter OAuth access token
+ * @param useCache - Whether to use cached user info (default: true)
  * @returns Promise that resolves to user info (id, username, name, profile_image_url)
- * @throws {Error} If API request fails
+ * @throws {Error} If API request fails (unless 429 rate limit, then returns cached if available)
  */
-export async function getTwitterUserInfo(accessToken: string): Promise<{
+export async function getTwitterUserInfo(
+  accessToken: string,
+  useCache: boolean = true
+): Promise<{
   id: string;
   username: string;
   name: string;
   profile_image_url?: string;
 }> {
+  // Check cache first
+  if (useCache) {
+    const cached = userInfoCache.get(accessToken);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.userInfo;
+    }
+  }
+
   const response = await fetch('https://api.twitter.com/2/users/me?user.fields=profile_image_url', {
     method: 'GET',
     headers: {
@@ -132,7 +161,19 @@ export async function getTwitterUserInfo(accessToken: string): Promise<{
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to get Twitter user info: ${response.status} ${errorText}`);
+    const status = response.status;
+
+    // Handle rate limiting (429) - return cached data if available
+    if (status === 429) {
+      const cached = userInfoCache.get(accessToken);
+      if (cached) {
+        console.warn('⚠️  Twitter API rate limit hit (429). Returning cached user info.');
+        return cached.userInfo;
+      }
+      throw new Error(`Twitter API rate limit exceeded (429). Please try again later. ${errorText}`);
+    }
+
+    throw new Error(`Failed to get Twitter user info: ${status} ${errorText}`);
   }
 
   const data = await response.json() as {
@@ -143,12 +184,21 @@ export async function getTwitterUserInfo(accessToken: string): Promise<{
       profile_image_url?: string;
     };
   };
-  return {
+
+  const userInfo = {
     id: data.data.id,
     username: data.data.username,
     name: data.data.name,
     profile_image_url: data.data.profile_image_url,
   };
+
+  // Cache the result for 24 hours
+  userInfoCache.set(accessToken, {
+    userInfo,
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+  });
+
+  return userInfo;
 }
 
 /**

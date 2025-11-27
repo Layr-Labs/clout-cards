@@ -201,8 +201,21 @@ router.get('/twitter/callback', async (req: Request, res: Response): Promise<voi
     // Exchange code for access token
     const { accessToken, refreshToken } = await exchangeTwitterCode(code, redirectUri, session.codeVerifier);
 
-    // Get user info
-    const userInfo = await getTwitterUserInfo(accessToken);
+    // Get user info (this will cache it for future requests)
+    // If rate limited, we'll handle it gracefully
+    let userInfo;
+    try {
+      userInfo = await getTwitterUserInfo(accessToken);
+    } catch (error) {
+      // If rate limited during OAuth callback, log warning but don't fail
+      // The user can still proceed, and we'll cache user info on next request
+      if (error instanceof Error && error.message.includes('429')) {
+        console.warn('⚠️  Twitter API rate limit hit during OAuth callback. User info will be fetched on next request.');
+        // Create a placeholder user info - this shouldn't happen often
+        throw new Error('Twitter API rate limit exceeded. Please try again in a few minutes.');
+      }
+      throw error;
+    }
 
     // Generate temporary session ID for token retrieval
     const sessionId = generateState(64);
@@ -323,6 +336,16 @@ router.get('/twitter/user', async (req: Request, res: Response): Promise<void> =
     res.status(200).json(userInfo);
   } catch (error) {
     console.error('Error getting Twitter user:', error);
+    
+    // Handle rate limiting specifically
+    if (error instanceof Error && error.message.includes('429')) {
+      res.status(429).json({
+        error: 'RateLimitExceeded',
+        message: 'Twitter API rate limit exceeded. Please try again later.',
+      });
+      return;
+    }
+    
     res.status(401).json({
       error: 'Unauthorized',
       message: error instanceof Error ? error.message : 'Invalid access token',

@@ -35,13 +35,33 @@ export function initiateTwitterAuth(redirectUri?: string): void {
 }
 
 /**
- * Gets Twitter user info from access token
+ * Gets Twitter user information from access token
+ *
+ * Uses localStorage cache to avoid excessive API calls and handle rate limiting.
+ * Cache expires after 1 hour.
  *
  * @param accessToken - Twitter OAuth access token
- * @returns Promise that resolves to Twitter user information
- * @throws {Error} If the request fails or token is invalid
+ * @returns Promise that resolves to Twitter user info
+ * @throws {Error} If API request fails
  */
 export async function getTwitterUser(accessToken: string): Promise<TwitterUser> {
+  // Check localStorage cache first
+  const cacheKey = `twitter_user_${accessToken.substring(0, 20)}`;
+  const cachedStr = localStorage.getItem(cacheKey);
+  if (cachedStr) {
+    try {
+      const cached = JSON.parse(cachedStr) as { userInfo: TwitterUser; expiresAt: number };
+      if (Date.now() < cached.expiresAt) {
+        return cached.userInfo;
+      }
+      // Cache expired, remove it
+      localStorage.removeItem(cacheKey);
+    } catch (error) {
+      // Invalid cache, remove it
+      localStorage.removeItem(cacheKey);
+    }
+  }
+
   const backendUrl = getBackendUrl();
   const url = `${backendUrl}/twitter/user`;
 
@@ -55,12 +75,34 @@ export async function getTwitterUser(accessToken: string): Promise<TwitterUser> 
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    
+    // If rate limited, try to return cached data even if expired
+    if (response.status === 429) {
+      if (cachedStr) {
+        try {
+          const cached = JSON.parse(cachedStr) as { userInfo: TwitterUser; expiresAt: number };
+          console.warn('⚠️  Twitter API rate limit hit. Using cached user info.');
+          return cached.userInfo;
+        } catch {
+          // Cache invalid, fall through to error
+        }
+      }
+      throw new Error('Twitter API rate limit exceeded. Please try again later.');
+    }
+    
     throw new Error(
       errorData.message || `Failed to get Twitter user: ${response.status} ${response.statusText}`
     );
   }
 
   const user: TwitterUser = await response.json();
+
+  // Cache the result for 1 hour
+  localStorage.setItem(cacheKey, JSON.stringify({
+    userInfo: user,
+    expiresAt: Date.now() + 60 * 60 * 1000, // 1 hour
+  }));
+
   return user;
 }
 

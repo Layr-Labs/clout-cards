@@ -25,6 +25,8 @@ import { signPayload, getTeePublicKey, computePayloadDigest } from './eip712';
 export enum EventKind {
   DEPOSIT = 'deposit',
   WITHDRAW = 'withdraw',
+  WITHDRAWAL_REQUEST = 'withdrawal_request',
+  WITHDRAWAL_EXECUTED = 'withdrawal_executed',
   BET = 'bet',
   HAND_START = 'hand_start',
   HAND_END = 'hand_end',

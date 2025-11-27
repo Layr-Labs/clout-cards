@@ -2,6 +2,26 @@
 
 ## Development
 
+### Quick Start: Reset Development Environment
+
+To completely reset your development environment (tear down Docker, restart services, migrate database, and deploy contract):
+
+```bash
+npx ts-node scripts/reset-dev-env.ts
+```
+
+This script will:
+1. Stop and remove all Docker containers and volumes
+2. Start fresh Docker containers (PostgreSQL and Anvil)
+3. Wait for services to be ready
+4. Run database migrations
+5. Deploy the CloutCards contract (using `--default-anvil-key --skip-confirmation` for automation)
+6. Display the contract proxy address
+
+After running, you can start the dev server with the displayed contract address.
+
+**Note**: The reset script runs without user interaction. For manual contract deployments, see [Deployment Guide](./README-DEPLOYMENT.md).
+
 ### Setup & Local Testing
 
 1. **Install dependencies**:
@@ -10,26 +30,33 @@ npm install
 cd frontend && npm install && cd ..
 ```
 
-2. **Start local blockchain** (Anvil):
+2. **Reset development environment** (recommended for fresh start):
 ```bash
-anvil
+npx ts-node scripts/reset-dev-env.ts
 ```
 
-3. **Deploy contract** (in a new terminal):
-```bash
-# Get TEE public key from backend (if running)
-TEE_PUBLIC_KEY=$(curl -s http://localhost:8000/tee/publicKey | jq -r '.publicKey' || echo "0x0487Ecf457cEAdc4Be25676EDE5F634fdcDdbF4d")
+   Or manually:
 
-# Deploy contract
-npx ts-node scripts/deploy-clout-cards.ts \
-  http://localhost:8545 \
-  $TEE_PUBLIC_KEY \
-  --default-anvil-key
+   **Start local services** (PostgreSQL and Anvil):
+   ```bash
+   docker-compose up -d
+   ```
 
-# Copy the proxy address from output
-```
+   **Deploy contract** (in a new terminal):
+   ```bash
+   # Get TEE public key from backend (if running)
+   TEE_PUBLIC_KEY=$(curl -s http://localhost:8000/tee/publicKey | jq -r '.publicKey' || echo "0x0487Ecf457cEAdc4Be25676EDE5F634fdcDdbF4d")
 
-4. **Start full dev server** (backend + frontend):
+   # Deploy contract
+   npx ts-node scripts/deploy-clout-cards.ts \
+     http://localhost:8545 \
+     $TEE_PUBLIC_KEY \
+     --default-anvil-key
+
+   # Copy the proxy address from output
+   ```
+
+3. **Start full dev server** (backend + frontend):
 ```bash
 # Option 1: Set inline (one-time use)
 CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress npm run dev:full

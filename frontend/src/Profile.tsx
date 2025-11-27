@@ -7,8 +7,10 @@ import { useEthBalance } from './hooks/useEthBalance';
 import { useEscrowBalance } from './hooks/useEscrowBalance';
 import { formatAddress } from './utils/formatAddress';
 import { DepositDialog } from './components/DepositDialog';
+import { CashOutDialog } from './components/CashOutDialog';
 import { UserProfileDropdown } from './components/UserProfileDropdown';
 import { WalletAvatar } from './components/WalletAvatar';
+import { Tooltip } from './components/Tooltip';
 import './Profile.css';
 import './App.css';
 
@@ -24,16 +26,52 @@ export default function Profile() {
   const { address, provider, isLoggedIn } = useWallet();
   const twitterUser = useTwitterUser();
   const ethBalance = useEthBalance(address, provider);
-  const escrowBalanceGwei = useEscrowBalance();
+  const escrowBalanceState = useEscrowBalance();
   const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
+  const [isCashOutDialogOpen, setIsCashOutDialogOpen] = useState(false);
 
   const isFullyLoggedIn = isLoggedIn && !!twitterUser && !!address;
 
   // Convert gwei to ETH for display
   // gwei is already in gwei (10^9 wei), so divide by 10^9 to get ETH
+  const escrowBalanceGwei = escrowBalanceState?.balanceGwei || '0';
   const escrowBalanceEth = escrowBalanceGwei
     ? (Number(escrowBalanceGwei) / 1e9).toFixed(6).replace(/\.?0+$/, '')
     : '0.0000';
+  
+  // withdrawalPending is false if escrowBalanceState is null (not loaded yet)
+  const withdrawalPending = escrowBalanceState?.withdrawalPending ?? false;
+  const withdrawalExpiry = escrowBalanceState?.withdrawalSignatureExpiry;
+
+  // Format expiry time for tooltip
+  const formatExpiryTooltip = (expiry: string | null): string => {
+    if (!expiry) return '';
+    try {
+      const expiryDate = new Date(expiry);
+      const now = new Date();
+      const diffMs = expiryDate.getTime() - now.getTime();
+      
+      if (diffMs <= 0) {
+        return 'Withdrawal signature has expired';
+      }
+      
+      const diffSeconds = Math.floor(diffMs / 1000);
+      const diffMinutes = Math.floor(diffSeconds / 60);
+      const diffHours = Math.floor(diffMinutes / 60);
+      
+      if (diffHours > 0) {
+        const remainingMinutes = diffMinutes % 60;
+        return `Withdrawal expires in ${diffHours} hour${diffHours > 1 ? 's' : ''}${remainingMinutes > 0 ? ` and ${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}` : ''}`;
+      } else if (diffMinutes > 0) {
+        const remainingSeconds = diffSeconds % 60;
+        return `Withdrawal expires in ${diffMinutes} minute${diffMinutes > 1 ? 's' : ''}${remainingSeconds > 0 ? ` and ${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}` : ''}`;
+      } else {
+        return `Withdrawal expires in ${diffSeconds} second${diffSeconds > 1 ? 's' : ''}`;
+      }
+    } catch (error) {
+      return 'Withdrawal pending';
+    }
+  };
 
   const twitterUrl = twitterUser ? `https://twitter.com/${twitterUser.username}` : '';
 
@@ -127,12 +165,34 @@ export default function Profile() {
                     {escrowBalanceEth} ETH
                   </div>
                 </div>
-                <button
-                  className="profile-deposit-button"
-                  onClick={() => setIsDepositDialogOpen(true)}
-                >
-                  Deposit
-                </button>
+                <div className="profile-escrow-actions">
+                  <button
+                    className="profile-deposit-button"
+                    onClick={() => setIsDepositDialogOpen(true)}
+                    disabled={withdrawalPending}
+                    title={withdrawalPending ? 'A withdrawal is pending. Please wait for it to complete.' : ''}
+                  >
+                    Deposit
+                  </button>
+                  {withdrawalPending ? (
+                    <Tooltip content={formatExpiryTooltip(withdrawalExpiry || null)} position="top">
+                      <button
+                        className="profile-cash-out-button profile-withdrawal-pending-button"
+                        disabled={true}
+                      >
+                        Withdrawal Pending
+                      </button>
+                    </Tooltip>
+                  ) : (
+                    <button
+                      className="profile-cash-out-button"
+                      onClick={() => setIsCashOutDialogOpen(true)}
+                      disabled={!escrowBalanceState || escrowBalanceEth === '0.0000' || Number(escrowBalanceEth) === 0}
+                    >
+                      CASH OUT
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -146,6 +206,16 @@ export default function Profile() {
           // Balance will auto-refresh via useEscrowBalance hook
           console.log('Deposit successful');
         }}
+      />
+
+      <CashOutDialog
+        isOpen={isCashOutDialogOpen}
+        onClose={() => setIsCashOutDialogOpen(false)}
+        onCashOutSuccess={() => {
+          // Balance will auto-refresh via useEscrowBalance hook
+          console.log('Cash out successful');
+        }}
+        escrowBalanceGwei={escrowBalanceGwei}
       />
     </div>
   );

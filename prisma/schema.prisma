@@ -71,11 +71,17 @@ model PokerTable {
  * Tracks the on-chain escrow balance for each player wallet address.
  * This balance is updated when Deposited() events are detected from the CloutCards contract.
  * Balance is stored in gwei (wei / 10^9) for precision.
+ * 
+ * Also tracks pending withdrawal state to prevent race conditions:
+ * - nextWithdrawalNonce: The nonce that will be used for the next withdrawal signature
+ * - withdrawalSignatureExpiry: When the current withdrawal signature expires (if pending)
  */
 model PlayerEscrowBalance {
-  walletAddress String   @id @db.VarChar(42) @map("wallet_address") // Ethereum address (primary key)
-  balanceGwei   BigInt   @map("balance_gwei") // Escrow balance in gwei
-  updatedAt     DateTime @updatedAt @map("updated_at") // Last update timestamp
+  walletAddress            String    @id @db.VarChar(42) @map("wallet_address") // Ethereum address (primary key)
+  balanceGwei             BigInt    @map("balance_gwei") // Escrow balance in gwei
+  nextWithdrawalNonce     BigInt?   @map("next_withdrawal_nonce") // Next withdrawal nonce (nullable if never withdrawn)
+  withdrawalSignatureExpiry DateTime? @map("withdrawal_signature_expiry") // Expiry timestamp of pending withdrawal signature (nullable)
+  updatedAt                DateTime  @updatedAt @map("updated_at") // Last update timestamp
 
   @@map("player_escrow_balances")
 }

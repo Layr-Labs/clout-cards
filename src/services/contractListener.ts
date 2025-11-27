@@ -1,28 +1,21 @@
 /**
  * Contract event listener service
  *
- * Listens to Deposited() events from the CloutCards contract and updates
- * the player escrow balance in the database.
+ * Listens to Deposited() and WithdrawalExecuted() events from the CloutCards contract
+ * and updates the player escrow balance in the database.
  */
 
 import { ethers } from 'ethers';
-import { getStringEnv, isProduction } from '../config/env';
-import { addEscrowBalance } from './escrowBalance';
+import { addEscrowBalance, processWithdrawalExecution } from './escrowBalance';
+import { createCloutCardsEventsContract } from '../utils/contract';
 
 /**
- * CloutCards contract ABI - only the events we need to listen to
- */
-const CLOUTCARDS_ABI = [
-  'event Deposited(address indexed player, address indexed depositor, uint256 amount)',
-] as const;
-
-/**
- * Starts listening to Deposited() events from the CloutCards contract
+ * Starts listening to Deposited() and WithdrawalExecuted() events from the CloutCards contract
  *
  * This function:
  * 1. Connects to the Ethereum RPC provider
  * 2. Gets the CloutCards contract instance
- * 3. Listens for Deposited() events
+ * 3. Listens for Deposited() and WithdrawalExecuted() events
  * 4. Updates the player escrow balance when events are detected
  *
  * @param contractAddress - Address of the CloutCards proxy contract
@@ -35,18 +28,11 @@ export function startContractListener(contractAddress: string, rpcUrl?: string):
     throw new Error(`Invalid contract address: ${contractAddress}`);
   }
 
-  // For local development, always use Anvil default RPC
-  // In production, use provided rpcUrl or RPC_URL env var
-  const isProd = process.env.NODE_ENV === 'production' || process.env.ENVIRONMENT === 'production';
-  const providerUrl = rpcUrl || (isProd ? getStringEnv('RPC_URL', '') : 'http://localhost:8545');
-  
-  if (!providerUrl) {
-    throw new Error('RPC_URL is required in production');
-  }
-  const provider = new ethers.JsonRpcProvider(providerUrl);
-  const contract = new ethers.Contract(contractAddress, CLOUTCARDS_ABI, provider);
+  const contract = createCloutCardsEventsContract(contractAddress, rpcUrl);
+  const provider = contract.runner as ethers.JsonRpcProvider;
+  const providerUrl = (provider as any).connection?.url || 'unknown';
 
-  console.log(`📡 Listening to Deposited() events from CloutCards contract: ${contractAddress}`);
+  console.log(`📡 Listening to Deposited() and WithdrawalExecuted() events from CloutCards contract: ${contractAddress}`);
   console.log(`   RPC URL: ${providerUrl}`);
 
   // Listen for Deposited events
@@ -92,6 +78,53 @@ export function startContractListener(contractAddress: string, rpcUrl?: string):
       console.log(`✅ Escrow balance updated for ${player}`);
     } catch (error) {
       console.error('❌ Error processing Deposited event:', error);
+      // Don't throw - we want to continue listening even if one event fails
+    }
+  });
+
+  // Listen for WithdrawalExecuted events
+  contract.on('WithdrawalExecuted', async (player: string, to: string, amount: bigint, nonce: bigint, eventPayload: any) => {
+    try {
+      // Extract event metadata from the EventLog object nested in the payload
+      const eventLog = eventPayload.log || eventPayload;
+      const transactionHash = eventLog.transactionHash;
+      const blockNumber = eventLog.blockNumber;
+
+      if (!transactionHash || blockNumber === undefined) {
+        console.error('❌ WithdrawalExecuted event missing transaction hash or block number');
+        console.error('   eventPayload.log:', eventPayload.log);
+        console.error('   eventPayload keys:', Object.keys(eventPayload));
+        return;
+      }
+
+      console.log(`💸 WithdrawalExecuted event detected:`);
+      console.log(`   Player: ${player}`);
+      console.log(`   To: ${to}`);
+      console.log(`   Amount: ${ethers.formatEther(amount)} ETH`);
+      console.log(`   Nonce: ${nonce}`);
+      console.log(`   Transaction: ${transactionHash}`);
+      console.log(`   Block: ${blockNumber}`);
+
+      // Get block timestamp
+      const block = await provider.getBlock(blockNumber);
+      const blockTimestamp = block ? new Date(block.timestamp * 1000) : new Date();
+
+      // Convert amount from wei to gwei
+      const amountGwei = amount / BigInt(10 ** 9);
+
+      // Process withdrawal execution (reduces balance and clears withdrawal state)
+      await processWithdrawalExecution(
+        player,
+        amountGwei,
+        nonce,
+        transactionHash,
+        BigInt(blockNumber),
+        blockTimestamp
+      );
+
+      console.log(`✅ Withdrawal execution processed for ${player}`);
+    } catch (error) {
+      console.error('❌ Error processing WithdrawalExecuted event:', error);
       // Don't throw - we want to continue listening even if one event fails
     }
   });

@@ -9,6 +9,7 @@
  */
 import express, { Request, Response } from 'express';
 import cors, { CorsOptions } from 'cors';
+import { ethers } from 'ethers';
 import './config/env'; // Loads dotenv.config() and initializes environment
 import { getAdminAddresses } from './services/admins';
 import { parseIntEnv, isProduction } from './config/env';
@@ -20,7 +21,8 @@ import { verifyEventSignature } from './services/eventVerification';
 import twitterAuthRoutes from './routes/twitterAuth';
 import { getTeePublicKey } from './db/eip712';
 import { requireWalletAuth } from './middleware/walletAuth';
-import { getEscrowBalance } from './services/escrowBalance';
+import { getEscrowBalance, getEscrowBalanceWithWithdrawal } from './services/escrowBalance';
+import { signEscrowWithdrawal } from './services/withdrawalSigning';
 import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 
@@ -492,15 +494,141 @@ app.get('/tee/publicKey', (req: Request, res: Response): void => {
 app.get('/playerEscrowBalance', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
   try {
     const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
-    const balanceGwei = await getEscrowBalance(walletAddress);
+    const escrowState = await getEscrowBalanceWithWithdrawal(walletAddress);
     
     res.status(200).json({
-      balanceGwei: balanceGwei.toString(),
+      balanceGwei: escrowState.balanceGwei.toString(),
+      nextWithdrawalNonce: escrowState.nextWithdrawalNonce?.toString() || null,
+      withdrawalSignatureExpiry: escrowState.withdrawalSignatureExpiry?.toISOString() || null,
+      withdrawalPending: escrowState.withdrawalPending,
     });
   } catch (error) {
     console.error('Error fetching escrow balance:', error);
     res.status(500).json({
       error: 'Failed to fetch balance',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /signEscrowWithdrawal
+ *
+ * Sign a withdrawal request for a player's escrow balance.
+ *
+ * Auth:
+ * - Requires wallet authentication via requireWalletAuth middleware
+ * - Wallet address must match the address in the session signature
+ * - Player must be withdrawing from their connected wallet
+ *
+ * Request:
+ * - Body: {
+ *     amountGwei: string, // Amount to withdraw in gwei
+ *     toAddress: string   // Recipient address (must match walletAddress for now)
+ *   }
+ * - Query params:
+ *   - walletAddress: string (Ethereum address - must match connected wallet)
+ *
+ * Response:
+ * - 200: {
+ *     nonce: string,
+ *     expiry: string,
+ *     v: number,
+ *     r: string,
+ *     s: string
+ *   }
+ *   - nonce: Withdrawal nonce used in the signature
+ *   - expiry: Expiry timestamp (Unix timestamp in seconds)
+ *   - v, r, s: ECDSA signature components for the withdrawal digest
+ *
+ * Error model:
+ * - 400: { error: "Invalid request"; message: string } - Invalid parameters or validation failure
+ * - 401: { error: "Unauthorized"; message: string } - Invalid or missing signature
+ * - 409: { error: "Conflict"; message: string } - Withdrawal already pending
+ * - 500: { error: "Failed to sign withdrawal"; message: string } - Server error
+ *
+ * Side effects:
+ * - Creates a withdrawal_request event in the database
+ * - Updates player escrow balance with nonce and expiry (atomic transaction)
+ * - Prevents race conditions by ensuring only one pending withdrawal at a time
+ *
+ * @param {Request} req - Express request object with walletAddress attached
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const { amountGwei, toAddress } = req.body;
+
+    // Validate request body
+    if (!amountGwei || !toAddress) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'amountGwei and toAddress are required',
+      });
+      return;
+    }
+
+    // Validate toAddress matches walletAddress (for now, player must withdraw to their own wallet)
+    if (ethers.getAddress(toAddress.toLowerCase()) !== ethers.getAddress(walletAddress.toLowerCase())) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'toAddress must match walletAddress',
+      });
+      return;
+    }
+
+    // Parse amountGwei
+    let amountGweiBigInt: bigint;
+    try {
+      amountGweiBigInt = BigInt(amountGwei);
+    } catch (error) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'amountGwei must be a valid number',
+      });
+      return;
+    }
+
+    // Sign the withdrawal request
+    const signature = await signEscrowWithdrawal(
+      walletAddress,
+      toAddress,
+      amountGweiBigInt
+    );
+
+    res.status(200).json({
+      nonce: signature.nonce.toString(),
+      expiry: signature.expiry.toString(),
+      v: signature.v,
+      r: signature.r,
+      s: signature.s,
+    });
+  } catch (error) {
+    console.error('Error signing escrow withdrawal:', error);
+    
+    // Check if it's a conflict (pending withdrawal)
+    if (error instanceof Error && error.message.includes('already pending')) {
+      res.status(409).json({
+        error: 'Conflict',
+        message: error.message,
+      });
+      return;
+    }
+
+    // Check if it's a validation error (amount exceeds balance)
+    if (error instanceof Error && error.message.includes('exceeds escrow balance')) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: 'Failed to sign withdrawal',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }

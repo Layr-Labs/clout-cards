@@ -1,0 +1,36 @@
+.tooltip {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.95);
+  color: #ffffff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  z-index: 10000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+  pointer-events: none;
+  max-width: calc(100vw - 20px);
+  word-break: keep-all;
+}
+
+/* Default: tooltip below trigger, arrow points up */
+.tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: rgba(0, 0, 0, 0.95);
+  bottom: 100%;
+}
+
+/* Arrow pointing down when tooltip is above the trigger */
+.tooltip.top::after {
+  bottom: auto;
+  top: 100%;
+  border-bottom-color: transparent;
+  border-top-color: rgba(0, 0, 0, 0.95);
+}
+

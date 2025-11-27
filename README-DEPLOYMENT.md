@@ -62,7 +62,7 @@ npx ts-node scripts/deploy-clout-cards.ts \
 ## Deployment Script Usage
 
 ```bash
-npx ts-node scripts/deploy-clout-cards.ts <rpc-url> <house-address> [deployer-private-key] [--upgrade <proxy-address>] [--default-anvil-key]
+npx ts-node scripts/deploy-clout-cards.ts <rpc-url> <house-address> [deployer-private-key] [--upgrade <proxy-address>] [--default-anvil-key] [--skip-confirmation]
 ```
 
 ### Arguments
@@ -84,8 +84,14 @@ npx ts-node scripts/deploy-clout-cards.ts <rpc-url> <house-address> [deployer-pr
 
 - **`--default-anvil-key`**: Use Anvil's default account for local development
   - Only works with local Anvil instances
-  - Requires confirmation prompt
+  - Requires confirmation prompt (unless `--skip-confirmation` is also used)
   - **WARNING**: Never use in production!
+
+- **`--skip-confirmation`**: Skip the confirmation prompt when using `--default-anvil-key`
+  - Useful for automated scripts (e.g., `reset-dev-env.ts`)
+  - Still displays a warning message
+  - Must be used together with `--default-anvil-key`
+  - Example: `--default-anvil-key --skip-confirmation`
 
 - **`--upgrade <proxy-address>`**: Upgrade existing proxy instead of deploying new
   - Requires proxy address as argument
@@ -96,11 +102,18 @@ npx ts-node scripts/deploy-clout-cards.ts <rpc-url> <house-address> [deployer-pr
 ### New Deployment
 
 ```bash
-# Local Anvil with default key
+# Local Anvil with default key (prompts for confirmation)
 npx ts-node scripts/deploy-clout-cards.ts \
   http://localhost:8545 \
   0x0487Ecf457cEAdc4Be25676EDE5F634fdcDdbF4d \
   --default-anvil-key
+
+# Local Anvil with default key (skip confirmation - for scripts)
+npx ts-node scripts/deploy-clout-cards.ts \
+  http://localhost:8545 \
+  0x0487Ecf457cEAdc4Be25676EDE5F634fdcDdbF4d \
+  --default-anvil-key \
+  --skip-confirmation
 
 # Local Anvil with custom key
 npx ts-node scripts/deploy-clout-cards.ts \
@@ -143,6 +156,26 @@ After successful deployment, you'll see:
 ```
 
 **Important**: Always use the **proxy address** (not the implementation address) for all contract interactions.
+
+## Quick Reset Script
+
+For local development, you can use the reset script to completely tear down and restart your environment:
+
+```bash
+npx ts-node scripts/reset-dev-env.ts
+```
+
+This script will:
+- Stop and remove all Docker containers and volumes
+- Start fresh Docker containers (PostgreSQL and Anvil)
+- Wait for services to be ready
+- Run database migrations
+- Deploy the CloutCards contract using the default Anvil key (with `--skip-confirmation` for automation)
+- Display the contract proxy address
+
+After running, you can start the dev server with the displayed contract address.
+
+**Note**: The reset script automatically uses `--skip-confirmation` when deploying, so it runs without user interaction. For manual deployments, you can still use `--default-anvil-key` without `--skip-confirmation` to get the safety prompt.
 
 ## Setting Contract Address
 

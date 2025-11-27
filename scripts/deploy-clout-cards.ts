@@ -19,6 +19,9 @@
  *   # Deploy to local Anvil (using default key flag)
  *   npx ts-node scripts/deploy-clout-cards.ts http://localhost:8545 0x1234...abcd --default-anvil-key
  *
+ *   # Deploy to local Anvil (skip confirmation prompt)
+ *   npx ts-node scripts/deploy-clout-cards.ts http://localhost:8545 0x1234...abcd --default-anvil-key --skip-confirmation
+ *
  *   # Deploy to Sepolia with private key as argument
  *   npx ts-node scripts/deploy-clout-cards.ts https://sepolia.infura.io/v3/YOUR_KEY 0x1234...abcd 0xYOUR_PRIVATE_KEY
  *
@@ -311,17 +314,36 @@ async function main() {
   const isUpgrade = upgradeIndex !== -1;
   const defaultAnvilKeyIndex = args.indexOf('--default-anvil-key');
   const useDefaultAnvilKey = defaultAnvilKeyIndex !== -1;
+  const skipConfirmationIndex = args.indexOf('--skip-confirmation');
+  const skipConfirmation = skipConfirmationIndex !== -1;
   
-  // Remove flags from args array
-  if (isUpgrade) {
-    args.splice(upgradeIndex, 1);
+  // Extract upgrade proxy address before removing flags
+  let upgradeProxyAddress: string | undefined;
+  if (isUpgrade && upgradeIndex + 1 < args.length) {
+    upgradeProxyAddress = args[upgradeIndex + 1];
   }
-  if (useDefaultAnvilKey) {
-    args.splice(defaultAnvilKeyIndex, 1);
+  
+  // Remove flags from args array (remove in reverse order to preserve indices)
+  // Note: --upgrade flag also removes its value (the next argument)
+  const indicesToRemove: number[] = [];
+  if (skipConfirmationIndex !== -1) indicesToRemove.push(skipConfirmationIndex);
+  if (defaultAnvilKeyIndex !== -1) indicesToRemove.push(defaultAnvilKeyIndex);
+  if (upgradeIndex !== -1) {
+    indicesToRemove.push(upgradeIndex);
+    // Also remove the proxy address argument after --upgrade
+    if (upgradeIndex + 1 < args.length) {
+      indicesToRemove.push(upgradeIndex + 1);
+    }
+  }
+  
+  // Sort descending and remove
+  indicesToRemove.sort((a, b) => b - a);
+  for (const idx of indicesToRemove) {
+    args.splice(idx, 1);
   }
   
   if (args.length < 2) {
-    console.error('Usage: npx ts-node scripts/deploy-clout-cards.ts <rpc-url> <house-address> [deployer-private-key] [--upgrade <proxy-address>] [--default-anvil-key]');
+    console.error('Usage: npx ts-node scripts/deploy-clout-cards.ts <rpc-url> <house-address> [deployer-private-key] [--upgrade <proxy-address>] [--default-anvil-key] [--skip-confirmation]');
     console.error('');
     console.error('Arguments:');
     console.error('  rpc-url              - RPC URL for the network (e.g., http://localhost:8545)');
@@ -331,6 +353,7 @@ async function main() {
     console.error('Options:');
     console.error('  --upgrade <proxy-address>  - Upgrade existing proxy instead of deploying new');
     console.error('  --default-anvil-key         - Use Anvil\'s default private key (for local development only)');
+    console.error('  --skip-confirmation         - Skip confirmation prompt when using --default-anvil-key');
     console.error('');
     console.error('Examples:');
     console.error('  # Deploy new contract');
@@ -338,6 +361,9 @@ async function main() {
     console.error('');
     console.error('  # Deploy with Anvil default key (local dev only)');
     console.error('  npx ts-node scripts/deploy-clout-cards.ts http://localhost:8545 0x1234...abcd --default-anvil-key');
+    console.error('');
+    console.error('  # Deploy with Anvil default key (skip confirmation)');
+    console.error('  npx ts-node scripts/deploy-clout-cards.ts http://localhost:8545 0x1234...abcd --default-anvil-key --skip-confirmation');
     console.error('');
     console.error('  # Upgrade existing contract');
     console.error('  npx ts-node scripts/deploy-clout-cards.ts http://localhost:8545 0x1234...abcd 0xYOUR_KEY --upgrade 0xPROXY_ADDRESS');
@@ -354,13 +380,16 @@ async function main() {
     process.exit(1);
   }
   
-  // Confirm if using default Anvil key
-  if (useDefaultAnvilKey) {
+  // Confirm if using default Anvil key (unless skip confirmation flag is set)
+  if (useDefaultAnvilKey && !skipConfirmation) {
     const confirmed = await confirmDefaultAnvilKey();
     if (!confirmed) {
       console.log('Deployment cancelled.');
       process.exit(0);
     }
+  } else if (useDefaultAnvilKey && skipConfirmation) {
+    console.warn('⚠️  WARNING: Using Anvil\'s default private key (confirmation skipped via --skip-confirmation flag).');
+    console.warn('   This should ONLY be used for local development!');
   }
   
   // Get deployer wallet
@@ -393,7 +422,7 @@ async function main() {
   console.log('');
   
   if (isUpgrade) {
-    const proxyAddress = args[3];
+    const proxyAddress = upgradeProxyAddress;
     if (!proxyAddress || !ethers.isAddress(proxyAddress)) {
       console.error('Error: Invalid proxy address for upgrade');
       process.exit(1);

@@ -2,15 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../contexts/WalletContext';
 import { useEthBalance } from '../hooks/useEthBalance';
+import { createCloutCardsEventsContract } from '../utils/contract';
 import { getContractAddress } from '../config/contract';
 import './DepositDialog.css';
-
-/**
- * CloutCards contract ABI - only the events we need to listen to
- */
-const CLOUTCARDS_ABI = [
-  'event Deposited(address indexed player, address indexed depositor, uint256 amount)',
-] as const;
 
 /**
  * Deposit dialog component
@@ -47,9 +41,6 @@ export function DepositDialog({
   const contractRef = useRef<ethers.Contract | null>(null);
   const listenerRef = useRef<(() => void) | null>(null);
 
-  // Get contract address (from window global or env var)
-  const contractAddress = getContractAddress();
-
   // Reset state when dialog opens/closes
   useEffect(() => {
     if (isOpen) {
@@ -69,25 +60,36 @@ export function DepositDialog({
     }
   }, [isOpen]);
 
-  // Set up contract instance when provider/address changes
+  // Set up contract instance when provider changes
   useEffect(() => {
-    if (provider && contractAddress && !contractRef.current) {
-      contractRef.current = new ethers.Contract(contractAddress, CLOUTCARDS_ABI, provider);
+    if (provider && !contractRef.current) {
+      try {
+        contractRef.current = createCloutCardsEventsContract(provider);
+      } catch (error) {
+        console.error('Failed to create contract instance:', error);
+      }
     }
-  }, [provider, contractAddress]);
+  }, [provider]);
 
   /**
    * Polls for transaction confirmation and listens for Deposited event
    */
   async function pollForConfirmation(txHash: string) {
-    if (!provider || !contractRef.current || !address) {
+    if (!provider || !address) {
+      setError('Provider or address not available');
+      setIsDepositing(false);
       return;
     }
 
+    // Create a fresh contract instance to avoid race conditions with contractRef
+    const contract = createCloutCardsEventsContract(provider);
+
     try {
-      // Poll for transaction receipt
+      // Poll for transaction receipt with faster polling for local Anvil
+      // Use shorter interval (500ms) for local development, 2s for L2
+      const pollInterval = 500; // Faster polling for local Anvil
       let receipt: ethers.TransactionReceipt | null = null;
-      const maxAttempts = 150; // 150 attempts = ~5 minutes at 2s intervals
+      const maxAttempts = 300; // More attempts with shorter interval
       let attempts = 0;
 
       while (!receipt && attempts < maxAttempts) {
@@ -101,19 +103,23 @@ export function DepositDialog({
         } catch (err) {
           // Transaction not yet mined, continue polling
         }
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds (L2)
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
         attempts++;
       }
 
       if (!receipt) {
         setError('Transaction confirmation timeout. Please check the transaction manually.');
+        setIsDepositing(false);
         return;
       }
 
       // Query for Deposited events from this transaction
-      // Filter by depositor (msg.sender) since we're using receive() hook
-      const filter = contractRef.current.filters.Deposited(null, address);
-      const events = await contractRef.current.queryFilter(filter, receipt.blockNumber, receipt.blockNumber);
+      // Query a range of blocks to handle Anvil's fast block mining
+      // Convert blockNumber to BigInt to handle both number and BigInt types
+      const blockNumber = BigInt(receipt.blockNumber);
+      const startBlock = blockNumber > 0n ? blockNumber - 1n : blockNumber;
+      const filter = contract.filters.Deposited(null, address);
+      const events = await contract.queryFilter(filter, startBlock, blockNumber + 1n);
 
       // Find the event from this transaction
       const foundEvent = events.find(e => e.transactionHash === txHash);
@@ -134,8 +140,12 @@ export function DepositDialog({
       // If event not found in query, set up a listener as fallback
       // This handles cases where the event might be emitted in a future block
       let eventFound = false;
-      const listener = (player: string, depositor: string, amount: bigint, event: ethers.Log) => {
-        if (event.transactionHash === txHash) {
+      const listener = (player: string, depositor: string, amount: bigint, eventPayload?: any) => {
+        // Handle both ethers.js v6 event formats
+        const eventLog = eventPayload?.log || eventPayload;
+        const txHashFromEvent = eventLog?.transactionHash || (eventPayload as any)?.transactionHash;
+        
+        if (txHashFromEvent === txHash) {
           eventFound = true;
           setDepositEvent({
             player,
@@ -144,7 +154,7 @@ export function DepositDialog({
           });
           setIsDepositing(false);
           // Clean up listener
-          if (contractRef.current && listenerRef.current) {
+          if (listenerRef.current) {
             listenerRef.current();
             listenerRef.current = null;
           }
@@ -155,14 +165,12 @@ export function DepositDialog({
         }
       };
 
-      contractRef.current.on('Deposited', listener);
+      contract.on('Deposited', listener);
       listenerRef.current = () => {
-        if (contractRef.current) {
-          contractRef.current.off('Deposited', listener);
-        }
+        contract.off('Deposited', listener);
       };
 
-      // Set a timeout to stop listening after 2 minutes
+      // Set a timeout to stop listening after 30 seconds (faster for local)
       setTimeout(() => {
         if (listenerRef.current) {
           listenerRef.current();
@@ -172,16 +180,12 @@ export function DepositDialog({
           setIsDepositing(false);
           setError('Deposit event not detected. Transaction confirmed but event may be delayed.');
         }
-      }, 120000); // 2 minutes
-
-      // Call success callback
-      if (onDepositSuccess) {
-        onDepositSuccess();
-      }
+      }, 30000); // 30 seconds timeout
     } catch (err: unknown) {
       console.error('Error polling for confirmation:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to confirm transaction';
       setError(errorMessage);
+      setIsDepositing(false);
     }
   }
 
@@ -189,8 +193,14 @@ export function DepositDialog({
    * Handles deposit transaction
    */
   async function handleDeposit() {
-    if (!address || !provider || !contractAddress) {
-      setError('Wallet not connected or contract address not configured');
+    if (!address || !provider) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    const contractAddr = getContractAddress();
+    if (!contractAddr) {
+      setError('Contract address not configured. Please set CLOUTCARDS_CONTRACT_ADDRESS environment variable.');
       return;
     }
 
@@ -212,7 +222,7 @@ export function DepositDialog({
       
       // Call the deposit() function (receive hook) by sending ETH directly
       const tx = await signer.sendTransaction({
-        to: contractAddress,
+        to: contractAddr,
         value: amountWei,
       });
 
@@ -305,7 +315,7 @@ export function DepositDialog({
               <div className="deposit-tx-info">
                 <div className="deposit-tx-info-row">
                   <span className="deposit-tx-label">Contract Address:</span>
-                  <span className="deposit-tx-value deposit-tx-address">{contractAddress}</span>
+                  <span className="deposit-tx-value deposit-tx-address">{getContractAddress() || 'N/A'}</span>
                 </div>
                 
                 <div className="deposit-tx-info-row">

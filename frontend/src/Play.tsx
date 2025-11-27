@@ -70,7 +70,15 @@ function Play() {
           localStorage.setItem('twitterRefreshToken', data.refreshToken)
         }
 
-        // Store user info temporarily - useTwitterUser hook will pick it up
+        // Store user info in cache to avoid immediate API call
+        if (data.userInfo) {
+          const cacheKey = `twitter_user_${data.accessToken.substring(0, 20)}`;
+          localStorage.setItem(cacheKey, JSON.stringify({
+            userInfo: data.userInfo,
+            expiresAt: Date.now() + 60 * 60 * 1000, // 1 hour
+          }));
+        }
+
         // Clean up URL
         window.history.replaceState({}, '', window.location.pathname)
 

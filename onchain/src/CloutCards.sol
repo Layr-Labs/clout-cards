@@ -316,11 +316,13 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      * @param amount The amount of ETH to withdraw (in wei)
      * @param expiry The timestamp when the signature expires
      *
-     * @return The EIP-712 typed data digest that should be signed by the house
+     * @return digest The EIP-712 typed data digest that should be signed by the house
+     * @return nonce The withdrawal nonce that was used to compute the digest
      *
      * @notice The digest uses EIP-712 domain separator which includes chainid and contract address
      *         to prevent replay attacks across different chains or contract deployments
-     * @notice The nonce is automatically read from nextWithdrawalNonce[player] storage
+     * @notice The nonce is automatically read from nextWithdrawalNonce[player] storage and returned
+     *         so callers can verify which nonce was used without making a separate query
      * @notice The nonce ensures that each withdrawal signature can only be used once
      * @notice This function is EIP-712 compliant and can be used with eth_signTypedDataV4
      */
@@ -329,9 +331,9 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         address to,
         uint256 amount,
         uint256 expiry
-    ) public view returns (bytes32) {
+    ) public view returns (bytes32, uint256) {
         uint256 nonce = nextWithdrawalNonce[player];
-        return _computeWithdrawDigest(player, to, amount, nonce, expiry);
+        return (_computeWithdrawDigest(player, to, amount, nonce, expiry), nonce);
     }
 
     /**

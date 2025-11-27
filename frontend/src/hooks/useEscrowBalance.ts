@@ -1,20 +1,20 @@
 /**
- * React hook to fetch and manage escrow balance
+ * React hook to fetch and manage escrow balance with withdrawal state
  *
- * @returns Escrow balance in gwei (as string), or null if not loaded/error
+ * @returns Escrow balance state including withdrawal information, or null if not loaded/error
  */
 
 import { useState, useEffect } from 'react';
 import { useWallet } from '../contexts/WalletContext';
-import { getEscrowBalance } from '../services/escrow';
+import { getEscrowBalance, type EscrowBalanceState } from '../services/escrow';
 
-export function useEscrowBalance(): string | null {
+export function useEscrowBalance(): EscrowBalanceState | null {
   const { address, signature } = useWallet();
-  const [balance, setBalance] = useState<string | null>(null);
+  const [balanceState, setBalanceState] = useState<EscrowBalanceState | null>(null);
 
   useEffect(() => {
     if (!address || !signature) {
-      setBalance(null);
+      setBalanceState(null);
       return;
     }
 
@@ -22,14 +22,14 @@ export function useEscrowBalance(): string | null {
 
     async function fetchBalance() {
       try {
-        const balanceGwei = await getEscrowBalance(address, signature);
+        const state = await getEscrowBalance(address, signature);
         if (!cancelled) {
-          setBalance(balanceGwei);
+          setBalanceState(state);
         }
       } catch (error) {
         console.error('Failed to fetch escrow balance:', error);
         if (!cancelled) {
-          setBalance(null);
+          setBalanceState(null);
         }
       }
     }
@@ -45,6 +45,6 @@ export function useEscrowBalance(): string | null {
     };
   }, [address, signature]);
 
-  return balance;
+  return balanceState;
 }
 
