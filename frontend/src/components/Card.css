@@ -132,6 +132,72 @@
   letter-spacing: 2px;
 }
 
+/* Smaller cards for table seats - scale everything by 0.5x */
+.table-seat-cards .card {
+  width: 60px;
+  height: 84px; /* Maintain aspect ratio (60px * 1.4) */
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.table-seat-cards .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.table-seat-cards .card-front {
+  padding: 4px; /* 8px * 0.5 */
+  border: 1px solid rgba(0, 0, 0, 0.1); /* 2px * 0.5 */
+}
+
+.table-seat-cards .card-corner {
+  font-size: 0.55rem; /* 1.1rem * 0.5 */
+  line-height: 1;
+}
+
+.table-seat-cards .card-suit {
+  font-size: 0.7rem; /* 1.4rem * 0.5 */
+  line-height: 1;
+}
+
+.table-seat-cards .card-center {
+  padding: 4px; /* 8px * 0.5 */
+}
+
+.table-seat-cards .card-rank-center {
+  font-size: 2rem; /* 4rem * 0.5 */
+  line-height: 1;
+}
+
+.table-seat-cards .card-back {
+  border: 1px solid rgba(212, 175, 55, 0.3); /* 2px * 0.5 */
+}
+
+.table-seat-cards .card-back-logo {
+  font-size: 1.25rem; /* 2.5rem * 0.5 */
+  letter-spacing: 1px; /* 2px * 0.5 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); /* Scaled shadow */
+}
+
+/* Scale down card back pattern for smaller cards */
+.table-seat-cards .card-back-pattern::before {
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 5px, /* 10px * 0.5 */
+      rgba(212, 175, 55, 0.1) 5px,
+      rgba(212, 175, 55, 0.1) 10px /* 20px * 0.5 */
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 5px,
+      rgba(212, 175, 55, 0.1) 5px,
+      rgba(212, 175, 55, 0.1) 10px
+    );
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .card {
@@ -149,6 +215,65 @@
 
   .card-back-logo {
     font-size: 2rem;
+  }
+
+  /* Smaller cards for table seats on mobile - scale by ~0.42x (50/120) */
+  .table-seat-cards .card {
+    width: 50px;
+    height: 70px; /* Maintain aspect ratio (50px * 1.4) */
+    border-radius: 5px;
+  }
+
+  .table-seat-cards .card-front {
+    padding: 3px; /* Scaled for mobile */
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  .table-seat-cards .card-corner {
+    font-size: 0.46rem; /* Scaled for mobile */
+    line-height: 1;
+  }
+
+  .table-seat-cards .card-suit {
+    font-size: 0.59rem; /* Scaled for mobile */
+    line-height: 1;
+  }
+
+  .table-seat-cards .card-center {
+    padding: 3px; /* Scaled for mobile */
+  }
+
+  .table-seat-cards .card-rank-center {
+    font-size: 1.67rem; /* Scaled for mobile */
+    line-height: 1;
+  }
+
+  .table-seat-cards .card-back {
+    border: 1px solid rgba(212, 175, 55, 0.3);
+  }
+
+  .table-seat-cards .card-back-logo {
+    font-size: 1.05rem; /* Scaled for mobile */
+    letter-spacing: 0.84px; /* Scaled for mobile */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+
+  .table-seat-cards .card-back-pattern::before {
+    background-image: 
+      repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 4px, /* Scaled for mobile */
+        rgba(212, 175, 55, 0.1) 4px,
+        rgba(212, 175, 55, 0.1) 8px /* Scaled for mobile */
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 4px,
+        rgba(212, 175, 55, 0.1) 4px,
+        rgba(212, 175, 55, 0.1) 8px
+      );
   }
 }
 

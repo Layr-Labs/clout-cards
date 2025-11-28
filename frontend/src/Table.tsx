@@ -1,11 +1,12 @@
 import './App.css'
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getPokerTables, getTablePlayers, joinTable, standUp, type PokerTable, type TablePlayer } from './services/tables'
+import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
 import { ConfirmDialog } from './components/ConfirmDialog'
+import { Card } from './components/Card'
 import { useWallet } from './contexts/WalletContext'
 import { useTwitterUser } from './hooks/useTwitterUser'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
@@ -20,6 +21,7 @@ function Table() {
   const { id } = useParams<{ id: string }>()
   const [table, setTable] = useState<PokerTable | null>(null)
   const [players, setPlayers] = useState<TablePlayer[]>([])
+  const [currentHand, setCurrentHand] = useState<CurrentHand | null>(null)
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
   const [isBuyInDialogOpen, setIsBuyInDialogOpen] = useState(false)
   const [selectedSeatNumber, setSelectedSeatNumber] = useState<number | null>(null)
@@ -126,6 +128,43 @@ function Table() {
   }, [tableId])
 
   /**
+   * Loads current hand state
+   * Only polls if there are at least 2 players at the table
+   */
+  useEffect(() => {
+    if (!tableId || !isFullyLoggedIn || !address || !signature) {
+      setCurrentHand(null)
+      return
+    }
+
+    // Only poll for hands if there are at least 2 players
+    if (players.length < 2) {
+      setCurrentHand(null)
+      return
+    }
+
+    async function loadHand() {
+      if (!signature || !address) return
+      try {
+        const hand = await getCurrentHand(tableId!, address, signature)
+        setCurrentHand(hand)
+      } catch (err: any) {
+        // 404 is expected when no hand is active
+        if (err?.status !== 404) {
+          console.error('Failed to load hand:', err)
+        }
+        setCurrentHand(null)
+      }
+    }
+
+    loadHand()
+    
+    // Refresh hand every 2 seconds
+    const interval = setInterval(loadHand, 2000)
+    return () => clearInterval(interval)
+  }, [tableId, isFullyLoggedIn, address, signature, players.length])
+
+  /**
    * Handles Buy In button click
    */
   function handleBuyInClick(seatNumber: number) {
@@ -216,6 +255,41 @@ function Table() {
   }
 
   /**
+   * Gets the hand player for the current user
+   */
+  function getUserHandPlayer() {
+    if (!currentHand || !address) return null
+    const normalizedAddress = address.toLowerCase()
+    return currentHand.players.find(p => p.walletAddress.toLowerCase() === normalizedAddress) || null
+  }
+
+  /**
+   * Checks if it's the current user's turn to act
+   */
+  function isUserTurn(): boolean {
+    const userHandPlayer = getUserHandPlayer()
+    if (!currentHand || !userHandPlayer) return false
+    return currentHand.currentActionSeat === userHandPlayer.seatNumber && userHandPlayer.status === 'ACTIVE'
+  }
+
+  /**
+   * Checks if it's a specific seat's turn to act
+   */
+  function isSeatTurn(seatNumber: number): boolean {
+    if (!currentHand) return false
+    const handPlayer = getHandPlayerBySeat(seatNumber)
+    return currentHand.currentActionSeat === seatNumber && handPlayer?.status === 'ACTIVE'
+  }
+
+  /**
+   * Gets hand player by seat number
+   */
+  function getHandPlayerBySeat(seatNumber: number) {
+    if (!currentHand) return null
+    return currentHand.players.find(p => p.seatNumber === seatNumber) || null
+  }
+
+  /**
    * Handles Stand Up button click - opens confirmation dialog
    */
   function handleStandUpClick() {
@@ -273,6 +347,46 @@ function Table() {
             className="table-image"
           />
           
+          {/* Community Cards - Center of Table */}
+          {currentHand && currentHand.communityCards.length > 0 && (
+            <div className="table-community-cards">
+              {currentHand.communityCards.map((card, index) => (
+                <Card
+                  key={index}
+                  suit={card.suit}
+                  rank={card.rank}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Pots Display - Below Community Cards */}
+          {currentHand && currentHand.pots.length > 0 && (
+            <div className="table-pots">
+              {currentHand.pots.map((pot) => (
+                <div key={pot.potNumber} className="table-pot">
+                  <div className="table-pot-amount">
+                    {(Number(pot.amount) / 1e9).toFixed(4).replace(/\.?0+$/, '')} ETH
+                  </div>
+                  <div className="table-pot-avatars">
+                    {pot.eligibleSeatNumbers.map((seatNum) => {
+                      const handPlayer = getHandPlayerBySeat(seatNum)
+                      if (!handPlayer?.twitterAvatarUrl) return null
+                      return (
+                        <img
+                          key={seatNum}
+                          src={handPlayer.twitterAvatarUrl}
+                          alt={handPlayer.twitterHandle || 'Player'}
+                          className="table-pot-avatar"
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
           {/* Seat Avatars */}
           {table && table.maxSeatCount > 0 && (
             <div className="table-seats-container">
@@ -321,12 +435,62 @@ function Table() {
                           ) : (
                             <div className="table-seat-avatar-initial">
                               {player.twitterHandle ? player.twitterHandle.charAt(1).toUpperCase() : '?'}
-            </div>
+                            </div>
                           )}
-            </div>
+                        </div>
+                        
+                        {/* Badges for dealer/blinds - can show multiple - positioned outside circle to avoid clipping */}
+                        {currentHand && (
+                          <div className="table-seat-badges">
+                            {currentHand.dealerPosition === seatIndex && (
+                              <div className="table-seat-badge table-seat-badge-dealer">D</div>
+                            )}
+                            {currentHand.smallBlindSeat === seatIndex && (
+                              <div className="table-seat-badge table-seat-badge-small-blind">SB</div>
+                            )}
+                            {currentHand.bigBlindSeat === seatIndex && (
+                              <div className="table-seat-badge table-seat-badge-big-blind">BB</div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Player Cards */}
+                        {currentHand && (() => {
+                          const handPlayer = getHandPlayerBySeat(seatIndex)
+                          const isAuthorizedPlayer = address && player.walletAddress.toLowerCase() === address.toLowerCase()
+                          
+                          if (!handPlayer) return null
+                          
+                          // Show hole cards for authorized player if active
+                          if (isAuthorizedPlayer && handPlayer.holeCards && handPlayer.status === 'ACTIVE') {
+                            return (
+                              <div className="table-seat-cards">
+                                {handPlayer.holeCards.map((card, idx) => (
+                                  <Card
+                                    key={idx}
+                                    suit={card.suit}
+                                    rank={card.rank}
+                                  />
+                                ))}
+                              </div>
+                            )
+                          }
+                          
+                          // Show card backs for other players in hand
+                          if (!isAuthorizedPlayer && handPlayer.status === 'ACTIVE') {
+                            return (
+                              <div className="table-seat-cards">
+                                <Card isBack={true} />
+                                <Card isBack={true} />
+                              </div>
+                            )
+                          }
+                          
+                          return null
+                        })()}
                         
                         {/* Player Info Box */}
-                        <div className="table-seat-player-info">
+                        <div className={`table-seat-player-info ${position.x > 50 ? 'table-seat-player-info-right' : ''} ${isSeatTurn(seatIndex) ? 'table-seat-player-info-turn' : ''}`}>
                           <a
                             href={`https://twitter.com/${player.twitterHandle.replace('@', '')}`}
                             target="_blank"
@@ -339,9 +503,9 @@ function Table() {
                             <div className="table-seat-stack">
                               {tableBalanceEth} ETH
                             </div>
-                        )}
-                          {/* Stand Up Button - only show if this is the current user's seat */}
-                          {isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (
+                          )}
+                          {/* Stand Up Button - only show if this is the current user's seat and no hand active */}
+                          {isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand && (
                             <button
                               className="table-seat-stand-up-button"
                               onClick={handleStandUpClick}
@@ -381,6 +545,48 @@ function Table() {
 
         {/* Table Name - on top of background */}
         <h1 className="table-name">{table ? table.name : `Table ${tableId || '...'}`}</h1>
+
+        {/* Action Buttons - Show when it's user's turn */}
+        {currentHand && isUserTurn() && (
+          <div className="table-action-buttons">
+            <div className="table-action-info">
+              {currentHand.currentBet && (
+                <div className="table-action-current-bet">
+                  Current Bet: {(Number(currentHand.currentBet) / 1e9).toFixed(4).replace(/\.?0+$/, '')} ETH
+                </div>
+              )}
+            </div>
+            <div className="table-action-buttons-row">
+              <button
+                className="table-action-button table-action-button-fold"
+                onClick={() => {
+                  // TODO: Implement fold action
+                  console.log('Fold clicked')
+                }}
+              >
+                Fold
+              </button>
+              <button
+                className="table-action-button table-action-button-check-call"
+                onClick={() => {
+                  // TODO: Implement check/call action
+                  console.log('Check/Call clicked')
+                }}
+              >
+                {currentHand.currentBet && Number(currentHand.currentBet) > 0 ? 'Call' : 'Check'}
+              </button>
+              <button
+                className="table-action-button table-action-button-raise"
+                onClick={() => {
+                  // TODO: Implement raise action
+                  console.log('Raise clicked')
+                }}
+              >
+                Raise
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Login Dialog */}

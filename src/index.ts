@@ -633,6 +633,153 @@ app.post('/standUp', requireWalletAuth({ addressSource: 'query' }), async (req: 
 });
 
 /**
+ * GET /currentHand
+ *
+ * Gets the current active hand for a table, including all hand state.
+ *
+ * Auth:
+ * - Requires wallet signature authentication via requireWalletAuth middleware
+ *
+ * Request:
+ * - Query params:
+ *   - tableId: number (required) - Table ID to get hand for
+ *   - walletAddress: string (required) - Wallet address (for authentication and to return user's hole cards)
+ * - Headers:
+ *   - Authorization: Bearer <signature> (session signature)
+ *
+ * Response:
+ * - 200: {
+ *     handId: number,
+ *     status: string,
+ *     round: string | null,
+ *     communityCards: Array<{suit: string, rank: string}>,
+ *     players: Array<{
+ *       seatNumber: number,
+ *       walletAddress: string,
+ *       twitterHandle: string | null,
+ *       twitterAvatarUrl: string | null,
+ *       status: string,
+ *       chipsCommitted: string,
+ *       holeCards: Array<{suit: string, rank: string}> | null  // Only for authorized player if active
+ *     }>,
+ *     pots: Array<{
+ *       potNumber: number,
+ *       amount: string,
+ *       eligibleSeatNumbers: number[]
+ *     }>,
+ *     dealerPosition: number | null,
+ *     smallBlindSeat: number | null,
+ *     bigBlindSeat: number | null,
+ *     currentActionSeat: number | null,
+ *     currentBet: string | null,
+ *     lastRaiseAmount: string | null
+ *   }
+ * - 404: { error: "NOT_FOUND"; message: string } - No active hand found
+ * - 401: { error: "UNAUTHORIZED"; message: string } - Unauthorized
+ *
+ * @param {Request} req - Express request object with walletAddress attached
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/currentHand', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const tableId = req.query.tableId;
+
+    // Validate query params
+    if (!tableId) {
+      throw new ValidationError('tableId is required');
+    }
+
+    const tableIdNum = validateTableId(tableId);
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    // Get current active hand
+    const hand = await (prisma as any).hand.findFirst({
+      where: {
+        tableId: tableIdNum,
+        status: {
+          not: 'COMPLETED',
+        },
+      },
+      include: {
+        players: true,
+        pots: true,
+      },
+      orderBy: {
+        startedAt: 'desc',
+      },
+    });
+
+    if (!hand) {
+      throw new NotFoundError('No active hand found for this table');
+    }
+
+    // Get table seat sessions to get Twitter info
+    const seatSessions = await prisma.tableSeatSession.findMany({
+      where: {
+        tableId: tableIdNum,
+        isActive: true,
+        seatNumber: {
+          in: hand.players.map((p: any) => p.seatNumber),
+        },
+      },
+    });
+
+    const seatSessionMap = new Map(
+      seatSessions.map((s) => [s.seatNumber, s])
+    );
+
+    // Build response
+    const communityCards = Array.isArray(hand.communityCards) ? hand.communityCards : [];
+    
+    const players = hand.players.map((player: any) => {
+      const session = seatSessionMap.get(player.seatNumber);
+      const isAuthorizedPlayer = player.walletAddress.toLowerCase() === normalizedAddress;
+      
+      return {
+        seatNumber: player.seatNumber,
+        walletAddress: player.walletAddress,
+        twitterHandle: session?.twitterHandle || null,
+        twitterAvatarUrl: session?.twitterAvatarUrl || null,
+        status: player.status,
+        chipsCommitted: player.chipsCommitted.toString(),
+        // Only return hole cards for authorized player if they're active
+        holeCards: isAuthorizedPlayer && player.status === 'ACTIVE' 
+          ? (Array.isArray(player.holeCards) ? player.holeCards : [])
+          : null,
+      };
+    });
+
+    const pots = hand.pots.map((pot: any) => ({
+      potNumber: pot.potNumber,
+      amount: pot.amount.toString(),
+      eligibleSeatNumbers: Array.isArray(pot.eligibleSeatNumbers) 
+        ? pot.eligibleSeatNumbers 
+        : [],
+    }));
+
+    res.status(200).json({
+      handId: hand.id,
+      status: hand.status,
+      round: hand.round,
+      communityCards,
+      players,
+      pots,
+      dealerPosition: hand.dealerPosition,
+      smallBlindSeat: hand.smallBlindSeat,
+      bigBlindSeat: hand.bigBlindSeat,
+      currentActionSeat: hand.currentActionSeat,
+      currentBet: hand.currentBet?.toString() || null,
+      lastRaiseAmount: hand.lastRaiseAmount?.toString() || null,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to get current hand');
+  }
+});
+
+/**
  * GET /events
  *
  * Returns the most recent events from the event table.

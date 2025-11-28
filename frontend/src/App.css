@@ -1362,6 +1362,8 @@
   border: 2px solid rgba(212, 175, 55, 0.5);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
+  position: relative;
+  z-index: 2; /* Ensure circle is above the info box */
 }
 
 .table-seat-avatar-filled {
@@ -1371,6 +1373,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 2; /* Ensure filled circle is above the info box */
 }
 
 .table-seat-avatar-image {
@@ -1394,23 +1398,71 @@
 
 .table-seat-player-info {
   position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0px; /* Start at left edge so avatar covers rounded corners */
+  top: 0px; /* Align top with circle apex */
+  height: 60px; /* Match circle height exactly */
   background: rgba(10, 10, 10, 0.85);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-radius: 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 30px 8px 8px 30px; /* Top-left and bottom-left rounded to match circle radius (30px), right side rounded (8px) */
+  border-left: none; /* No left border to connect with circle */
+  border-top: 1px solid rgba(212, 175, 55, 0.3);
+  border-right: 1px solid rgba(212, 175, 55, 0.3);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  min-width: 120px;
-  text-align: center;
+  min-width: 140px;
+  padding: 8px 20px 8px 75px; /* Increased left padding (75px) for more spacing, reduced vertical padding to fit 60px height */
+  text-align: left; /* Left align text since it's extending right */
   white-space: nowrap;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start; /* Left align content */
+  justify-content: center; /* Center content vertically within 60px height */
   gap: 4px;
+  z-index: 1; /* Behind the circle */
+}
+
+/* Right-side seats: extend to the left */
+.table-seat-player-info-right {
+  left: auto;
+  right: 0px; /* Start at right edge so avatar covers rounded corners */
+  top: 0px; /* Align top with circle apex */
+  height: 60px; /* Match circle height exactly */
+  border-radius: 8px 30px 30px 8px; /* Top-right and bottom-right rounded to match circle radius (30px), left side rounded (8px) */
+  border-right: none; /* No right border to connect with circle */
+  border-left: 1px solid rgba(212, 175, 55, 0.3);
+  padding: 8px 75px 8px 20px; /* Increased right padding (75px) for more spacing, reduced vertical padding to fit 60px height */
+  text-align: right; /* Right align text since it's extending left */
+  align-items: flex-end; /* Right align content */
+  justify-content: center; /* Center content vertically within 60px height */
+}
+
+/* Golden glow when it's player's turn */
+.table-seat-player-info-turn {
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 0 2px rgba(212, 175, 55, 0.6),
+    0 0 20px rgba(212, 175, 55, 0.8),
+    0 0 40px rgba(212, 175, 55, 0.4);
+  border-color: rgba(212, 175, 55, 0.8);
+  animation: turnGlow 2s ease-in-out infinite;
+}
+
+@keyframes turnGlow {
+  0%, 100% {
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.5),
+      0 0 0 2px rgba(212, 175, 55, 0.6),
+      0 0 20px rgba(212, 175, 55, 0.8),
+      0 0 40px rgba(212, 175, 55, 0.4);
+  }
+  50% {
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.5),
+      0 0 0 2px rgba(212, 175, 55, 0.8),
+      0 0 30px rgba(212, 175, 55, 1),
+      0 0 60px rgba(212, 175, 55, 0.6);
+  }
 }
 
 .table-seat-twitter-handle {
@@ -1511,6 +1563,204 @@
   transform: none;
 }
 
+/* Community Cards - Center of Table */
+.table-community-cards {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pots Display - Below Community Cards */
+.table-pots {
+  position: absolute;
+  top: calc(50% + 100px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-pot {
+  background: rgba(10, 10, 10, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px solid rgba(212, 175, 55, 0.5);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.table-pot-amount {
+  color: #d4af37;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.table-pot-avatars {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.table-pot-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+/* Player Cards at Seats */
+/* Table seat cards container - positioning only, card styles are in Card.css */
+.table-seat-cards {
+  position: absolute;
+  top: calc(100% + 8px); /* Position closer to avatar */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  z-index: 3;
+}
+
+/* Seat Badges Container */
+.table-seat-badges {
+  position: absolute;
+  top: -8px; /* Overlap with circle edge (circle radius is 30px, badge is 24px, so -8px creates overlap) */
+  right: -8px; /* Overlap with circle edge */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  z-index: 10;
+}
+
+/* Seat Badges */
+.table-seat-badge {
+  background: rgba(212, 175, 55, 0.9);
+  color: #1a1a1a;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border: 2px solid #1a1a1a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.table-seat-badge-dealer {
+  background: rgba(212, 175, 55, 0.9); /* Gold color */
+  color: #1a1a1a;
+}
+
+.table-seat-badge-small-blind {
+  background: rgba(186, 85, 211, 0.9); /* Light purple (mediumorchid) */
+  color: #ffffff;
+}
+
+.table-seat-badge-big-blind {
+  background: rgba(138, 43, 226, 0.9); /* Dark purple (blueviolet) */
+  color: #ffffff;
+}
+
+/* Action Buttons */
+.table-action-buttons {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px solid rgba(212, 175, 55, 0.5);
+  border-radius: 12px;
+  padding: 16px 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-action-info {
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.table-action-current-bet {
+  color: #d4af37;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.table-action-buttons-row {
+  display: flex;
+  gap: 12px;
+}
+
+.table-action-button {
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 100px;
+}
+
+.table-action-button-fold {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: #ffffff;
+}
+
+.table-action-button-fold:hover {
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5);
+}
+
+.table-action-button-check-call {
+  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+  color: #ffffff;
+}
+
+.table-action-button-check-call:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+}
+
+.table-action-button-raise {
+  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+  color: #1a1a1a;
+}
+
+.table-action-button-raise:hover {
+  background: linear-gradient(135deg, #f4d03f 0%, #ffd700 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5);
+}
+
 /* Table Name - on top of background image */
 .table-name {
   position: relative;
@@ -1550,10 +1800,30 @@
     height: 50px;
   }
 
+  .table-seat-badges {
+    top: -6px; /* Adjusted for smaller 50px circle (radius 25px) */
+    right: -6px; /* Adjusted for smaller 50px circle */
+  }
+
   .table-seat-player-info {
+    left: 0px; /* Start at left edge so avatar covers rounded corners */
+    top: 0px; /* Align top with circle apex */
+    height: 50px; /* Match circle height exactly for mobile */
+    border-radius: 25px 6px 6px 25px; /* Top-left and bottom-left rounded to match circle radius (25px), right side rounded (6px) */
     font-size: 0.75rem;
-    padding: 6px 10px;
-    min-width: 100px;
+    padding: 6px 16px 6px 62px; /* Increased left padding (62px) for more spacing, reduced vertical padding to fit 50px height */
+    min-width: 110px;
+    justify-content: center; /* Center content vertically within 50px height */
+  }
+
+  .table-seat-player-info-right {
+    left: auto;
+    right: 0px; /* Start at right edge so avatar covers rounded corners */
+    top: 0px; /* Align top with circle apex */
+    height: 50px; /* Match circle height exactly for mobile */
+    border-radius: 6px 25px 25px 6px; /* Top-right and bottom-right rounded to match circle radius (25px), left side rounded (6px) */
+    padding: 6px 62px 6px 16px; /* Increased right padding (62px) for more spacing, reduced vertical padding to fit 50px height */
+    justify-content: center; /* Center content vertically within 50px height */
   }
 
   .table-seat-twitter-handle {

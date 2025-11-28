@@ -281,3 +281,85 @@ export async function standUp(
   });
 }
 
+/**
+ * Card representation
+ */
+export interface Card {
+  suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';
+  rank: 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
+}
+
+/**
+ * Hand player in current hand
+ */
+export interface HandPlayer {
+  seatNumber: number;
+  walletAddress: string;
+  twitterHandle: string | null;
+  twitterAvatarUrl: string | null;
+  status: 'ACTIVE' | 'FOLDED' | 'ALL_IN';
+  chipsCommitted: string;
+  holeCards: Card[] | null; // Only for authorized player if active
+}
+
+/**
+ * Pot in current hand
+ */
+export interface HandPot {
+  potNumber: number;
+  amount: string;
+  eligibleSeatNumbers: number[];
+}
+
+/**
+ * Current hand state
+ */
+export interface CurrentHand {
+  handId: number;
+  status: string;
+  round: string | null;
+  communityCards: Card[];
+  players: HandPlayer[];
+  pots: HandPot[];
+  dealerPosition: number | null;
+  smallBlindSeat: number | null;
+  bigBlindSeat: number | null;
+  currentActionSeat: number | null;
+  currentBet: string | null;
+  lastRaiseAmount: string | null;
+}
+
+/**
+ * Gets the current active hand for a table
+ *
+ * GET /currentHand
+ *
+ * Auth:
+ * - Requires wallet signature authentication
+ *
+ * Request:
+ * - Query params: tableId, walletAddress
+ * - Headers: Authorization (signature)
+ *
+ * Response:
+ * - 200: CurrentHand
+ * - 404: { error: string; message: string } - No active hand found
+ * - 401: { error: string; message: string } - Unauthorized
+ *
+ * @param tableId - The poker table ID
+ * @param walletAddress - User's wallet address
+ * @param signature - Session signature
+ * @returns Promise that resolves to the current hand state
+ * @throws {Error} If the request fails
+ */
+export async function getCurrentHand(
+  tableId: number,
+  walletAddress: string,
+  signature: string
+): Promise<CurrentHand> {
+  return apiClient<CurrentHand>(`/currentHand?tableId=${tableId}&walletAddress=${encodeURIComponent(walletAddress)}`, {
+    requireAuth: true,
+    signature,
+  });
+}
+
