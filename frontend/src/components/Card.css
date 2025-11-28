@@ -1,0 +1,154 @@
+/**
+ * Card component styles
+ */
+
+.card {
+  width: 120px;
+  height: 168px; /* Standard playing card aspect ratio ~2.5:3.5 */
+  border-radius: 12px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Card Front */
+.card-front {
+  background: #ffffff;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.card-red {
+  color: #dc2626;
+}
+
+.card-black {
+  color: #1a1a1a;
+}
+
+/* Card Corners */
+.card-corner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.card-corner-top {
+  align-self: flex-start;
+}
+
+.card-corner-bottom {
+  align-self: flex-end;
+}
+
+.card-suit {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+/* Card Center */
+.card-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+/* Center Rank */
+.card-rank-center {
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Card Back */
+.card-back {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  border: 2px solid rgba(212, 175, 55, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-back-pattern {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Card Back Pattern Background */
+.card-back-pattern::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      rgba(212, 175, 55, 0.1) 10px,
+      rgba(212, 175, 55, 0.1) 20px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 10px,
+      rgba(212, 175, 55, 0.1) 10px,
+      rgba(212, 175, 55, 0.1) 20px
+    );
+  opacity: 0.5;
+}
+
+.card-back-logo {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #d4af37;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 1;
+  letter-spacing: 2px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .card {
+    width: 100px;
+    height: 140px;
+  }
+
+  .card-suit {
+    font-size: 1.2rem;
+  }
+
+  .card-rank-center {
+    font-size: 3rem;
+  }
+
+  .card-back-logo {
+    font-size: 2rem;
+  }
+}
+

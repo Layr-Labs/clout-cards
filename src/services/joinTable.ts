@@ -106,12 +106,20 @@ export async function joinTable(
       throw new Error('Cannot join table while a withdrawal is pending. Please wait for the withdrawal to complete or expire.');
     }
 
-    // 2. Check escrow balance is sufficient
-    if (escrowState.balanceGwei < input.buyInAmountGwei) {
-      throw new Error(`Insufficient escrow balance. Required: ${input.buyInAmountGwei} gwei, Available: ${escrowState.balanceGwei} gwei`);
+    // 2. Check if user is already seated at THIS table (any seat) - fail immediately
+    const existingSessionAtThisTable = await tx.tableSeatSession.findFirst({
+      where: {
+        walletAddress: normalizedAddress,
+        tableId: input.tableId,
+        isActive: true,
+      },
+    });
+
+    if (existingSessionAtThisTable) {
+      throw new Error(`Player is already seated at table ${input.tableId}, seat ${existingSessionAtThisTable.seatNumber}`);
     }
 
-    // 3. Check user isn't already at another table
+    // 3. Check if user is already seated at ANY other table
     const existingActiveSession = await tx.tableSeatSession.findFirst({
       where: {
         walletAddress: normalizedAddress,
@@ -123,7 +131,12 @@ export async function joinTable(
       throw new Error(`Player is already seated at table ${existingActiveSession.tableId}, seat ${existingActiveSession.seatNumber}`);
     }
 
-    // 4. Check seat is available (race condition check)
+    // 4. Check escrow balance is sufficient (only check after we know they're not already seated)
+    if (escrowState.balanceGwei < input.buyInAmountGwei) {
+      throw new Error(`Insufficient escrow balance. Required: ${input.buyInAmountGwei} gwei, Available: ${escrowState.balanceGwei} gwei`);
+    }
+
+    // 5. Check seat is available (race condition check - in case another player took it)
     const seatOccupied = await tx.tableSeatSession.findFirst({
       where: {
         tableId: input.tableId,
@@ -136,7 +149,7 @@ export async function joinTable(
       throw new Error(`Seat ${input.seatNumber} is already occupied`);
     }
 
-    // 5. Deduct buy-in from escrow balance
+    // 6. Deduct buy-in from escrow balance
     const existingBalances = await tx.$queryRaw<Array<{ wallet_address: string; balance_gwei: bigint }>>`
       SELECT wallet_address, balance_gwei
       FROM player_escrow_balances
@@ -159,10 +172,10 @@ export async function joinTable(
       },
     });
 
-    // 6. Create "sit down" event
+    // 7. Create "sit down" event
     await createEventInTransaction(tx, EventKind.JOIN_TABLE, payloadJson, normalizedAddress, null);
 
-    // 7. Create table seat session
+    // 8. Create table seat session
     const session = await tx.tableSeatSession.create({
       data: {
         tableId: input.tableId,

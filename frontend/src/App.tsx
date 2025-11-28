@@ -7,6 +7,7 @@ import Admin from './Admin'
 import Play from './Play'
 import Profile from './Profile'
 import Table from './Table'
+import Cards from './Cards'
 import { Header } from './components/Header'
 
 /**
@@ -247,6 +248,7 @@ function App() {
         <Route path="/play" element={<Play />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/table/:id" element={<Table />} />
+        <Route path="/cards" element={<Cards />} />
       </Routes>
     </BrowserRouter>
   )

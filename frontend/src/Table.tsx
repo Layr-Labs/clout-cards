@@ -356,7 +356,7 @@ function Table() {
                     ) : (
                       <>
                         <div className="table-seat-avatar-circle" />
-                        {isFullyLoggedIn && (
+                        {isFullyLoggedIn && !isUserSeated() && (
                           <button
                             className="table-seat-buy-in-button"
                             onClick={() => handleBuyInClick(seatIndex)}

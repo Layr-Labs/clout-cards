@@ -540,17 +540,20 @@ app.post('/joinTable', requireWalletAuth({ addressSource: 'query' }), requireTwi
       if (error.message.includes('pending withdrawal') ||
           error.message.includes('already occupied') ||
           error.message.includes('already seated')) {
-        throw new ConflictError(error.message);
+        sendErrorResponse(res, new ConflictError(error.message), 'Failed to join table');
+        return;
       }
       
       if (error.message.includes('Insufficient escrow') ||
           error.message.includes('below minimum') ||
           error.message.includes('exceeds maximum')) {
-        throw new ValidationError(error.message);
+        sendErrorResponse(res, new ValidationError(error.message), 'Failed to join table');
+        return;
       }
       
       if (error.message.includes('not found') || error.message.includes('not active')) {
-        throw new NotFoundError(error.message);
+        sendErrorResponse(res, new NotFoundError(error.message), 'Failed to join table');
+        return;
       }
     }
     
