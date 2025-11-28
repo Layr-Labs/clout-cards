@@ -91,7 +91,7 @@ function Table() {
         const foundTable = tables.find(t => t.id === tableId)
         
         if (foundTable) {
-          setTable(foundTable)
+        setTable(foundTable)
         }
       } catch (err) {
         console.error('Failed to load table data:', err)
@@ -321,9 +321,9 @@ function Table() {
                           ) : (
                             <div className="table-seat-avatar-initial">
                               {player.twitterHandle ? player.twitterHandle.charAt(1).toUpperCase() : '?'}
-                            </div>
+            </div>
                           )}
-                        </div>
+            </div>
                         
                         {/* Player Info Box */}
                         <div className="table-seat-player-info">
@@ -339,7 +339,7 @@ function Table() {
                             <div className="table-seat-stack">
                               {tableBalanceEth} ETH
                             </div>
-                          )}
+                        )}
                           {/* Stand Up Button - only show if this is the current user's seat */}
                           {isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (
                             <button

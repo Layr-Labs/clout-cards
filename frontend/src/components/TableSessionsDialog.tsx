@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { getTableSessions, type TableSeatSession } from '../services/tables';
 import { formatAddress } from '../utils/formatAddress';
 import { formatGwei } from '../utils/formatGwei';
+import { AsyncState } from './AsyncState';
 import './TableSessionsDialog.css';
 
 /**
@@ -103,19 +104,14 @@ export function TableSessionsDialog({
         </div>
 
         <div className="table-sessions-dialog-content">
-          {isLoading ? (
-            <div className="table-sessions-loading">
-              <p>Loading sessions...</p>
-            </div>
-          ) : error ? (
-            <div className="table-sessions-error">
-              <p>Error: {error}</p>
-            </div>
-          ) : sessions.length === 0 ? (
-            <div className="table-sessions-empty">
-              <p>No sessions found for this table.</p>
-            </div>
-          ) : (
+          <AsyncState
+            isLoading={isLoading}
+            error={error}
+            isEmpty={sessions.length === 0}
+            emptyMessage="No sessions found for this table."
+            loadingMessage="Loading sessions..."
+            errorMessage={error || undefined}
+          >
             <div className="table-sessions-table-container">
               <table className="table-sessions-table">
                 <thead>
@@ -171,7 +167,7 @@ export function TableSessionsDialog({
                 </tbody>
               </table>
             </div>
-          )}
+          </AsyncState>
         </div>
 
         <div className="table-sessions-dialog-footer">

@@ -1,0 +1,69 @@
+/**
+ * Slider component styles
+ *
+ * Reusable range slider styles for consistent input UI
+ */
+
+.slider-base {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(212, 175, 55, 0.2);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.slider-base::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+  border: 2px solid #1a1a1a;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slider-base::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.7);
+}
+
+.slider-base::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+  border: 2px solid #1a1a1a;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slider-base::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.7);
+}
+
+.slider-base:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.slider-labels-base {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.slider-label-active {
+  color: #d4af37;
+  font-weight: 600;
+}
+

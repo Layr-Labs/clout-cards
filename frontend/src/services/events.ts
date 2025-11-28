@@ -4,7 +4,7 @@
  * Provides functions to interact with backend event endpoints.
  */
 
-import { getBackendUrl } from '../config/env';
+import { apiClient } from './apiClient';
 
 /**
  * Event from API
@@ -40,25 +40,10 @@ export async function getEvents(
   adminAddress: string,
   limit: number = 50
 ): Promise<Event[]> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/events?adminAddress=${encodeURIComponent(adminAddress)}&limit=${limit}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${signature}`,
-    },
+  return apiClient<Event[]>(`/events?limit=${limit}`, {
+    requireAuth: true,
+    signature,
+    adminAddress,
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to fetch events: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const events: Event[] = await response.json();
-  return events;
 }
 

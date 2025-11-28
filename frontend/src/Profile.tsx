@@ -80,9 +80,9 @@ export default function Profile() {
       {/* Header */}
       <Header
         onLoginClick={() => {
-          // Redirect to play page to login
-          window.location.href = '/play';
-        }}
+                // Redirect to play page to login
+                window.location.href = '/play';
+              }}
       />
 
       <div className="profile-container">

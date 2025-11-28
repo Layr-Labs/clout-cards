@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
 import { getPokerTables, type PokerTable } from './services/tables'
-import { formatGwei } from './utils/formatGwei'
 import { LoginDialog } from './components/LoginDialog'
 import { Header } from './components/Header'
 import { useTwitterUser } from './hooks/useTwitterUser'
 import { getBackendUrl } from './config/env'
+import { TableCard } from './components/TableCard'
+import { AsyncState } from './components/AsyncState'
 
 /**
  * Play page component for CloutCards
@@ -150,50 +151,24 @@ function Play() {
           </p>
 
           {/* Tables List */}
-          {isLoadingTables ? (
-            <div className="play-tables-loading">
-              <p>Loading tables...</p>
-            </div>
-          ) : tables.length === 0 ? (
-            <div className="play-tables-empty">
-              <p>No tables available. Check back later!</p>
-            </div>
-          ) : (
+          <AsyncState
+            isLoading={isLoadingTables}
+            error={null}
+            isEmpty={tables.length === 0}
+            emptyMessage="No tables available. Check back later!"
+            loadingMessage="Loading tables..."
+            className="play-tables-state"
+          >
             <div className="play-tables-list">
               {tables.map((table) => (
-                <div key={table.id} className="play-table-card">
-                  <div className="play-table-header">
-                    <h3 className="play-table-name">{table.name}</h3>
-                    <span className={`play-table-status ${table.isActive ? 'active' : 'inactive'}`}>
-                      {table.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div className="play-table-details">
-                    <div className="play-table-detail">
-                      <span className="play-table-label">Buy-In:</span>
-                      <span className="play-table-value">
-                        {formatGwei(table.minimumBuyIn)} - {formatGwei(table.maximumBuyIn)} gwei
-                      </span>
-                    </div>
-                    <div className="play-table-detail">
-                      <span className="play-table-label">Blinds:</span>
-                      <span className="play-table-value">
-                        {formatGwei(table.smallBlind)} / {formatGwei(table.bigBlind)} gwei
-                      </span>
-                    </div>
-                    <div className="play-table-detail">
-                      <span className="play-table-label">Rake:</span>
-                      <span className="play-table-value">{table.perHandRake} bps</span>
-                    </div>
-                    <div className="play-table-detail">
-                      <span className="play-table-label">Seats:</span>
-                      <span className="play-table-value">{table.maxSeatCount}</span>
-                    </div>
-                  </div>
-                  <div className="play-table-actions">
-                    {isFullyLoggedIn ? (
+                <TableCard
+                  key={table.id}
+                  table={table}
+                  className="play-table-card"
+                  renderAction={() => (
+                    isFullyLoggedIn ? (
                       <button
-                        className="play-table-join-button"
+                        className="cta-button cta-primary play-table-join-button"
                         onClick={() => handleJoin(table)}
                         disabled={!table.isActive}
                       >
@@ -201,17 +176,17 @@ function Play() {
                       </button>
                     ) : (
                       <button
-                        className="play-table-signin-button"
+                        className="cta-button cta-secondary play-table-signin-button"
                         onClick={() => setIsLoginDialogOpen(true)}
                       >
                         Log In
                       </button>
-                    )}
-                  </div>
-                </div>
+                    )
+                  )}
+                />
               ))}
             </div>
-          )}
+          </AsyncState>
         </div>
       </main>
 

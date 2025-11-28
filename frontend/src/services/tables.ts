@@ -4,7 +4,7 @@
  * Provides functions to interact with backend table endpoints.
  */
 
-import { getBackendUrl } from '../config/env';
+import { apiClient } from './apiClient';
 
 /**
  * Input for creating a new poker table
@@ -67,27 +67,12 @@ export async function createTable(
   input: CreateTableInput,
   signature: string
 ): Promise<CreatedTable> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/createTable`;
-
-  const response = await fetch(url, {
+  return apiClient<CreatedTable>('/createTable', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${signature}`,
-    },
+    requireAuth: true,
+    signature,
     body: JSON.stringify(input),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to create table: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const table: CreatedTable = await response.json();
-  return table;
 }
 
 /**
@@ -97,25 +82,7 @@ export async function createTable(
  * @throws {Error} If the request fails
  */
 export async function getPokerTables(): Promise<PokerTable[]> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/pokerTables`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to fetch poker tables: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const tables: PokerTable[] = await response.json();
-  return tables;
+  return apiClient<PokerTable[]>('/pokerTables');
 }
 
 /**
@@ -139,25 +106,7 @@ export interface TablePlayer {
  * @throws {Error} If the request fails
  */
 export async function getTablePlayers(tableId: number): Promise<TablePlayer[]> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/tablePlayers?tableId=${tableId}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to fetch table players: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const players: TablePlayer[] = await response.json();
-  return players;
+  return apiClient<TablePlayer[]>(`/tablePlayers?tableId=${tableId}`);
 }
 
 /**
@@ -217,28 +166,14 @@ export async function joinTable(
   signature: string,
   twitterAccessToken: string
 ): Promise<JoinTableResponse> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/joinTable?walletAddress=${encodeURIComponent(walletAddress)}`;
-
-  const response = await fetch(url, {
+  return apiClient<JoinTableResponse>('/joinTable', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${signature}`,
-      'X-Twitter-Access-Token': twitterAccessToken,
-    },
+    requireAuth: true,
+    signature,
+    twitterToken: twitterAccessToken,
+    walletAddress,
     body: JSON.stringify(input),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to join table: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const session: JoinTableResponse = await response.json();
-  return session;
 }
 
 /**
@@ -277,26 +212,11 @@ export interface TableSeatSession {
  * @throws {Error} If the request fails
  */
 export async function getTableSessions(tableId: number, signature: string, adminAddress: string): Promise<TableSeatSession[]> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/admin/tableSessions?tableId=${tableId}&adminAddress=${encodeURIComponent(adminAddress)}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${signature}`,
-    },
+  return apiClient<TableSeatSession[]>(`/admin/tableSessions?tableId=${tableId}`, {
+    requireAuth: true,
+    signature,
+    adminAddress,
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to fetch table sessions: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const sessions: TableSeatSession[] = await response.json();
-  return sessions;
 }
 
 /**
@@ -352,26 +272,12 @@ export async function standUp(
   walletAddress: string,
   signature: string
 ): Promise<StandUpResponse> {
-  const backendUrl = getBackendUrl();
-  const url = `${backendUrl}/standUp?walletAddress=${encodeURIComponent(walletAddress)}`;
-
-  const response = await fetch(url, {
+  return apiClient<StandUpResponse>('/standUp', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${signature}`,
-    },
+    requireAuth: true,
+    signature,
+    walletAddress,
     body: JSON.stringify(input),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || `Failed to stand up: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const session: StandUpResponse = await response.json();
-  return session;
 }
 

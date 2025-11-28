@@ -4,7 +4,7 @@
  * Provides functions for fetching player escrow balance from the backend API.
  */
 
-import { getBackendUrl } from '../config/env';
+import { apiClient } from './apiClient';
 
 /**
  * Escrow balance with withdrawal state
@@ -25,30 +25,11 @@ export interface EscrowBalanceState {
  * @throws {Error} If the API request fails
  */
 export async function getEscrowBalance(walletAddress: string, signature: string): Promise<EscrowBalanceState> {
-  const backendUrl = getBackendUrl();
-  const response = await fetch(
-    `${backendUrl}/playerEscrowBalance?walletAddress=${encodeURIComponent(walletAddress)}`,
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${signature}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to fetch escrow balance' }));
-    throw new Error(error.message || 'Failed to fetch escrow balance');
-  }
-
-  const data = await response.json();
-  return {
-    balanceGwei: data.balanceGwei,
-    nextWithdrawalNonce: data.nextWithdrawalNonce,
-    withdrawalSignatureExpiry: data.withdrawalSignatureExpiry,
-    withdrawalPending: data.withdrawalPending,
-  };
+  return apiClient<EscrowBalanceState>('/playerEscrowBalance', {
+    requireAuth: true,
+    signature,
+    walletAddress,
+  });
 }
 
 /**
@@ -73,27 +54,21 @@ export async function signEscrowWithdrawal(
   r: string;
   s: string;
 }> {
-  const backendUrl = getBackendUrl();
-  const response = await fetch(
-    `${backendUrl}/signEscrowWithdrawal?walletAddress=${encodeURIComponent(walletAddress)}`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${signature}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amountGwei,
-        toAddress,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to sign withdrawal' }));
-    throw new Error(error.message || 'Failed to sign withdrawal');
-  }
-
-  return await response.json();
+  return apiClient<{
+    nonce: string;
+    expiry: string;
+    v: number;
+    r: string;
+    s: string;
+  }>('/signEscrowWithdrawal', {
+    method: 'POST',
+    requireAuth: true,
+    signature,
+    walletAddress,
+    body: JSON.stringify({
+      amountGwei,
+      toAddress,
+    }),
+  });
 }
 

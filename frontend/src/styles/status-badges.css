@@ -1,0 +1,39 @@
+/**
+ * Status badge component styles
+ *
+ * Reusable active/inactive status badges for consistent UI
+ */
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-badge.active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-badge.inactive {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Variant: Small badge */
+.status-badge-small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+/* Variant: Large badge */
+.status-badge-large {
+  padding: 6px 14px;
+  font-size: 0.9rem;
+}
+

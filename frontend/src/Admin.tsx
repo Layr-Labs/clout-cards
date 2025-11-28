@@ -5,13 +5,14 @@ import { useWallet } from './contexts/WalletContext'
 import { WalletInfo } from './components/WalletInfo'
 import { Header } from './components/Header'
 import { formatAddress } from './utils/formatAddress'
-import { formatGwei } from './utils/formatGwei'
 import { JsonViewerDialog } from './components/JsonViewerDialog'
 import { getEvents, type Event } from './services/events'
 import { isAdmin } from './services/admin'
 import { AddTableDialog } from './components/AddTableDialog'
 import { TableSessionsDialog } from './components/TableSessionsDialog'
 import { createTable, getPokerTables, type PokerTable } from './services/tables'
+import { TableCard } from './components/TableCard'
+import { AsyncState } from './components/AsyncState'
 
 /**
  * Admin page component for CloutCards
@@ -269,58 +270,29 @@ function Admin() {
                         </div>
 
                         {/* Tables List */}
-                        {isLoadingTables ? (
-                          <div className="admin-tables-loading">
-                            <p>Loading tables...</p>
-                          </div>
-                        ) : tables.length === 0 ? (
-                          <div className="admin-tables-empty">
-                            <p>No tables found. Create your first table using the "Add Table" button above.</p>
-                          </div>
-                        ) : (
+                        <AsyncState
+                          isLoading={isLoadingTables}
+                          error={null}
+                          isEmpty={tables.length === 0}
+                          emptyMessage='No tables found. Create your first table using the "Add Table" button above.'
+                          loadingMessage="Loading tables..."
+                          className="admin-tables-state"
+                        >
                           <div className="admin-tables-list">
                             {tables.map((table) => (
-                              <div 
-                                key={table.id} 
-                                className="admin-table-card"
-                                onClick={() => {
+                              <TableCard
+                                key={table.id}
+                                table={table}
+                                onAction={() => {
                                   setSelectedTable(table)
                                   setIsSessionsDialogOpen(true)
                                 }}
-                                style={{ cursor: 'pointer' }}
-                              >
-                                <div className="admin-table-header">
-                                  <h3 className="admin-table-name">{table.name}</h3>
-                                  <span className={`admin-table-status ${table.isActive ? 'active' : 'inactive'}`}>
-                                    {table.isActive ? 'Active' : 'Inactive'}
-                                  </span>
-                                </div>
-                                <div className="admin-table-details">
-                                  <div className="admin-table-detail">
-                                    <span className="admin-table-label">Buy-In:</span>
-                                    <span className="admin-table-value">
-                                      {formatGwei(table.minimumBuyIn)} - {formatGwei(table.maximumBuyIn)} gwei
-                                    </span>
-                                  </div>
-                                  <div className="admin-table-detail">
-                                    <span className="admin-table-label">Blinds:</span>
-                                    <span className="admin-table-value">
-                                      {formatGwei(table.smallBlind)} / {formatGwei(table.bigBlind)} gwei
-                                    </span>
-                                  </div>
-                                  <div className="admin-table-detail">
-                                    <span className="admin-table-label">Rake:</span>
-                                    <span className="admin-table-value">{table.perHandRake} bps</span>
-                                  </div>
-                                  <div className="admin-table-detail">
-                                    <span className="admin-table-label">Seats:</span>
-                                    <span className="admin-table-value">{table.maxSeatCount}</span>
-                                  </div>
-                                </div>
-                              </div>
+                                className="admin-table-card"
+                                showDetails={true}
+                              />
                             ))}
                           </div>
-                        )}
+                        </AsyncState>
                       </div>
                     )}
 
@@ -336,15 +308,14 @@ function Admin() {
                         </div>
 
                         {/* Events List */}
-                        {isLoadingEvents ? (
-                          <div className="admin-events-loading">
-                            <p>Loading events...</p>
-                          </div>
-                        ) : events.length === 0 ? (
-                          <div className="admin-events-empty">
-                            <p>No events found.</p>
-                          </div>
-                        ) : (
+                        <AsyncState
+                          isLoading={isLoadingEvents}
+                          error={null}
+                          isEmpty={events.length === 0}
+                          emptyMessage="No events found."
+                          loadingMessage="Loading events..."
+                          className="admin-events-state"
+                        >
                           <div className="admin-events-list">
                             <table className="admin-events-table">
                               <thead>
@@ -472,7 +443,7 @@ function Admin() {
                               </div>
                             )}
                           </div>
-                        )}
+                        </AsyncState>
                       </div>
                     )}
                   </div>

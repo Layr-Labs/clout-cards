@@ -28,6 +28,9 @@ import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 import { joinTable } from './services/joinTable';
 import { standUp } from './services/standUp';
+import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppError } from './utils/errorHandler';
+import { validateAndGetTableId, validateTableId } from './utils/validation';
+import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
 
 /**
  * Express application instance
@@ -134,11 +137,7 @@ app.get('/admins', (req: Request, res: Response): void => {
     const admins = getAdminAddresses();
     res.status(200).json(admins);
   } catch (error) {
-    console.error('Error getting admin addresses:', error);
-    res.status(500).json({
-      error: 'Failed to retrieve admin addresses',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to retrieve admin addresses');
   }
 });
 
@@ -175,11 +174,7 @@ app.get('/sessionMessage', (req: Request, res: Response): void => {
     const { address } = req.query;
 
     if (!address || typeof address !== 'string') {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'Address query parameter is required',
-      });
-      return;
+      throw new ValidationError('Address query parameter is required');
     }
 
     // Generate session message using reusable utility
@@ -187,11 +182,7 @@ app.get('/sessionMessage', (req: Request, res: Response): void => {
 
     res.status(200).json({ message });
   } catch (error) {
-    console.error('Error generating session message:', error);
-    res.status(400).json({
-      error: 'Invalid address',
-      message: error instanceof Error ? error.message : 'Address must be a valid Ethereum address',
-    });
+    sendErrorResponse(res, error, 'Failed to generate session message', 400);
   }
 });
 
@@ -237,42 +228,16 @@ app.post('/createTable', requireAdminAuth(), async (req: Request, res: Response)
     const adminAddress = (req as Request & { adminAddress: string }).adminAddress;
     const { adminAddress: _, ...tableInput } = req.body; // Remove adminAddress from tableInput
 
-    // Parse BigInt values from strings
-    const createTableInput: CreateTableInput = {
-      name: tableInput.name,
-      minimumBuyIn: BigInt(tableInput.minimumBuyIn),
-      maximumBuyIn: BigInt(tableInput.maximumBuyIn),
-      perHandRake: tableInput.perHandRake,
-      maxSeatCount: tableInput.maxSeatCount,
-      smallBlind: BigInt(tableInput.smallBlind),
-      bigBlind: BigInt(tableInput.bigBlind),
-      isActive: tableInput.isActive,
-    };
+    // Parse BigInt values from strings using utility
+    const createTableInput = parseTableInput(tableInput);
 
     // Create the table (includes event logging in transaction)
     const table = await createTable(createTableInput, adminAddress);
 
-    // Convert BigInt fields to strings for JSON response
-    res.status(200).json({
-      id: table.id,
-      name: table.name,
-      minimumBuyIn: table.minimumBuyIn.toString(),
-      maximumBuyIn: table.maximumBuyIn.toString(),
-      perHandRake: table.perHandRake,
-      maxSeatCount: table.maxSeatCount,
-      smallBlind: table.smallBlind.toString(),
-      bigBlind: table.bigBlind.toString(),
-      isActive: table.isActive,
-      createdAt: table.createdAt,
-      updatedAt: table.updatedAt,
-    });
+    // Serialize BigInt fields to strings for JSON response
+    res.status(200).json(serializeTable(table));
   } catch (error) {
-    console.error('Error creating table:', error);
-    const statusCode = error instanceof Error && error.message.includes('must be') ? 400 : 500;
-    res.status(statusCode).json({
-      error: 'Failed to create table',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to create table');
   }
 });
 
@@ -307,28 +272,12 @@ app.get('/pokerTables', async (req: Request, res: Response): Promise<void> => {
   try {
     const tables = await getAllTables();
 
-    // Convert BigInt fields to strings for JSON response
-    const tablesJson = tables.map((table) => ({
-      id: table.id,
-      name: table.name,
-      minimumBuyIn: table.minimumBuyIn.toString(),
-      maximumBuyIn: table.maximumBuyIn.toString(),
-      perHandRake: table.perHandRake,
-      maxSeatCount: table.maxSeatCount,
-      smallBlind: table.smallBlind.toString(),
-      bigBlind: table.bigBlind.toString(),
-      isActive: table.isActive,
-      createdAt: table.createdAt.toISOString(),
-      updatedAt: table.updatedAt.toISOString(),
-    }));
+    // Serialize BigInt fields to strings for JSON response
+    const tablesJson = tables.map(serializeTable);
 
     res.status(200).json(tablesJson);
   } catch (error) {
-    console.error('Error fetching poker tables:', error);
-    res.status(500).json({
-      error: 'Failed to fetch poker tables',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to fetch poker tables');
   }
 });
 
@@ -364,38 +313,8 @@ app.get('/pokerTables', async (req: Request, res: Response): Promise<void> => {
  */
 app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
   try {
-    const tableIdParam = req.query.tableId;
-    
-    if (!tableIdParam) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId query parameter is required',
-      });
-      return;
-    }
-
-    const tableId = parseInt(tableIdParam as string, 10);
-    if (isNaN(tableId) || tableId <= 0) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId must be a positive integer',
-      });
-      return;
-    }
-
-    // Verify table exists
-    const table = await prisma.pokerTable.findUnique({
-      where: { id: tableId },
-      select: { id: true },
-    });
-
-    if (!table) {
-      res.status(404).json({
-        error: 'Table not found',
-        message: `No table found with id: ${tableId}`,
-      });
-      return;
-    }
+    // Validate table ID and verify table exists
+    const tableId = await validateAndGetTableId(req.query.tableId);
 
     // Get all active seat sessions for this table, ordered by seat number
     const seatSessions = await prisma.tableSeatSession.findMany({
@@ -425,7 +344,7 @@ app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
       tableBalanceGwei: bigint;
     }>;
 
-    // Convert BigInt fields to strings for JSON response
+    // Serialize BigInt fields to strings for JSON response
     const playersJson = seatSessions.map((session) => ({
       id: session.id,
       walletAddress: session.walletAddress,
@@ -438,11 +357,7 @@ app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json(playersJson);
   } catch (error) {
-    console.error('Error fetching table players:', error);
-    res.status(500).json({
-      error: 'Failed to fetch table players',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to fetch table players');
   }
 });
 
@@ -480,38 +395,8 @@ app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
  */
 app.get('/admin/tableSessions', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
   try {
-    const tableIdParam = req.query.tableId;
-    
-    if (!tableIdParam) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId query parameter is required',
-      });
-      return;
-    }
-
-    const tableId = parseInt(tableIdParam as string, 10);
-    if (isNaN(tableId) || tableId <= 0) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId must be a positive integer',
-      });
-      return;
-    }
-
-    // Verify table exists
-    const table = await prisma.pokerTable.findUnique({
-      where: { id: tableId },
-      select: { id: true },
-    });
-
-    if (!table) {
-      res.status(404).json({
-        error: 'Table not found',
-        message: `No table found with id: ${tableId}`,
-      });
-      return;
-    }
+    // Validate table ID and verify table exists
+    const tableId = await validateAndGetTableId(req.query.tableId);
 
     // Get all seat sessions for this table (active and inactive), ordered by joinedAt descending
     const seatSessions = await prisma.tableSeatSession.findMany({
@@ -544,26 +429,12 @@ app.get('/admin/tableSessions', requireAdminAuth({ addressSource: 'query' }), as
       tableBalanceGwei: bigint;
     }>;
 
-    // Convert BigInt fields to strings for JSON response
-    const sessionsJson = seatSessions.map((session) => ({
-      id: session.id,
-      walletAddress: session.walletAddress,
-      twitterHandle: session.twitterHandle,
-      twitterAvatarUrl: session.twitterAvatarUrl,
-      seatNumber: session.seatNumber,
-      joinedAt: session.joinedAt.toISOString(),
-      leftAt: session.leftAt?.toISOString() || null,
-      isActive: session.isActive,
-      tableBalanceGwei: session.tableBalanceGwei.toString(),
-    }));
+    // Serialize BigInt fields to strings for JSON response
+    const sessionsJson = seatSessions.map(serializeTableSeatSession);
 
     res.status(200).json(sessionsJson);
   } catch (error) {
-    console.error('Error fetching table sessions:', error);
-    res.status(500).json({
-      error: 'Failed to fetch table sessions',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to fetch table sessions');
   }
 });
 
@@ -626,40 +497,20 @@ app.post('/joinTable', requireWalletAuth({ addressSource: 'query' }), requireTwi
 
     // Validate request body
     if (tableId === undefined || seatNumber === undefined || !buyInAmountGwei) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId, seatNumber, and buyInAmountGwei are required',
-      });
-      return;
+      throw new ValidationError('tableId, seatNumber, and buyInAmountGwei are required');
     }
 
     // Validate types
-    const tableIdNum = parseInt(String(tableId), 10);
+    const tableIdNum = validateTableId(tableId);
     const seatNumberNum = parseInt(String(seatNumber), 10);
     const buyInAmountGweiBigInt = BigInt(buyInAmountGwei);
 
-    if (isNaN(tableIdNum) || tableIdNum <= 0) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId must be a positive integer',
-      });
-      return;
-    }
-
     if (isNaN(seatNumberNum) || seatNumberNum < 0) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'seatNumber must be a non-negative integer',
-      });
-      return;
+      throw new ValidationError('seatNumber must be a non-negative integer');
     }
 
     if (buyInAmountGweiBigInt <= 0n) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'buyInAmountGwei must be greater than 0',
-      });
-      return;
+      throw new ValidationError('buyInAmountGwei must be greater than 0');
     }
 
     // Join the table
@@ -684,47 +535,26 @@ app.post('/joinTable', requireWalletAuth({ addressSource: 'query' }), requireTwi
       joinedAt: session.joinedAt.toISOString(),
     });
   } catch (error) {
-    console.error('Error joining table:', error);
-    
-    // Check for specific error types
-    if (error instanceof Error) {
-      if (error.message.includes('pending withdrawal')) {
-        res.status(409).json({
-          error: 'Conflict',
-          message: error.message,
-        });
-        return;
+    // Map service errors to appropriate HTTP status codes
+    if (error instanceof Error && !(error instanceof AppError)) {
+      if (error.message.includes('pending withdrawal') ||
+          error.message.includes('already occupied') ||
+          error.message.includes('already seated')) {
+        throw new ConflictError(error.message);
       }
       
-      if (error.message.includes('already occupied') || error.message.includes('already seated')) {
-        res.status(409).json({
-          error: 'Conflict',
-          message: error.message,
-        });
-        return;
-      }
-      
-      if (error.message.includes('Insufficient escrow') || error.message.includes('below minimum') || error.message.includes('exceeds maximum')) {
-        res.status(400).json({
-          error: 'Invalid request',
-          message: error.message,
-        });
-        return;
+      if (error.message.includes('Insufficient escrow') ||
+          error.message.includes('below minimum') ||
+          error.message.includes('exceeds maximum')) {
+        throw new ValidationError(error.message);
       }
       
       if (error.message.includes('not found') || error.message.includes('not active')) {
-        res.status(404).json({
-          error: 'Not found',
-          message: error.message,
-        });
-        return;
+        throw new NotFoundError(error.message);
       }
     }
-
-    res.status(500).json({
-      error: 'Failed to join table',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    
+    sendErrorResponse(res, error, 'Failed to join table');
   }
 });
 
@@ -782,59 +612,20 @@ app.post('/standUp', requireWalletAuth({ addressSource: 'query' }), async (req: 
 
     // Validate request body
     if (tableId === undefined) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId is required',
-      });
-      return;
+      throw new ValidationError('tableId is required');
     }
 
     // Validate types
-    const tableIdNum = parseInt(String(tableId), 10);
-
-    if (isNaN(tableIdNum) || tableIdNum <= 0) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'tableId must be a positive integer',
-      });
-      return;
-    }
+    const tableIdNum = validateTableId(tableId);
 
     // Stand up from the table
     const session = await standUp(walletAddress, {
       tableId: tableIdNum,
     });
 
-    res.status(200).json({
-      id: session.id,
-      tableId: session.tableId,
-      walletAddress: session.walletAddress,
-      seatNumber: session.seatNumber,
-      tableBalanceGwei: session.tableBalanceGwei.toString(),
-      twitterHandle: session.twitterHandle,
-      twitterAvatarUrl: session.twitterAvatarUrl,
-      joinedAt: session.joinedAt.toISOString(),
-      leftAt: session.leftAt.toISOString(),
-      isActive: session.isActive,
-    });
+    res.status(200).json(serializeTableSeatSession(session));
   } catch (error) {
-    console.error('Error standing up:', error);
-    
-    // Check for specific error types
-    if (error instanceof Error) {
-      if (error.message.includes('No active session')) {
-        res.status(404).json({
-          error: 'Not found',
-          message: error.message,
-        });
-        return;
-      }
-    }
-
-    res.status(500).json({
-      error: 'Failed to stand up',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to stand up');
   }
 });
 
@@ -881,11 +672,7 @@ app.get('/events', requireAdminAuth({ addressSource: 'query' }), async (req: Req
     if (limitParam) {
       const parsedLimit = parseInt(limitParam as string, 10);
       if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
-        res.status(400).json({
-          error: 'Invalid request',
-          message: 'limit must be a number between 1 and 100',
-        });
-        return;
+        throw new ValidationError('limit must be a number between 1 and 100');
       }
       limit = parsedLimit;
     }
@@ -926,11 +713,7 @@ app.get('/events', requireAdminAuth({ addressSource: 'query' }), async (req: Req
 
     res.status(200).json(eventsJson);
   } catch (error) {
-    console.error('Error fetching events:', error);
-    res.status(500).json({
-      error: 'Failed to fetch events',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to fetch events');
   }
 });
 
@@ -964,11 +747,7 @@ app.get('/tee/publicKey', (req: Request, res: Response): void => {
     const publicKey = getTeePublicKey();
     res.status(200).json({ publicKey });
   } catch (error) {
-    console.error('Error getting TEE public key:', error);
-    res.status(500).json({
-      error: 'Failed to retrieve TEE public key',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to retrieve TEE public key');
   }
 });
 
@@ -1012,11 +791,7 @@ app.get('/playerEscrowBalance', requireWalletAuth({ addressSource: 'query' }), a
       withdrawalPending: escrowState.withdrawalPending,
     });
   } catch (error) {
-    console.error('Error fetching escrow balance:', error);
-    res.status(500).json({
-      error: 'Failed to fetch balance',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to fetch balance');
   }
 });
 
@@ -1073,20 +848,12 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
 
     // Validate request body
     if (!amountGwei || !toAddress) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'amountGwei and toAddress are required',
-      });
-      return;
+      throw new ValidationError('amountGwei and toAddress are required');
     }
 
     // Validate toAddress matches walletAddress (for now, player must withdraw to their own wallet)
     if (ethers.getAddress(toAddress.toLowerCase()) !== ethers.getAddress(walletAddress.toLowerCase())) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'toAddress must match walletAddress',
-      });
-      return;
+      throw new ValidationError('toAddress must match walletAddress');
     }
 
     // Parse amountGwei
@@ -1094,11 +861,7 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
     try {
       amountGweiBigInt = BigInt(amountGwei);
     } catch (error) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: 'amountGwei must be a valid number',
-      });
-      return;
+      throw new ValidationError('amountGwei must be a valid number');
     }
 
     // Sign the withdrawal request
@@ -1116,30 +879,18 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
       s: signature.s,
     });
   } catch (error) {
-    console.error('Error signing escrow withdrawal:', error);
+    // Map service errors to appropriate HTTP status codes
+    if (error instanceof Error && !(error instanceof AppError)) {
+      if (error.message.includes('already pending')) {
+        throw new ConflictError(error.message);
+      }
+      
+      if (error.message.includes('exceeds escrow balance')) {
+        throw new ValidationError(error.message);
+      }
+    }
     
-    // Check if it's a conflict (pending withdrawal)
-    if (error instanceof Error && error.message.includes('already pending')) {
-      res.status(409).json({
-        error: 'Conflict',
-        message: error.message,
-      });
-      return;
-    }
-
-    // Check if it's a validation error (amount exceeds balance)
-    if (error instanceof Error && error.message.includes('exceeds escrow balance')) {
-      res.status(400).json({
-        error: 'Invalid request',
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Failed to sign withdrawal',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    sendErrorResponse(res, error, 'Failed to sign withdrawal');
   }
 });
 
