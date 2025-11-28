@@ -27,6 +27,7 @@ import { signEscrowWithdrawal } from './services/withdrawalSigning';
 import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 import { joinTable } from './services/joinTable';
+import { standUp } from './services/standUp';
 
 /**
  * Express application instance
@@ -722,6 +723,116 @@ app.post('/joinTable', requireWalletAuth({ addressSource: 'query' }), requireTwi
 
     res.status(500).json({
       error: 'Failed to join table',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /standUp
+ *
+ * Allows a player to leave a poker table and move their balance back to escrow.
+ *
+ * Auth:
+ * - Requires wallet signature authentication via requireWalletAuth middleware
+ *
+ * Request:
+ * - Body: {
+ *     tableId: number  // Table ID to stand up from
+ *   }
+ * - Query params:
+ *   - walletAddress: string (Ethereum address - must match connected wallet)
+ * - Headers:
+ *   - Authorization: Bearer <signature> (session signature)
+ *
+ * Response:
+ * - 200: {
+ *     id: number,
+ *     tableId: number,
+ *     walletAddress: string,
+ *     seatNumber: number,
+ *     tableBalanceGwei: string,
+ *     twitterHandle: string | null,
+ *     twitterAvatarUrl: string | null,
+ *     joinedAt: string,
+ *     leftAt: string,
+ *     isActive: boolean
+ *   }
+ *
+ * Error model:
+ * - 400: { error: "Invalid request"; message: string } - Invalid parameters
+ * - 401: { error: "Unauthorized"; message: string } - Missing or invalid authentication
+ * - 404: { error: "Not found"; message: string } - No active session found
+ * - 500: { error: "Failed to stand up"; message: string } - Server error
+ *
+ * Side effects:
+ * - Creates a leave_table event in the database
+ * - Adds table balance back to player's escrow balance
+ * - Marks session as inactive and sets leftAt timestamp
+ *
+ * @param {Request} req - Express request object with walletAddress attached
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/standUp', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const { tableId } = req.body;
+
+    // Validate request body
+    if (tableId === undefined) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId is required',
+      });
+      return;
+    }
+
+    // Validate types
+    const tableIdNum = parseInt(String(tableId), 10);
+
+    if (isNaN(tableIdNum) || tableIdNum <= 0) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId must be a positive integer',
+      });
+      return;
+    }
+
+    // Stand up from the table
+    const session = await standUp(walletAddress, {
+      tableId: tableIdNum,
+    });
+
+    res.status(200).json({
+      id: session.id,
+      tableId: session.tableId,
+      walletAddress: session.walletAddress,
+      seatNumber: session.seatNumber,
+      tableBalanceGwei: session.tableBalanceGwei.toString(),
+      twitterHandle: session.twitterHandle,
+      twitterAvatarUrl: session.twitterAvatarUrl,
+      joinedAt: session.joinedAt.toISOString(),
+      leftAt: session.leftAt.toISOString(),
+      isActive: session.isActive,
+    });
+  } catch (error) {
+    console.error('Error standing up:', error);
+    
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('No active session')) {
+        res.status(404).json({
+          error: 'Not found',
+          message: error.message,
+        });
+        return;
+      }
+    }
+
+    res.status(500).json({
+      error: 'Failed to stand up',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }

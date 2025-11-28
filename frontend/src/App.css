@@ -1614,6 +1614,10 @@
   min-width: 120px;
   text-align: center;
   white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 .table-seat-twitter-handle {
@@ -1674,6 +1678,44 @@
   cursor: not-allowed;
   box-shadow: none;
   border: 1px solid rgba(100, 100, 100, 0.3);
+}
+
+/* Stand Up Button - inside player info box */
+.table-seat-stand-up-button {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+  transition: all 0.2s ease;
+  margin-top: 2px;
+  width: 100%;
+}
+
+.table-seat-stand-up-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.6);
+}
+
+.table-seat-stand-up-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.table-seat-stand-up-button:disabled {
+  background: rgba(100, 100, 100, 0.3);
+  color: rgba(200, 200, 200, 0.5);
+  cursor: not-allowed;
+  box-shadow: none;
+  border: 1px solid rgba(100, 100, 100, 0.3);
+  transform: none;
 }
 
 /* Table Name - on top of background image */

@@ -1,10 +1,11 @@
 import './App.css'
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getPokerTables, getTablePlayers, joinTable, type PokerTable, type TablePlayer } from './services/tables'
+import { getPokerTables, getTablePlayers, joinTable, standUp, type PokerTable, type TablePlayer } from './services/tables'
 import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { useWallet } from './contexts/WalletContext'
 import { useTwitterUser } from './hooks/useTwitterUser'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
@@ -23,6 +24,8 @@ function Table() {
   const [isBuyInDialogOpen, setIsBuyInDialogOpen] = useState(false)
   const [selectedSeatNumber, setSelectedSeatNumber] = useState<number | null>(null)
   const [isJoining, setIsJoining] = useState(false)
+  const [isStandUpConfirmOpen, setIsStandUpConfirmOpen] = useState(false)
+  const [isStandingUp, setIsStandingUp] = useState(false)
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -190,6 +193,69 @@ function Table() {
     return balanceGwei >= minBuyInGwei
   }
 
+  /**
+   * Checks if the current user is seated at this table
+   */
+  function isUserSeated(): boolean {
+    if (!address || !players.length) {
+      return false
+    }
+    const normalizedAddress = address.toLowerCase()
+    return players.some(p => p.walletAddress.toLowerCase() === normalizedAddress)
+  }
+
+  /**
+   * Gets the current user's player info if they're seated
+   */
+  function getUserPlayer(): TablePlayer | null {
+    if (!address || !players.length) {
+      return null
+    }
+    const normalizedAddress = address.toLowerCase()
+    return players.find(p => p.walletAddress.toLowerCase() === normalizedAddress) || null
+  }
+
+  /**
+   * Handles Stand Up button click - opens confirmation dialog
+   */
+  function handleStandUpClick() {
+    setIsStandUpConfirmOpen(true)
+  }
+
+  /**
+   * Handles stand up confirmation
+   */
+  async function handleStandUpConfirm() {
+    if (!tableId || !address || !signature) {
+      return
+    }
+
+    setIsStandingUp(true)
+
+    try {
+      await standUp(
+        { tableId },
+        address,
+        signature
+      )
+
+      // Close dialog and refresh players
+      setIsStandUpConfirmOpen(false)
+      
+      // Refresh players list
+      const fetchedPlayers = await getTablePlayers(tableId)
+      setPlayers(fetchedPlayers)
+
+      // Note: Escrow balance will be refreshed automatically by the useEscrowBalance hook
+      // when the user navigates to a page that displays it (like Profile)
+    } catch (error) {
+      console.error('Failed to stand up:', error)
+      alert(error instanceof Error ? error.message : 'Failed to stand up. Please try again.')
+    } finally {
+      setIsStandingUp(false)
+    }
+  }
+
   return (
     <div className="app">
       {/* Header */}
@@ -274,6 +340,17 @@ function Table() {
                               {tableBalanceEth} ETH
                             </div>
                           )}
+                          {/* Stand Up Button - only show if this is the current user's seat */}
+                          {isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (
+                            <button
+                              className="table-seat-stand-up-button"
+                              onClick={handleStandUpClick}
+                              disabled={isStandingUp}
+                              title="Stand up from the table"
+                            >
+                              Stand Up
+                            </button>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -326,6 +403,20 @@ function Table() {
           maximumBuyInGwei={table.maximumBuyIn}
           escrowBalanceGwei={escrowBalanceGwei}
           isLoading={isJoining}
+        />
+      )}
+
+      {/* Stand Up Confirmation Dialog */}
+      {table && (
+        <ConfirmDialog
+          isOpen={isStandUpConfirmOpen}
+          onClose={() => setIsStandUpConfirmOpen(false)}
+          onConfirm={handleStandUpConfirm}
+          title="Stand Up"
+          message={`Are you sure you want to stand up from ${table.name}? Your table balance will be moved back to your escrow.`}
+          confirmText="Stand Up"
+          cancelText="Cancel"
+          isLoading={isStandingUp}
         />
       )}
     </div>

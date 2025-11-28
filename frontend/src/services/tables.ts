@@ -299,3 +299,79 @@ export async function getTableSessions(tableId: number, signature: string, admin
   return sessions;
 }
 
+/**
+ * Input for standing up from a table
+ */
+export interface StandUpInput {
+  tableId: number;
+}
+
+/**
+ * Response from standing up from a table
+ */
+export interface StandUpResponse {
+  id: number;
+  tableId: number;
+  walletAddress: string;
+  seatNumber: number;
+  tableBalanceGwei: string;
+  twitterHandle: string | null;
+  twitterAvatarUrl: string | null;
+  joinedAt: string;
+  leftAt: string;
+  isActive: boolean;
+}
+
+/**
+ * Stands up from a poker table
+ *
+ * POST /standUp
+ *
+ * Auth:
+ * - Requires wallet signature authentication
+ *
+ * Request:
+ * - Body: { tableId }
+ * - Query params: walletAddress
+ * - Headers: Authorization (signature)
+ *
+ * Response:
+ * - 200: StandUpResponse
+ * - 400: { error: string; message: string } - Invalid request
+ * - 401: { error: string; message: string } - Unauthorized
+ * - 404: { error: string; message: string } - No active session found
+ *
+ * @param input - Stand up parameters
+ * @param walletAddress - User's wallet address
+ * @param signature - Session signature
+ * @returns Promise that resolves to the updated session
+ * @throws {Error} If the request fails
+ */
+export async function standUp(
+  input: StandUpInput,
+  walletAddress: string,
+  signature: string
+): Promise<StandUpResponse> {
+  const backendUrl = getBackendUrl();
+  const url = `${backendUrl}/standUp?walletAddress=${encodeURIComponent(walletAddress)}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${signature}`,
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || `Failed to stand up: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const session: StandUpResponse = await response.json();
+  return session;
+}
+
