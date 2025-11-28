@@ -10,6 +10,7 @@ import { JsonViewerDialog } from './components/JsonViewerDialog'
 import { getEvents, type Event } from './services/events'
 import { isAdmin } from './services/admin'
 import { AddTableDialog } from './components/AddTableDialog'
+import { TableSessionsDialog } from './components/TableSessionsDialog'
 import { createTable, getPokerTables, type PokerTable } from './services/tables'
 
 /**
@@ -32,6 +33,8 @@ function Admin() {
   const [hoveredHash, setHoveredHash] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number; isAbove: boolean } | null>(null)
   const [isAddTableDialogOpen, setIsAddTableDialogOpen] = useState(false)
+  const [selectedTable, setSelectedTable] = useState<PokerTable | null>(null)
+  const [isSessionsDialogOpen, setIsSessionsDialogOpen] = useState(false)
 
   /**
    * Handles wallet connection with error handling
@@ -277,7 +280,15 @@ function Admin() {
                         ) : (
                           <div className="admin-tables-list">
                             {tables.map((table) => (
-                              <div key={table.id} className="admin-table-card">
+                              <div 
+                                key={table.id} 
+                                className="admin-table-card"
+                                onClick={() => {
+                                  setSelectedTable(table)
+                                  setIsSessionsDialogOpen(true)
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
                                 <div className="admin-table-header">
                                   <h3 className="admin-table-name">{table.name}</h3>
                                   <span className={`admin-table-status ${table.isActive ? 'active' : 'inactive'}`}>
@@ -486,6 +497,21 @@ function Admin() {
         jsonString={selectedJsonPayload || ''}
         title="Event Payload JSON"
       />
+
+      {/* Table Sessions Dialog */}
+      {selectedTable && signature && address && (
+        <TableSessionsDialog
+          isOpen={isSessionsDialogOpen}
+          onClose={() => {
+            setIsSessionsDialogOpen(false)
+            setSelectedTable(null)
+          }}
+          tableId={selectedTable.id}
+          tableName={selectedTable.name}
+          signature={signature}
+          adminAddress={address}
+        />
+      )}
     </div>
   )
 }

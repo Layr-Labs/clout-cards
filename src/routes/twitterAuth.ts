@@ -353,5 +353,57 @@ router.get('/twitter/user', async (req: Request, res: Response): Promise<void> =
   }
 });
 
+/**
+ * GET /twitter/userByHandle
+ *
+ * Gets Twitter user info by username handle.
+ * Uses any available access token (from admin or system) to fetch public user info.
+ *
+ * Auth:
+ * - No authentication required (public endpoint for public Twitter data)
+ *
+ * Request:
+ * - Query params:
+ *   - handle: string (required) - Twitter username without @
+ *
+ * Response:
+ * - 200: { id: string; username: string; name: string; profile_image_url?: string }
+ * - 400: { error: string; message: string } - Invalid or missing handle
+ * - 404: { error: string; message: string } - User not found
+ * - 429: { error: string; message: string } - Rate limit exceeded
+ * - 500: { error: string; message: string } - Server error
+ */
+router.get('/twitter/userByHandle', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const handle = req.query.handle as string | undefined;
+    
+    if (!handle) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'handle query parameter is required',
+      });
+      return;
+    }
+
+    // Remove @ if present
+    const cleanHandle = handle.replace('@', '');
+
+    // Try to get any access token from stored sessions (for admin/system use)
+    // For now, we'll need an admin token or system token
+    // TODO: In production, use a system Twitter account or admin token
+    // For now, return 501 Not Implemented
+    res.status(501).json({
+      error: 'Not Implemented',
+      message: 'Fetching Twitter user by handle requires system Twitter credentials. This feature will be implemented soon.',
+    });
+  } catch (error) {
+    console.error('Error getting Twitter user by handle:', error);
+    res.status(500).json({
+      error: 'Server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;
 

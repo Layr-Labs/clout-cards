@@ -1555,16 +1555,125 @@
 .table-seat-avatar {
   position: absolute;
   width: 60px;
-  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
 }
 
 .table-seat-avatar-circle {
-  width: 100%;
-  height: 100%;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   border: 2px solid rgba(212, 175, 55, 0.5);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.table-seat-avatar-filled {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: rgba(212, 175, 55, 0.8);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-seat-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.table-seat-avatar-initial {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #d4af37;
+  background: rgba(10, 10, 10, 0.8);
+}
+
+.table-seat-player-info {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 120px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.table-seat-twitter-handle {
+  display: block;
+  color: #1da1f2;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  transition: color 0.2s ease;
+}
+
+.table-seat-twitter-handle:hover {
+  color: #0d8bd9;
+  text-decoration: underline;
+}
+
+.table-seat-stack {
+  color: #d4af37;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.table-seat-buy-in-button {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5), 0 0 0 2px rgba(212, 175, 55, 0.3);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.table-seat-buy-in-button:hover:not(:disabled) {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.7), 0 0 0 2px rgba(212, 175, 55, 0.5);
+}
+
+.table-seat-buy-in-button:active:not(:disabled) {
+  transform: translateX(-50%) translateY(0);
+}
+
+.table-seat-buy-in-button:disabled {
+  background: rgba(100, 100, 100, 0.3);
+  color: rgba(200, 200, 200, 0.5);
+  cursor: not-allowed;
+  box-shadow: none;
+  border: 1px solid rgba(100, 100, 100, 0.3);
 }
 
 /* Table Name - on top of background image */
@@ -1599,7 +1708,25 @@
 
   .table-seat-avatar {
     width: 50px;
+  }
+
+  .table-seat-avatar-circle {
+    width: 50px;
     height: 50px;
+  }
+
+  .table-seat-player-info {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+    min-width: 100px;
+  }
+
+  .table-seat-twitter-handle {
+    font-size: 0.75rem;
+  }
+
+  .table-seat-stack {
+    font-size: 0.7rem;
   }
 }
 

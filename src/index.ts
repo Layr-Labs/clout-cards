@@ -21,10 +21,12 @@ import { verifyEventSignature } from './services/eventVerification';
 import twitterAuthRoutes from './routes/twitterAuth';
 import { getTeePublicKey } from './db/eip712';
 import { requireWalletAuth } from './middleware/walletAuth';
+import { requireTwitterAuth } from './middleware/twitterAuth';
 import { getEscrowBalance, getEscrowBalanceWithWithdrawal } from './services/escrowBalance';
 import { signEscrowWithdrawal } from './services/withdrawalSigning';
 import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
+import { joinTable } from './services/joinTable';
 
 /**
  * Express application instance
@@ -46,7 +48,7 @@ const corsOptions: CorsOptions = {
     : ['http://localhost:5173', 'http://localhost:3000'], // Development: allow Vite and common dev ports
   credentials: true, // Allow cookies/auth headers if needed in the future
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Twitter-Access-Token'],
 };
 
 app.use(cors(corsOptions));
@@ -344,7 +346,8 @@ app.get('/pokerTables', async (req: Request, res: Response): Promise<void> => {
  *
  * Response:
  * - 200: Array of active seat session objects, ordered by seat number
- *   - Each session includes: walletAddress, twitterHandle, seatNumber, joinedAt, tableBalanceGwei
+ *   - Each session includes: id, walletAddress, twitterHandle, twitterAvatarUrl, seatNumber, joinedAt, tableBalanceGwei
+ *   - twitterAvatarUrl may be null if the user doesn't have a profile image
  *   - BigInt fields (tableBalanceGwei) are returned as strings
  *   - Sessions are ordered by seatNumber ascending
  *
@@ -403,24 +406,30 @@ app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
         seatNumber: 'asc',
       },
       select: {
+        id: true,
         walletAddress: true,
         twitterHandle: true,
+        twitterAvatarUrl: true,
         seatNumber: true,
         joinedAt: true,
         tableBalanceGwei: true,
       },
-    });
-
-    // Convert BigInt fields to strings for JSON response
-    const playersJson = seatSessions.map((session: {
+    }) as unknown as Array<{
+      id: number;
       walletAddress: string;
       twitterHandle: string | null;
+      twitterAvatarUrl: string | null;
       seatNumber: number;
       joinedAt: Date;
       tableBalanceGwei: bigint;
-    }) => ({
+    }>;
+
+    // Convert BigInt fields to strings for JSON response
+    const playersJson = seatSessions.map((session) => ({
+      id: session.id,
       walletAddress: session.walletAddress,
       twitterHandle: session.twitterHandle,
+      twitterAvatarUrl: session.twitterAvatarUrl,
       seatNumber: session.seatNumber,
       joinedAt: session.joinedAt.toISOString(),
       tableBalanceGwei: session.tableBalanceGwei.toString(),
@@ -431,6 +440,288 @@ app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
     console.error('Error fetching table players:', error);
     res.status(500).json({
       error: 'Failed to fetch table players',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /admin/tableSessions
+ *
+ * Returns all seat sessions (active and inactive) for a given poker table.
+ * Requires admin authentication.
+ *
+ * Auth:
+ * - Requires admin signature authentication via requireAdminAuth middleware
+ *
+ * Request:
+ * - Query params:
+ *   - tableId: number (required) - The poker table ID
+ *
+ * Response:
+ * - 200: Array of seat session objects, ordered by joinedAt descending
+ *   - Each session includes: id, walletAddress, twitterHandle, twitterAvatarUrl, seatNumber, 
+ *     joinedAt, leftAt, isActive, tableBalanceGwei
+ *   - twitterAvatarUrl may be null if the user doesn't have a profile image
+ *   - BigInt fields (tableBalanceGwei) are returned as strings
+ *   - leftAt is null for active sessions
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid or missing tableId parameter
+ * - 401: { error: string; message: string } - Unauthorized (not admin)
+ * - 404: { error: string; message: string } - Table not found
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/admin/tableSessions', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tableIdParam = req.query.tableId;
+    
+    if (!tableIdParam) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId query parameter is required',
+      });
+      return;
+    }
+
+    const tableId = parseInt(tableIdParam as string, 10);
+    if (isNaN(tableId) || tableId <= 0) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId must be a positive integer',
+      });
+      return;
+    }
+
+    // Verify table exists
+    const table = await prisma.pokerTable.findUnique({
+      where: { id: tableId },
+      select: { id: true },
+    });
+
+    if (!table) {
+      res.status(404).json({
+        error: 'Table not found',
+        message: `No table found with id: ${tableId}`,
+      });
+      return;
+    }
+
+    // Get all seat sessions for this table (active and inactive), ordered by joinedAt descending
+    const seatSessions = await prisma.tableSeatSession.findMany({
+      where: {
+        tableId: tableId,
+      },
+      orderBy: {
+        joinedAt: 'desc',
+      },
+      select: {
+        id: true,
+        walletAddress: true,
+        twitterHandle: true,
+        twitterAvatarUrl: true,
+        seatNumber: true,
+        joinedAt: true,
+        leftAt: true,
+        isActive: true,
+        tableBalanceGwei: true,
+      },
+    }) as unknown as Array<{
+      id: number;
+      walletAddress: string;
+      twitterHandle: string | null;
+      twitterAvatarUrl: string | null;
+      seatNumber: number;
+      joinedAt: Date;
+      leftAt: Date | null;
+      isActive: boolean;
+      tableBalanceGwei: bigint;
+    }>;
+
+    // Convert BigInt fields to strings for JSON response
+    const sessionsJson = seatSessions.map((session) => ({
+      id: session.id,
+      walletAddress: session.walletAddress,
+      twitterHandle: session.twitterHandle,
+      twitterAvatarUrl: session.twitterAvatarUrl,
+      seatNumber: session.seatNumber,
+      joinedAt: session.joinedAt.toISOString(),
+      leftAt: session.leftAt?.toISOString() || null,
+      isActive: session.isActive,
+      tableBalanceGwei: session.tableBalanceGwei.toString(),
+    }));
+
+    res.status(200).json(sessionsJson);
+  } catch (error) {
+    console.error('Error fetching table sessions:', error);
+    res.status(500).json({
+      error: 'Failed to fetch table sessions',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /joinTable
+ *
+ * Allows a fully authenticated user to join a poker table at a specific seat.
+ *
+ * Auth:
+ * - Requires wallet signature authentication via requireWalletAuth middleware
+ * - Requires Twitter access token authentication via requireTwitterAuth middleware
+ * - User must be fully logged in (both wallet and Twitter)
+ *
+ * Request:
+ * - Body: {
+ *     tableId: number,        // Table ID to join
+ *     seatNumber: number,     // Seat number (0 to maxSeatCount-1)
+ *     buyInAmountGwei: string // Buy-in amount in gwei (must be within table range)
+ *   }
+ * - Query params:
+ *   - walletAddress: string (Ethereum address - must match connected wallet)
+ * - Headers:
+ *   - Authorization: Bearer <signature> (session signature)
+ *   - X-Twitter-Access-Token: <twitter_access_token>
+ *
+ * Response:
+ * - 200: {
+ *     id: number,
+ *     tableId: number,
+ *     walletAddress: string,
+ *     seatNumber: number,
+ *     tableBalanceGwei: string,
+ *     twitterHandle: string | null,
+ *     joinedAt: string
+ *   }
+ *
+ * Error model:
+ * - 400: { error: "Invalid request"; message: string } - Invalid parameters or validation failure
+ * - 401: { error: "Unauthorized"; message: string } - Invalid or missing authentication
+ * - 409: { error: "Conflict"; message: string } - Seat occupied, user already seated, or pending withdrawal
+ * - 500: { error: "Failed to join table"; message: string } - Server error
+ *
+ * Side effects:
+ * - Creates a join_table event in the database
+ * - Deducts buy-in amount from player's escrow balance
+ * - Creates table seat session (atomic transaction)
+ * - Fails if user has pending withdrawal
+ * - Fails if seat is already occupied (race condition protection)
+ *
+ * @param {Request} req - Express request object with walletAddress and twitterAccessToken attached
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/joinTable', requireWalletAuth({ addressSource: 'query' }), requireTwitterAuth(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const twitterAccessToken = (req as Request & { twitterAccessToken: string }).twitterAccessToken;
+    const { tableId, seatNumber, buyInAmountGwei } = req.body;
+
+    // Validate request body
+    if (tableId === undefined || seatNumber === undefined || !buyInAmountGwei) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId, seatNumber, and buyInAmountGwei are required',
+      });
+      return;
+    }
+
+    // Validate types
+    const tableIdNum = parseInt(String(tableId), 10);
+    const seatNumberNum = parseInt(String(seatNumber), 10);
+    const buyInAmountGweiBigInt = BigInt(buyInAmountGwei);
+
+    if (isNaN(tableIdNum) || tableIdNum <= 0) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId must be a positive integer',
+      });
+      return;
+    }
+
+    if (isNaN(seatNumberNum) || seatNumberNum < 0) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'seatNumber must be a non-negative integer',
+      });
+      return;
+    }
+
+    if (buyInAmountGweiBigInt <= 0n) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'buyInAmountGwei must be greater than 0',
+      });
+      return;
+    }
+
+    // Join the table
+    const session = await joinTable(
+      walletAddress,
+      twitterAccessToken,
+      {
+        tableId: tableIdNum,
+        seatNumber: seatNumberNum,
+        buyInAmountGwei: buyInAmountGweiBigInt,
+      }
+    );
+
+    res.status(200).json({
+      id: session.id,
+      tableId: session.tableId,
+      walletAddress: session.walletAddress,
+      seatNumber: session.seatNumber,
+      tableBalanceGwei: session.tableBalanceGwei.toString(),
+      twitterHandle: session.twitterHandle,
+      twitterAvatarUrl: session.twitterAvatarUrl,
+      joinedAt: session.joinedAt.toISOString(),
+    });
+  } catch (error) {
+    console.error('Error joining table:', error);
+    
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('pending withdrawal')) {
+        res.status(409).json({
+          error: 'Conflict',
+          message: error.message,
+        });
+        return;
+      }
+      
+      if (error.message.includes('already occupied') || error.message.includes('already seated')) {
+        res.status(409).json({
+          error: 'Conflict',
+          message: error.message,
+        });
+        return;
+      }
+      
+      if (error.message.includes('Insufficient escrow') || error.message.includes('below minimum') || error.message.includes('exceeds maximum')) {
+        res.status(400).json({
+          error: 'Invalid request',
+          message: error.message,
+        });
+        return;
+      }
+      
+      if (error.message.includes('not found') || error.message.includes('not active')) {
+        res.status(404).json({
+          error: 'Not found',
+          message: error.message,
+        });
+        return;
+      }
+    }
+
+    res.status(500).json({
+      error: 'Failed to join table',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }

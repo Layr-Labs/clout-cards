@@ -109,6 +109,7 @@ model TableSeatSession {
   seatNumber      Int      @map("seat_number") // Seat number (0-7)
   tableBalanceGwei BigInt  @map("table_balance_gwei") // Player's balance at this table (in gwei)
   twitterHandle   String?  @db.VarChar(255) @map("twitter_handle") // Player's Twitter/X handle (optional, not unique)
+  twitterAvatarUrl String? @db.VarChar(500) @map("twitter_avatar_url") // Player's Twitter/X profile image URL (optional)
   joinedAt        DateTime @default(now()) @map("joined_at") // When the player sat down
   leftAt          DateTime? @map("left_at") // When the player stood up (nullable)
   isActive        Boolean  @default(true) @map("is_active") // Whether the session is currently active

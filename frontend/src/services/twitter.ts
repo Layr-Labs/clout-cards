@@ -97,10 +97,10 @@ export async function getTwitterUser(accessToken: string): Promise<TwitterUser> 
 
   const user: TwitterUser = await response.json();
 
-  // Cache the result for 1 hour
+  // Cache the result for 24 hours
   localStorage.setItem(cacheKey, JSON.stringify({
     userInfo: user,
-    expiresAt: Date.now() + 60 * 60 * 1000, // 1 hour
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
   }));
 
   return user;
