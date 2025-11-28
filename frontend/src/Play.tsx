@@ -1,11 +1,11 @@
 import './App.css'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
 import { getPokerTables, type PokerTable } from './services/tables'
 import { formatGwei } from './utils/formatGwei'
 import { LoginDialog } from './components/LoginDialog'
-import { UserProfileDropdown } from './components/UserProfileDropdown'
+import { Header } from './components/Header'
 import { useTwitterUser } from './hooks/useTwitterUser'
 import { getBackendUrl } from './config/env'
 
@@ -17,8 +17,9 @@ import { getBackendUrl } from './config/env'
  * Displays list of poker tables with Join/Log In buttons based on login status.
  */
 function Play() {
-  const { address, isLoggedIn } = useWallet()
+  const { isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
+  const navigate = useNavigate()
   const [tables, setTables] = useState<PokerTable[]>([])
   const [isLoadingTables, setIsLoadingTables] = useState(false)
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
@@ -129,30 +130,16 @@ function Play() {
       setIsLoginDialogOpen(true)
       return
     }
-    // TODO: Implement join table logic
-    console.log('Joining table:', table.id)
+    // Navigate to the table page
+    navigate(`/table/${table.id}`)
   }
 
   return (
     <div className="app">
       {/* Header */}
-      <header className="header">
-        <nav className="header-nav">
-          <Link to="/" className="nav-link">Home</Link>
-          <Link to="/play" className="nav-link">Tables</Link>
-          <a href="#leaderboard" className="nav-link">Leaderboard</a>
-          {isFullyLoggedIn && twitterUser && address ? (
-            <UserProfileDropdown twitterUser={twitterUser} address={address} />
-          ) : (
-            <button
-              className="header-login-button"
-              onClick={() => setIsLoginDialogOpen(true)}
-            >
-              Log In
-            </button>
-          )}
-        </nav>
-      </header>
+      <Header
+        onLoginClick={() => setIsLoginDialogOpen(true)}
+      />
 
       {/* Main Content */}
       <main className="play-main">

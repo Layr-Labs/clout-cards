@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import Admin from './Admin'
 import Play from './Play'
 import Profile from './Profile'
+import Table from './Table'
+import { Header } from './components/Header'
 
 /**
  * Landing page component for CloutCards
@@ -17,14 +19,16 @@ function LandingPage() {
   return (
     <div className="app">
       {/* Header */}
-      <header className="header">
-        <nav className="header-nav">
-          <Link to="/" className="nav-link">Home</Link>
-          <a href="#leaderboard" className="nav-link">Leaderboard</a>
-          <a href="#docs" className="nav-link">Docs</a>
+      <Header
+        navLinks={[
+          { to: '/', label: 'Home' },
+          { href: '#leaderboard', label: 'Leaderboard' },
+          { href: '#docs', label: 'Docs' },
+        ]}
+        actionButton={
           <Link to="/play" className="header-play-button">Play Now</Link>
-        </nav>
-      </header>
+        }
+      />
 
       {/* Hero Section */}
       <section className="hero">
@@ -242,6 +246,7 @@ function App() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/play" element={<Play />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/table/:id" element={<Table />} />
       </Routes>
     </BrowserRouter>
   )

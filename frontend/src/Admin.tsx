@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
 import { WalletInfo } from './components/WalletInfo'
+import { Header } from './components/Header'
 import { formatAddress } from './utils/formatAddress'
 import { formatGwei } from './utils/formatGwei'
 import { JsonViewerDialog } from './components/JsonViewerDialog'
@@ -174,14 +175,16 @@ function Admin() {
   return (
     <div className="app">
       {/* Header */}
-      <header className="header">
-        <nav className="header-nav">
-          <Link to="/" className="nav-link">Home</Link>
-          <a href="#leaderboard" className="nav-link">Leaderboard</a>
-          <a href="#docs" className="nav-link">Docs</a>
+      <Header
+        navLinks={[
+          { to: '/', label: 'Home' },
+          { href: '#leaderboard', label: 'Leaderboard' },
+          { href: '#docs', label: 'Docs' },
+        ]}
+        actionButton={
           <Link to="/play" className="header-play-button">Play Now</Link>
-        </nav>
-      </header>
+        }
+      />
 
       {/* Admin Content */}
       <main className="admin-main">

@@ -118,3 +118,43 @@ export async function getPokerTables(): Promise<PokerTable[]> {
   return tables;
 }
 
+/**
+ * Table player from API
+ */
+export interface TablePlayer {
+  walletAddress: string;
+  twitterHandle: string | null;
+  seatNumber: number;
+  joinedAt: string;
+  tableBalanceGwei: string;
+}
+
+/**
+ * Gets all active players for a given table
+ *
+ * @param tableId - The poker table ID
+ * @returns Promise that resolves to an array of table players
+ * @throws {Error} If the request fails
+ */
+export async function getTablePlayers(tableId: number): Promise<TablePlayer[]> {
+  const backendUrl = getBackendUrl();
+  const url = `${backendUrl}/tablePlayers?tableId=${tableId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || `Failed to fetch table players: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const players: TablePlayer[] = await response.json();
+  return players;
+}
+

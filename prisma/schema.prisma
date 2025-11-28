@@ -62,6 +62,10 @@ model PokerTable {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([minimumBuyIn, maximumBuyIn]) // Composite index for buy-in range searches
+  
+  // Relations
+  seatSessions    TableSeatSession[]
+
   @@map("poker_tables")
 }
 
@@ -84,4 +88,38 @@ model PlayerEscrowBalance {
   updatedAt                DateTime  @updatedAt @map("updated_at") // Last update timestamp
 
   @@map("player_escrow_balances")
+}
+
+/**
+ * Table seat session
+ * 
+ * Tracks when a player sits down at a specific seat at a poker table.
+ * This model combines the table, seat, player's running table balance, and session state.
+ * 
+ * Constraints:
+ * - A player can only be active at one table at a time (enforced by unique constraint on walletAddress where isActive=true)
+ * - A seat can only be occupied by one active player at a time (enforced by unique constraint on tableId+seatNumber where isActive=true)
+ * - Table balance is encumbered from the player's escrow balance when they join
+ * - When a player stands up, their table balance (winnings/losses) is moved back to escrow
+ */
+model TableSeatSession {
+  id              Int      @id @default(autoincrement()) @map("table_seat_session_id")
+  tableId         Int      @map("table_id") // Foreign key to PokerTable
+  walletAddress   String   @db.VarChar(42) @map("wallet_address") // Player's wallet address
+  seatNumber      Int      @map("seat_number") // Seat number (0-7)
+  tableBalanceGwei BigInt  @map("table_balance_gwei") // Player's balance at this table (in gwei)
+  twitterHandle   String?  @db.VarChar(255) @map("twitter_handle") // Player's Twitter/X handle (optional, not unique)
+  joinedAt        DateTime @default(now()) @map("joined_at") // When the player sat down
+  leftAt          DateTime? @map("left_at") // When the player stood up (nullable)
+  isActive        Boolean  @default(true) @map("is_active") // Whether the session is currently active
+
+  // Foreign key relationships
+  table           PokerTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, seatNumber, isActive], name: "unique_active_seat")
+  @@unique([walletAddress, isActive], name: "unique_active_player")
+  @@index([tableId])
+  @@index([walletAddress])
+  @@index([isActive])
+  @@map("table_seat_sessions")
 }

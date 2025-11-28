@@ -1,0 +1,126 @@
+/* Header Mobile Toggle Button */
+.header-mobile-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 8px;
+  z-index: 1001;
+  transition: color 0.3s linear;
+}
+
+.header-mobile-toggle:hover {
+  color: #d4af37;
+}
+
+.header-mobile-toggle:focus {
+  outline: 2px solid #d4af37;
+  outline-offset: 2px;
+}
+
+/* Desktop Navigation */
+.header-nav-desktop {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+/* Desktop Action Area */
+.header-action-desktop {
+  display: flex;
+  align-items: center;
+}
+
+/* Mobile Menu Overlay */
+.header-mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Mobile Navigation Menu */
+.header-nav-mobile {
+  display: none;
+  position: fixed;
+  top: 0;
+  right: -100%;
+  width: 280px;
+  max-width: 85vw;
+  height: 100vh;
+  background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+  z-index: 1000;
+  padding: 80px 24px 24px;
+  flex-direction: column;
+  gap: 24px;
+  transition: right 0.3s ease-in-out;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-y: auto;
+}
+
+.header-nav-mobile.open {
+  right: 0;
+}
+
+.header-mobile-link {
+  width: 100%;
+}
+
+.header-mobile-link .nav-link {
+  display: block;
+  width: 100%;
+  padding: 16px 0;
+  font-size: 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-mobile-action {
+  margin-top: auto;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-mobile-action .header-login-button {
+  width: 100%;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .header-mobile-toggle {
+    display: block;
+  }
+
+  .header-nav-desktop {
+    display: none;
+  }
+
+  .header-action-desktop {
+    display: none;
+  }
+
+  .header-mobile-overlay {
+    display: block;
+  }
+
+  .header-nav-mobile {
+    display: flex;
+  }
+
+  .header-nav {
+    justify-content: space-between;
+  }
+
+  /* Ensure header has proper padding on mobile */
+  .header {
+    padding: 12px 16px;
+  }
+}
+

@@ -8,7 +8,7 @@ import { useEscrowBalance } from './hooks/useEscrowBalance';
 import { formatAddress } from './utils/formatAddress';
 import { DepositDialog } from './components/DepositDialog';
 import { CashOutDialog } from './components/CashOutDialog';
-import { UserProfileDropdown } from './components/UserProfileDropdown';
+import { Header } from './components/Header';
 import { WalletAvatar } from './components/WalletAvatar';
 import { Tooltip } from './components/Tooltip';
 import './Profile.css';
@@ -77,27 +77,13 @@ export default function Profile() {
 
   return (
     <div className="app">
-      {/* Header - same as /play */}
-      <header className="header">
-        <nav className="header-nav">
-          <Link to="/" className="nav-link">Home</Link>
-          <Link to="/play" className="nav-link">Tables</Link>
-          <a href="#leaderboard" className="nav-link">Leaderboard</a>
-          {isFullyLoggedIn && twitterUser && address ? (
-            <UserProfileDropdown twitterUser={twitterUser} address={address} />
-          ) : (
-            <button
-              className="header-login-button"
-              onClick={() => {
-                // Redirect to play page to login
-                window.location.href = '/play';
-              }}
-            >
-              Log In
-            </button>
-          )}
-        </nav>
-      </header>
+      {/* Header */}
+      <Header
+        onLoginClick={() => {
+          // Redirect to play page to login
+          window.location.href = '/play';
+        }}
+      />
 
       <div className="profile-container">
         {!isFullyLoggedIn || !twitterUser || !address ? (

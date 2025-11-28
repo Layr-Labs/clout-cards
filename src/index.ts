@@ -330,6 +330,113 @@ app.get('/pokerTables', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /tablePlayers
+ *
+ * Returns all active seat sessions for a given poker table.
+ * No authentication required - this is public information.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - Query params:
+ *   - tableId: number (required) - The poker table ID
+ *
+ * Response:
+ * - 200: Array of active seat session objects, ordered by seat number
+ *   - Each session includes: walletAddress, twitterHandle, seatNumber, joinedAt, tableBalanceGwei
+ *   - BigInt fields (tableBalanceGwei) are returned as strings
+ *   - Sessions are ordered by seatNumber ascending
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid or missing tableId parameter
+ * - 404: { error: string; message: string } - Table not found
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tableIdParam = req.query.tableId;
+    
+    if (!tableIdParam) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId query parameter is required',
+      });
+      return;
+    }
+
+    const tableId = parseInt(tableIdParam as string, 10);
+    if (isNaN(tableId) || tableId <= 0) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'tableId must be a positive integer',
+      });
+      return;
+    }
+
+    // Verify table exists
+    const table = await prisma.pokerTable.findUnique({
+      where: { id: tableId },
+      select: { id: true },
+    });
+
+    if (!table) {
+      res.status(404).json({
+        error: 'Table not found',
+        message: `No table found with id: ${tableId}`,
+      });
+      return;
+    }
+
+    // Get all active seat sessions for this table, ordered by seat number
+    const seatSessions = await prisma.tableSeatSession.findMany({
+      where: {
+        tableId: tableId,
+        isActive: true,
+      },
+      orderBy: {
+        seatNumber: 'asc',
+      },
+      select: {
+        walletAddress: true,
+        twitterHandle: true,
+        seatNumber: true,
+        joinedAt: true,
+        tableBalanceGwei: true,
+      },
+    });
+
+    // Convert BigInt fields to strings for JSON response
+    const playersJson = seatSessions.map((session: {
+      walletAddress: string;
+      twitterHandle: string | null;
+      seatNumber: number;
+      joinedAt: Date;
+      tableBalanceGwei: bigint;
+    }) => ({
+      walletAddress: session.walletAddress,
+      twitterHandle: session.twitterHandle,
+      seatNumber: session.seatNumber,
+      joinedAt: session.joinedAt.toISOString(),
+      tableBalanceGwei: session.tableBalanceGwei.toString(),
+    }));
+
+    res.status(200).json(playersJson);
+  } catch (error) {
+    console.error('Error fetching table players:', error);
+    res.status(500).json({
+      error: 'Failed to fetch table players',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
  * GET /events
  *
  * Returns the most recent events from the event table.
