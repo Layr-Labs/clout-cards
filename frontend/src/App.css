@@ -1726,39 +1726,59 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   min-width: 100px;
+  position: relative;
+  overflow: hidden;
+}
+
+.table-action-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s linear;
+}
+
+.table-action-button:hover::before {
+  left: 100%;
 }
 
 .table-action-button-fold {
   background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
   color: #ffffff;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5), 0 0 0 2px rgba(220, 38, 38, 0.3);
 }
 
 .table-action-button-fold:hover {
   background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.7), 0 0 0 2px rgba(220, 38, 38, 0.5);
 }
 
 .table-action-button-check-call {
   background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
   color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5), 0 0 0 2px rgba(59, 130, 246, 0.3);
 }
 
 .table-action-button-check-call:hover {
   background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.7), 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
 .table-action-button-raise {
   background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
   color: #1a1a1a;
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5), 0 0 0 2px rgba(212, 175, 55, 0.3);
 }
 
 .table-action-button-raise:hover {
   background: linear-gradient(135deg, #f4d03f 0%, #ffd700 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5);
+  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.7), 0 0 0 2px rgba(212, 175, 55, 0.5);
 }
 
 /* Table Name - on top of background image */

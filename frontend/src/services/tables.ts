@@ -363,3 +363,49 @@ export async function getCurrentHand(
   });
 }
 
+/**
+ * Response from player action
+ */
+export interface PlayerActionResponse {
+  success: boolean;
+  handEnded: boolean;
+}
+
+/**
+ * Processes a player action (fold, call, raise) during a poker hand
+ *
+ * POST /action
+ *
+ * @param tableId - Table ID
+ * @param action - Action type ('FOLD', 'CALL', 'RAISE')
+ * @param walletAddress - Wallet address
+ * @param signature - Session signature
+ * @param amount - Optional bet amount for RAISE (in gwei)
+ * @returns Promise that resolves to action result
+ * @throws {Error} If the request fails
+ */
+export async function playerAction(
+  tableId: number,
+  action: 'FOLD' | 'CALL' | 'RAISE',
+  walletAddress: string,
+  signature: string,
+  amount?: bigint
+): Promise<PlayerActionResponse> {
+  const body: any = {
+    tableId,
+    action,
+  };
+
+  if (amount !== undefined) {
+    body.amount = amount.toString();
+  }
+
+  return apiClient<PlayerActionResponse>('/action', {
+    method: 'POST',
+    requireAuth: true,
+    signature,
+    walletAddress,
+    body: JSON.stringify(body),
+  });
+}
+

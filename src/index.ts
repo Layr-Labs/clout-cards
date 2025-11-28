@@ -28,6 +28,7 @@ import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 import { joinTable } from './services/joinTable';
 import { standUp } from './services/standUp';
+import { foldAction } from './services/playerAction';
 import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppError } from './utils/errorHandler';
 import { validateAndGetTableId, validateTableId } from './utils/validation';
 import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
@@ -776,6 +777,75 @@ app.get('/currentHand', requireWalletAuth({ addressSource: 'query' }), async (re
     });
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to get current hand');
+  }
+});
+
+/**
+ * POST /action
+ *
+ * Process a player action (fold, call, raise) during a poker hand.
+ *
+ * Auth:
+ * - Requires wallet signature in query params
+ * - Uses requireWalletAuth middleware to verify authentication
+ *
+ * Request:
+ * - Query params:
+ *   - address: string (required) - Wallet address
+ *   - signature: string (required) - Signature for authentication
+ * - Body:
+ *   - tableId: number (required) - Table ID
+ *   - action: string (required) - Action type ('FOLD', 'CALL', 'RAISE')
+ *   - amount?: number (optional) - Bet amount for RAISE (in gwei)
+ *
+ * Response:
+ * - 200: { success: boolean; handEnded: boolean }
+ * - 400: { error: string; message: string } - Invalid request
+ * - 401: { error: string; message: string } - Unauthorized
+ * - 404: { error: string; message: string } - Hand/table not found
+ * - 409: { error: string; message: string } - Not player's turn or invalid state
+ * - 500: { error: string; message: string } - Server error
+ *
+ * Error model:
+ * - Validation errors for missing/invalid parameters
+ * - State errors for invalid game state (not player's turn, already folded, etc.)
+ */
+app.post('/action', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const { tableId, action } = req.body;
+
+    // Validate request body
+    if (!tableId) {
+      throw new ValidationError('tableId is required');
+    }
+
+    if (!action) {
+      throw new ValidationError('action is required');
+    }
+
+    const tableIdNum = validateTableId(tableId);
+
+    // Validate action type
+    const validActions = ['FOLD', 'CALL', 'RAISE'];
+    if (!validActions.includes(action)) {
+      throw new ValidationError(`Invalid action. Must be one of: ${validActions.join(', ')}`);
+    }
+
+    // For now, only implement FOLD
+    if (action !== 'FOLD') {
+      throw new ValidationError('Only FOLD action is currently supported');
+    }
+
+    // Process fold action
+    const result = await foldAction(tableIdNum, walletAddress);
+
+    res.status(200).json({
+      success: result.success,
+      handEnded: result.handEnded,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to process action');
   }
 });
 

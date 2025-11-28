@@ -135,10 +135,34 @@ export async function startHand(tableId: number): Promise<{
     const deckJson = JSON.stringify(shuffledDeck);
     const deckCommitmentHash = keccak256(toUtf8Bytes(deckJson));
 
-    // 4. Assign dealer and blinds
-    // For first hand, dealer is seat 0 (or first eligible player's seat)
-    // Small blind is next seat, big blind is seat after that
-    const dealerIndex = 0;
+    // 4. Assign dealer and blinds with rotation
+    // Find the most recent completed hand to get the previous dealer position
+    const previousHand = await (tx as any).hand.findFirst({
+      where: {
+        tableId,
+        status: 'COMPLETED',
+      },
+      orderBy: {
+        completedAt: 'desc',
+      },
+    });
+
+    let dealerIndex = 0; // Default to first eligible player for first hand
+
+    if (previousHand && previousHand.dealerPosition !== null) {
+      // Find the previous dealer in the current eligible players list
+      const previousDealerSeat = previousHand.dealerPosition;
+      const previousDealerIndex = eligiblePlayers.findIndex(
+        (p) => p.seatNumber === previousDealerSeat
+      );
+
+      if (previousDealerIndex !== -1) {
+        // Rotate to next dealer (wrapping around)
+        dealerIndex = (previousDealerIndex + 1) % eligiblePlayers.length;
+      }
+      // If previous dealer is not in eligible players (they left or can't afford), start from 0
+    }
+
     const dealerPosition = eligiblePlayers[dealerIndex].seatNumber;
     const smallBlindIndex = (dealerIndex + 1) % eligiblePlayers.length;
     const bigBlindIndex = (dealerIndex + 2) % eligiblePlayers.length;

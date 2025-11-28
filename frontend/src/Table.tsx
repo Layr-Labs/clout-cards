@@ -1,7 +1,7 @@
 import './App.css'
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
+import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
@@ -28,6 +28,8 @@ function Table() {
   const [isJoining, setIsJoining] = useState(false)
   const [isStandUpConfirmOpen, setIsStandUpConfirmOpen] = useState(false)
   const [isStandingUp, setIsStandingUp] = useState(false)
+  const [isProcessingAction, setIsProcessingAction] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -297,6 +299,37 @@ function Table() {
   }
 
   /**
+   * Handles Fold button click
+   */
+  async function handleFoldClick() {
+    if (!tableId || !address || !signature || isProcessingAction) {
+      return
+    }
+
+    setIsProcessingAction(true)
+    setActionError(null)
+
+    try {
+      const result = await playerAction(tableId, 'FOLD', address, signature)
+      
+      if (result.handEnded) {
+        // Hand ended, polling will pick up the new state
+        console.log('Hand ended after fold')
+      }
+      
+      // Clear any previous errors on success
+      setActionError(null)
+      
+      // Polling will automatically pick up the state change
+    } catch (err: any) {
+      console.error('Failed to fold:', err)
+      setActionError(err.message || 'Failed to fold')
+    } finally {
+      setIsProcessingAction(false)
+    }
+  }
+
+  /**
    * Handles stand up confirmation
    */
   async function handleStandUpConfirm() {
@@ -550,6 +583,11 @@ function Table() {
         {currentHand && isUserTurn() && (
           <div className="table-action-buttons">
             <div className="table-action-info">
+              {actionError && (
+                <div className="table-action-error" style={{ color: '#ef4444', fontSize: '0.9rem', marginBottom: '8px' }}>
+                  {actionError}
+                </div>
+              )}
               {currentHand.currentBet && (
                 <div className="table-action-current-bet">
                   Current Bet: {(Number(currentHand.currentBet) / 1e9).toFixed(4).replace(/\.?0+$/, '')} ETH
@@ -559,12 +597,10 @@ function Table() {
             <div className="table-action-buttons-row">
               <button
                 className="table-action-button table-action-button-fold"
-                onClick={() => {
-                  // TODO: Implement fold action
-                  console.log('Fold clicked')
-                }}
+                onClick={handleFoldClick}
+                disabled={isProcessingAction}
               >
-                Fold
+                {isProcessingAction ? 'Processing...' : 'Fold'}
               </button>
               <button
                 className="table-action-button table-action-button-check-call"
