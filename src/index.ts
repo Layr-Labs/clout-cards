@@ -28,7 +28,7 @@ import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 import { joinTable } from './services/joinTable';
 import { standUp } from './services/standUp';
-import { foldAction, callAction, checkAction } from './services/playerAction';
+import { foldAction, callAction, checkAction, betAction, raiseAction, allInAction } from './services/playerAction';
 import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppError } from './utils/errorHandler';
 import { validateAndGetTableId, validateTableId } from './utils/validation';
 import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
@@ -795,7 +795,8 @@ app.get('/currentHand', requireWalletAuth({ addressSource: 'query' }), async (re
  *   - signature: string (required) - Signature for authentication
  * - Body:
  *   - tableId: number (required) - Table ID
- *   - action: string (required) - Action type ('FOLD', 'CALL', 'CHECK', 'RAISE')
+ *   - action: string (required) - Action type ('FOLD', 'CALL', 'CHECK', 'BET', 'RAISE', 'ALL_IN')
+ *   - amountGwei?: string (optional) - Bet/raise amount in gwei (required for BET/RAISE)
  *   - amount?: number (optional) - Bet amount for RAISE (in gwei)
  *
  * Response:
@@ -827,7 +828,7 @@ app.post('/action', requireWalletAuth({ addressSource: 'query' }), async (req: R
     const tableIdNum = validateTableId(tableId);
 
     // Validate action type
-    const validActions = ['FOLD', 'CALL', 'CHECK', 'RAISE'];
+    const validActions = ['FOLD', 'CALL', 'CHECK', 'BET', 'RAISE', 'ALL_IN'];
     if (!validActions.includes(action)) {
       throw new ValidationError(`Invalid action. Must be one of: ${validActions.join(', ')}`);
     }
@@ -839,8 +840,24 @@ app.post('/action', requireWalletAuth({ addressSource: 'query' }), async (req: R
       result = await callAction(tableIdNum, walletAddress);
     } else if (action === 'CHECK') {
       result = await checkAction(tableIdNum, walletAddress);
+    } else if (action === 'BET') {
+      const { amountGwei } = req.body;
+      if (!amountGwei) {
+        throw new ValidationError('amountGwei is required for BET action');
+      }
+      const amount = BigInt(amountGwei);
+      result = await betAction(tableIdNum, walletAddress, amount);
+    } else if (action === 'RAISE') {
+      const { amountGwei } = req.body;
+      if (!amountGwei) {
+        throw new ValidationError('amountGwei is required for RAISE action');
+      }
+      const amount = BigInt(amountGwei);
+      result = await raiseAction(tableIdNum, walletAddress, amount);
+    } else if (action === 'ALL_IN') {
+      result = await allInAction(tableIdNum, walletAddress);
     } else {
-      throw new ValidationError('RAISE action is not yet implemented');
+      throw new ValidationError(`Action ${action} is not implemented`);
     }
 
     res.status(200).json({

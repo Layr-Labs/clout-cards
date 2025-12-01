@@ -9,6 +9,7 @@ import { prisma } from '../db/client';
 import { createEventInTransaction, EventKind } from '../db/events';
 import { keccak256, toUtf8Bytes } from 'ethers';
 import { Card, SUITS, RANKS } from '../types/cards';
+import { validateTableExistsAndActive, findActiveHand } from '../utils/tableValidation';
 
 // HandStatus type from Prisma schema
 type HandStatus = 'WAITING_FOR_PLAYERS' | 'SHUFFLING' | 'PRE_FLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'COMPLETED';
@@ -78,28 +79,11 @@ export async function startHand(tableId: number): Promise<{
   currentActionSeat: number;
 }> {
   return await prisma.$transaction(async (tx) => {
-    // 1. Get table and active players
-    const table = await tx.pokerTable.findUnique({
-      where: { id: tableId },
-    });
-
-    if (!table) {
-      throw new Error(`Table with id ${tableId} not found`);
-    }
-
-    if (!table.isActive) {
-      throw new Error(`Table ${table.name} is not active`);
-    }
+    // 1. Validate table exists and is active
+    const table = await validateTableExistsAndActive(tableId, tx);
 
     // Check for existing active hand
-    const existingHand = await (tx as any).hand.findFirst({
-      where: {
-        tableId,
-        status: {
-          not: 'COMPLETED',
-        },
-      },
-    });
+    const existingHand = await findActiveHand(tableId, tx, false);
 
     if (existingHand) {
       throw new Error(`Hand ${existingHand.id} is already in progress`);

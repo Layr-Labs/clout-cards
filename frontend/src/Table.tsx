@@ -6,6 +6,8 @@ import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
 import { ConfirmDialog } from './components/ConfirmDialog'
+import { BetRaiseDialog } from './components/BetRaiseDialog'
+import { formatEth } from './utils/formatEth'
 import { Card } from './components/Card'
 import { useWallet } from './contexts/WalletContext'
 import { useTwitterUser } from './hooks/useTwitterUser'
@@ -30,6 +32,7 @@ function Table() {
   const [isStandingUp, setIsStandingUp] = useState(false)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isBetRaiseDialogOpen, setIsBetRaiseDialogOpen] = useState(false)
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -393,6 +396,98 @@ function Table() {
   }
 
   /**
+   * Handles Bet/Raise button click - opens dialog
+   */
+  function handleBetRaiseClick() {
+    setIsBetRaiseDialogOpen(true)
+  }
+
+  /**
+   * Handles Bet/Raise confirmation from dialog
+   */
+  async function handleBetRaiseConfirm(amountGwei: string) {
+    if (!tableId || !address || !signature || isProcessingAction || !currentHand) {
+      return
+    }
+
+    setIsProcessingAction(true)
+    setActionError(null)
+    setIsBetRaiseDialogOpen(false)
+
+    try {
+      const currentBet = currentHand.currentBet ? BigInt(currentHand.currentBet) : 0n
+      const isBetting = currentBet === 0n
+      const action = isBetting ? 'BET' : 'RAISE'
+      
+      const result = await playerAction(tableId, action, address, signature, amountGwei)
+      
+      if (result.handEnded) {
+        console.log(`Hand ended after ${action.toLowerCase()}`)
+      }
+      
+      if (result.roundAdvanced) {
+        console.log('Betting round advanced')
+      }
+      
+      setActionError(null)
+    } catch (err: any) {
+      const currentBet = currentHand.currentBet ? BigInt(currentHand.currentBet) : 0n
+      const isBetting = currentBet === 0n
+      const action = isBetting ? 'bet' : 'raise'
+      console.error(`Failed to ${action}:`, err)
+      setActionError(err.message || `Failed to ${action}`)
+    } finally {
+      setIsProcessingAction(false)
+    }
+  }
+
+  /**
+   * Handles All-in button click
+   */
+  async function handleAllInClick() {
+    if (!tableId || !address || !signature || isProcessingAction) {
+      return
+    }
+
+    setIsProcessingAction(true)
+    setActionError(null)
+
+    try {
+      const result = await playerAction(tableId, 'ALL_IN', address, signature)
+      
+      if (result.handEnded) {
+        console.log('Hand ended after all-in')
+      }
+      
+      if (result.roundAdvanced) {
+        console.log('Betting round advanced')
+      }
+      
+      setActionError(null)
+    } catch (err: any) {
+      console.error('Failed to go all-in:', err)
+      setActionError(err.message || 'Failed to go all-in')
+    } finally {
+      setIsProcessingAction(false)
+    }
+  }
+
+  /**
+   * Gets minimum raise amount
+   */
+  function getMinimumRaise(): bigint {
+    if (!currentHand || !table) return 0n
+    
+    const lastRaiseAmount = currentHand.lastRaiseAmount ? BigInt(currentHand.lastRaiseAmount) : null
+    
+    if (lastRaiseAmount !== null && lastRaiseAmount > 0n) {
+      return lastRaiseAmount
+    }
+    
+    return BigInt(table.bigBlind)
+  }
+
+  /**
    * Handles stand up confirmation
    */
   async function handleStandUpConfirm() {
@@ -462,7 +557,7 @@ function Table() {
               {currentHand.pots.map((pot) => (
                 <div key={pot.potNumber} className="table-pot">
                   <div className="table-pot-amount">
-                    {(Number(pot.amount) / 1e9).toFixed(4).replace(/\.?0+$/, '')} ETH
+                    {formatEth(pot.amount)}
                   </div>
                   <div className="table-pot-avatars">
                     {pot.eligibleSeatNumbers.map((seatNum) => {
@@ -493,7 +588,7 @@ function Table() {
                 
                 // Convert table balance from gwei to ETH
                 const tableBalanceEth = player?.tableBalanceGwei
-                  ? (Number(player.tableBalanceGwei) / 1e9).toFixed(4).replace(/\.?0+$/, '')
+                  ? formatEth(player.tableBalanceGwei)
                   : null
                 
                 return (
@@ -597,7 +692,7 @@ function Table() {
                           </a>
                           {tableBalanceEth && (
                             <div className="table-seat-stack">
-                              {tableBalanceEth} ETH
+                              {tableBalanceEth}
                             </div>
                           )}
                           {/* Stand Up Button - only show if this is the current user's seat and no hand active */}
@@ -623,7 +718,7 @@ function Table() {
                             disabled={!canAffordSeat()}
                             title={
                               !canAffordSeat()
-                                ? `Insufficient balance. Minimum buy-in: ${(Number(table.minimumBuyIn) / 1e9).toFixed(4)} ETH`
+                                ? `Insufficient balance. Minimum buy-in: ${formatEth(table.minimumBuyIn)}`
                                 : `Buy in to seat ${seatIndex}`
                             }
                           >
@@ -653,7 +748,7 @@ function Table() {
               )}
               {currentHand.currentBet && (
                 <div className="table-action-current-bet">
-                  Current Bet: {(Number(currentHand.currentBet) / 1e9).toFixed(4).replace(/\.?0+$/, '')} ETH
+                  Current Bet: {formatEth(currentHand.currentBet)}
                 </div>
               )}
             </div>
@@ -675,19 +770,24 @@ function Table() {
                   if (callAmount === null) {
                     return isProcessingAction ? 'Processing...' : 'Check'
                   } else {
-                    const callAmountEth = (Number(callAmount) / 1e9).toFixed(4).replace(/\.?0+$/, '')
-                    return isProcessingAction ? 'Processing...' : `Call ${callAmountEth} ETH`
+                    const callAmountEth = formatEth(callAmount)
+                    return isProcessingAction ? 'Processing...' : `Call ${callAmountEth}`
                   }
                 })()}
               </button>
               <button
                 className="table-action-button table-action-button-raise"
-                onClick={() => {
-                  // TODO: Implement raise action
-                  console.log('Raise clicked')
-                }}
+                onClick={handleBetRaiseClick}
+                disabled={isProcessingAction}
               >
-                Raise
+                {currentHand.currentBet && Number(currentHand.currentBet) > 0 ? 'Raise' : 'Bet'}
+              </button>
+              <button
+                className="table-action-button table-action-button-all-in"
+                onClick={handleAllInClick}
+                disabled={isProcessingAction}
+              >
+                All-in
               </button>
             </div>
           </div>
@@ -730,6 +830,38 @@ function Table() {
           isLoading={isStandingUp}
         />
       )}
+
+      {/* Bet/Raise Dialog */}
+      {table && currentHand && address && (() => {
+        const userHandPlayer = getUserHandPlayer()
+        if (!userHandPlayer) return null
+
+        // Get table balance from players array (TablePlayer)
+        const userPlayer = players.find(p => 
+          p.walletAddress.toLowerCase() === address.toLowerCase()
+        )
+        if (!userPlayer) return null
+
+        const currentBet = currentHand.currentBet || null
+        const chipsCommitted = userHandPlayer.chipsCommitted || '0'
+        const tableBalanceGwei = userPlayer.tableBalanceGwei || '0'
+        const isBetting = !currentBet || Number(currentBet) === 0
+
+        return (
+          <BetRaiseDialog
+            isOpen={isBetRaiseDialogOpen}
+            onClose={() => setIsBetRaiseDialogOpen(false)}
+            onConfirm={handleBetRaiseConfirm}
+            currentBet={currentBet}
+            chipsCommitted={chipsCommitted}
+            tableBalanceGwei={tableBalanceGwei}
+            bigBlind={table.bigBlind}
+            minimumRaise={getMinimumRaise().toString()}
+            isBetting={isBetting}
+            isLoading={isProcessingAction}
+          />
+        )
+      })()}
     </div>
   )
 }

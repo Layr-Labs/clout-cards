@@ -389,18 +389,18 @@ export interface PlayerActionResponse {
  */
 export async function playerAction(
   tableId: number,
-  action: 'FOLD' | 'CALL' | 'CHECK' | 'RAISE',
+  action: 'FOLD' | 'CALL' | 'CHECK' | 'BET' | 'RAISE' | 'ALL_IN',
   walletAddress: string,
   signature: string,
-  amount?: bigint
+  amountGwei?: string
 ): Promise<PlayerActionResponse> {
   const body: any = {
     tableId,
     action,
   };
 
-  if (amount !== undefined) {
-    body.amount = amount.toString();
+  if (amountGwei !== undefined) {
+    body.amountGwei = amountGwei;
   }
 
   return apiClient<PlayerActionResponse>('/action', {

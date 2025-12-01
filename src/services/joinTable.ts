@@ -9,6 +9,7 @@ import { createEventInTransaction, EventKind } from '../db/events';
 import { getEscrowBalanceWithWithdrawal } from './escrowBalance';
 import { getTwitterUserInfo } from './twitter';
 import { startHand } from './startHand';
+import { validateTableExistsAndActive } from '../utils/tableValidation';
 
 /**
  * Input for joining a poker table
@@ -58,18 +59,8 @@ export async function joinTable(
   const twitterHandle = `@${twitterUser.username}`;
   const twitterAvatarUrl = twitterUser.profile_image_url || null;
 
-  // Validate table exists and get table info
-  const table = await prisma.pokerTable.findUnique({
-    where: { id: input.tableId },
-  });
-
-  if (!table) {
-    throw new Error(`Table with id ${input.tableId} not found`);
-  }
-
-  if (!table.isActive) {
-    throw new Error(`Table ${table.name} is not active`);
-  }
+  // Validate table exists and is active
+  const table = await validateTableExistsAndActive(input.tableId, prisma);
 
   // Validate seat number
   if (input.seatNumber < 0 || input.seatNumber >= table.maxSeatCount) {
