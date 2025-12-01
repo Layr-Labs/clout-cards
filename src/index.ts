@@ -28,7 +28,7 @@ import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 import { joinTable } from './services/joinTable';
 import { standUp } from './services/standUp';
-import { foldAction } from './services/playerAction';
+import { foldAction, callAction, checkAction } from './services/playerAction';
 import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppError } from './utils/errorHandler';
 import { validateAndGetTableId, validateTableId } from './utils/validation';
 import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
@@ -795,11 +795,11 @@ app.get('/currentHand', requireWalletAuth({ addressSource: 'query' }), async (re
  *   - signature: string (required) - Signature for authentication
  * - Body:
  *   - tableId: number (required) - Table ID
- *   - action: string (required) - Action type ('FOLD', 'CALL', 'RAISE')
+ *   - action: string (required) - Action type ('FOLD', 'CALL', 'CHECK', 'RAISE')
  *   - amount?: number (optional) - Bet amount for RAISE (in gwei)
  *
  * Response:
- * - 200: { success: boolean; handEnded: boolean }
+ * - 200: { success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }
  * - 400: { error: string; message: string } - Invalid request
  * - 401: { error: string; message: string } - Unauthorized
  * - 404: { error: string; message: string } - Hand/table not found
@@ -827,22 +827,28 @@ app.post('/action', requireWalletAuth({ addressSource: 'query' }), async (req: R
     const tableIdNum = validateTableId(tableId);
 
     // Validate action type
-    const validActions = ['FOLD', 'CALL', 'RAISE'];
+    const validActions = ['FOLD', 'CALL', 'CHECK', 'RAISE'];
     if (!validActions.includes(action)) {
       throw new ValidationError(`Invalid action. Must be one of: ${validActions.join(', ')}`);
     }
 
-    // For now, only implement FOLD
-    if (action !== 'FOLD') {
-      throw new ValidationError('Only FOLD action is currently supported');
+    let result;
+    if (action === 'FOLD') {
+      result = await foldAction(tableIdNum, walletAddress);
+    } else if (action === 'CALL') {
+      result = await callAction(tableIdNum, walletAddress);
+    } else if (action === 'CHECK') {
+      result = await checkAction(tableIdNum, walletAddress);
+    } else {
+      throw new ValidationError('RAISE action is not yet implemented');
     }
-
-    // Process fold action
-    const result = await foldAction(tableIdNum, walletAddress);
 
     res.status(200).json({
       success: result.success,
       handEnded: result.handEnded,
+      roundAdvanced: result.roundAdvanced || false,
+      tableId: result.tableId,
+      winnerSeatNumber: result.winnerSeatNumber,
     });
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to process action');

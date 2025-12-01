@@ -330,6 +330,69 @@ function Table() {
   }
 
   /**
+   * Handles Check/Call button click
+   */
+  async function handleCheckCallClick() {
+    if (!tableId || !address || !signature || isProcessingAction || !currentHand) {
+      return
+    }
+
+    setIsProcessingAction(true)
+    setActionError(null)
+
+    try {
+      const userHandPlayer = getUserHandPlayer()
+      if (!userHandPlayer) {
+        throw new Error('Player not found in hand')
+      }
+
+      const currentBet = currentHand.currentBet ? BigInt(currentHand.currentBet) : 0n
+      const chipsCommitted = userHandPlayer.chipsCommitted ? BigInt(userHandPlayer.chipsCommitted) : 0n
+      const canCheck = currentBet === 0n || chipsCommitted >= currentBet
+
+      const action = canCheck ? 'CHECK' : 'CALL'
+      const result = await playerAction(tableId, action, address, signature)
+      
+      if (result.handEnded) {
+        console.log('Hand ended after check/call')
+      }
+      
+      if (result.roundAdvanced) {
+        console.log('Betting round advanced')
+      }
+      
+      // Clear any previous errors on success
+      setActionError(null)
+      
+      // Polling will automatically pick up the state change
+    } catch (err: any) {
+      console.error('Failed to check/call:', err)
+      setActionError(err.message || 'Failed to check/call')
+    } finally {
+      setIsProcessingAction(false)
+    }
+  }
+
+  /**
+   * Gets the call amount needed (if any)
+   */
+  function getCallAmount(): bigint | null {
+    if (!currentHand) return null
+    
+    const userHandPlayer = getUserHandPlayer()
+    if (!userHandPlayer) return null
+
+    const currentBet = currentHand.currentBet ? BigInt(currentHand.currentBet) : 0n
+    const chipsCommitted = userHandPlayer.chipsCommitted ? BigInt(userHandPlayer.chipsCommitted) : 0n
+    
+    if (currentBet === 0n || chipsCommitted >= currentBet) {
+      return null // Can check
+    }
+    
+    return currentBet - chipsCommitted
+  }
+
+  /**
    * Handles stand up confirmation
    */
   async function handleStandUpConfirm() {
@@ -604,12 +667,18 @@ function Table() {
               </button>
               <button
                 className="table-action-button table-action-button-check-call"
-                onClick={() => {
-                  // TODO: Implement check/call action
-                  console.log('Check/Call clicked')
-                }}
+                onClick={handleCheckCallClick}
+                disabled={isProcessingAction}
               >
-                {currentHand.currentBet && Number(currentHand.currentBet) > 0 ? 'Call' : 'Check'}
+                {(() => {
+                  const callAmount = getCallAmount()
+                  if (callAmount === null) {
+                    return isProcessingAction ? 'Processing...' : 'Check'
+                  } else {
+                    const callAmountEth = (Number(callAmount) / 1e9).toFixed(4).replace(/\.?0+$/, '')
+                    return isProcessingAction ? 'Processing...' : `Call ${callAmountEth} ETH`
+                  }
+                })()}
               </button>
               <button
                 className="table-action-button table-action-button-raise"

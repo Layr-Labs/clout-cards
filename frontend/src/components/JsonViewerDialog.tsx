@@ -1,4 +1,5 @@
 import './JsonViewerDialog.css'
+import { useState } from 'react'
 
 /**
  * JSON Viewer Dialog Component
@@ -16,6 +17,8 @@ export function JsonViewerDialog({
   jsonString: string
   title?: string
 }) {
+  const [copyFeedback, setCopyFeedback] = useState(false)
+
   if (!isOpen) return null
 
   let formattedJson: string
@@ -33,6 +36,11 @@ export function JsonViewerDialog({
     navigator.clipboard.writeText(formattedJson).catch((err) => {
       console.error('Failed to copy JSON:', err)
     })
+    
+    setCopyFeedback(true)
+    setTimeout(() => {
+      setCopyFeedback(false)
+    }, 1000)
   }
 
   return (
@@ -41,8 +49,12 @@ export function JsonViewerDialog({
         <div className="json-dialog-header">
           <h2 className="json-dialog-title">{title}</h2>
           <div className="json-dialog-actions-header">
-            <button className="json-dialog-copy" onClick={handleCopy} title="Copy JSON">
-              Copy
+            <button 
+              className={`json-dialog-copy ${copyFeedback ? 'copied' : ''}`} 
+              onClick={handleCopy} 
+              title="Copy JSON"
+            >
+              {copyFeedback ? 'Copied!' : 'Copy'}
             </button>
             <button className="json-dialog-close" onClick={onClose} aria-label="Close dialog">
               ×

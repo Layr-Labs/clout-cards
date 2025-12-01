@@ -66,6 +66,12 @@
   color: #ffffff;
 }
 
+.json-dialog-copy.copied {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+}
+
 .json-dialog-close {
   font-size: 1.5rem;
   padding: 4px 12px;

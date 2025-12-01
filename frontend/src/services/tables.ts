@@ -369,6 +369,9 @@ export async function getCurrentHand(
 export interface PlayerActionResponse {
   success: boolean;
   handEnded: boolean;
+  roundAdvanced?: boolean;
+  tableId: number;
+  winnerSeatNumber: number | null;
 }
 
 /**
@@ -386,7 +389,7 @@ export interface PlayerActionResponse {
  */
 export async function playerAction(
   tableId: number,
-  action: 'FOLD' | 'CALL' | 'RAISE',
+  action: 'FOLD' | 'CALL' | 'CHECK' | 'RAISE',
   walletAddress: string,
   signature: string,
   amount?: bigint
