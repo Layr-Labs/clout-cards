@@ -7,6 +7,7 @@
 
 import { prisma } from '../db/client';
 import { withEvent, EventKind, createEventInTransaction } from '../db/events';
+import { getTeePublicKey } from '../db/eip712';
 import { startHand } from './startHand';
 import { evaluateHand, compareHands, HandRank, getHandRankName, type EvaluatedHand } from './pokerHandEvaluation';
 import { Card } from '../types/cards';
@@ -17,6 +18,7 @@ import {
   getMinimumBetAmount,
   validateBetAmount,
   roundToIncrement,
+  shouldCreateSidePots,
 } from './potSplitting';
 
 // Types from Prisma schema
@@ -24,6 +26,147 @@ type HandStatus = 'WAITING_FOR_PLAYERS' | 'SHUFFLING' | 'PRE_FLOP' | 'FLOP' | 'T
 type HandPlayerStatus = 'ACTIVE' | 'FOLDED' | 'ALL_IN';
 type BettingRound = 'PRE_FLOP' | 'FLOP' | 'TURN' | 'RIVER';
 type PlayerActionType = 'POST_BLIND' | 'FOLD' | 'CHECK' | 'CALL' | 'RAISE' | 'ALL_IN';
+
+/**
+ * Calculates rake amount from a pot amount based on rake basis points
+ *
+ * @param potAmount - Pot amount in gwei
+ * @param rakeBps - Rake in basis points (e.g., 500 = 5%)
+ * @returns Rake amount in gwei
+ */
+function calculateRake(potAmount: bigint, rakeBps: number): bigint {
+  if (rakeBps <= 0) {
+    return 0n;
+  }
+  // Calculate: (potAmount * rakeBps) / 10000
+  // Use BigInt arithmetic to avoid precision loss
+  return (potAmount * BigInt(rakeBps)) / 10000n;
+}
+
+/**
+ * Calculates and deducts rake from all pots for a hand
+ *
+ * This function:
+ * 1. Calculates rake for each pot based on rakeBps
+ * 2. Updates pot amounts in the database (deducting rake)
+ * 3. Optionally sets winnerSeatNumbers on pots (for single winner scenario)
+ * 4. Adds total rake to TEE's escrow balance
+ *
+ * @param pots - Array of pot records from database
+ * @param rakeBps - Rake in basis points (e.g., 500 = 5%)
+ * @param handId - Hand ID for tracking
+ * @param tx - Prisma transaction client
+ * @param winnerSeatNumbers - Optional array of winner seat numbers to set on pots (for single winner scenario)
+ * @returns Object containing potRakeInfo, totalRakeAmount, and totalPotAmountAfterRake
+ */
+async function calculateAndDeductRake(
+  pots: Array<{ id: number; potNumber: number; amount: bigint | string | number }>,
+  rakeBps: number,
+  handId: number,
+  tx: any,
+  winnerSeatNumbers?: number[]
+): Promise<{
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
+  totalRakeAmount: bigint;
+  totalPotAmountAfterRake: bigint;
+}> {
+  const potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }> = [];
+  let totalRakeAmount = 0n;
+  let totalPotAmountAfterRake = 0n;
+
+  for (const pot of pots) {
+    const potAmountBeforeRake = BigInt(pot.amount);
+    const rakeAmount = calculateRake(potAmountBeforeRake, rakeBps);
+    const potAmountAfterRake = potAmountBeforeRake - rakeAmount;
+
+    potRakeInfo.push({
+      potNumber: pot.potNumber,
+      potAmountBeforeRake,
+      rakeAmount,
+      potAmountAfterRake,
+    });
+
+    totalRakeAmount += rakeAmount;
+    totalPotAmountAfterRake += potAmountAfterRake;
+
+    // Update pot amount to reflect rake deduction
+    // Optionally set winnerSeatNumbers if provided (for single winner scenario)
+    const updateData: { amount: bigint; winnerSeatNumbers?: any } = {
+      amount: potAmountAfterRake,
+    };
+    if (winnerSeatNumbers !== undefined) {
+      updateData.winnerSeatNumbers = winnerSeatNumbers as any;
+    }
+
+    if (rakeAmount > 0n || winnerSeatNumbers !== undefined) {
+      await (tx as any).pot.update({
+        where: { id: pot.id },
+        data: updateData,
+      });
+    }
+  }
+
+  // Add total rake to TEE's escrow balance
+  if (totalRakeAmount > 0n) {
+    await addRakeToTeeBalance(tx, totalRakeAmount, handId);
+  }
+
+  return {
+    potRakeInfo,
+    totalRakeAmount,
+    totalPotAmountAfterRake,
+  };
+}
+
+/**
+ * Adds rake to TEE's escrow balance within a transaction
+ *
+ * @param tx - Prisma transaction client
+ * @param rakeAmountGwei - Rake amount to add in gwei
+ * @param handId - Hand ID for tracking
+ */
+async function addRakeToTeeBalance(
+  tx: any,
+  rakeAmountGwei: bigint,
+  handId: number
+): Promise<void> {
+  if (rakeAmountGwei === 0n) {
+    return; // No rake to add
+  }
+
+  const teeAddress = getTeePublicKey().toLowerCase();
+
+  // Find or create TEE's escrow balance
+  const existingBalances = await tx.$queryRaw<Array<{ wallet_address: string; balance_gwei: bigint }>>`
+    SELECT wallet_address, balance_gwei
+    FROM player_escrow_balances
+    WHERE LOWER(wallet_address) = LOWER(${teeAddress})
+    LIMIT 1
+  `;
+
+  if (existingBalances.length > 0) {
+    // Update existing balance - use the address from the database to ensure case consistency
+    const existingAddress = existingBalances[0].wallet_address;
+    await tx.playerEscrowBalance.update({
+      where: { walletAddress: existingAddress },
+      data: {
+        balanceGwei: {
+          increment: rakeAmountGwei,
+        },
+      },
+    });
+  } else {
+    // Create new balance for TEE (teeAddress is already lowercased)
+    await tx.playerEscrowBalance.create({
+      data: {
+        walletAddress: teeAddress,
+        balanceGwei: rakeAmountGwei,
+      },
+    });
+  }
+
+  console.log(`💰 Added rake ${rakeAmountGwei} gwei to TEE balance (hand ${handId})`);
+}
 
 /**
  * Gets the next active player seat number (skips folded and all-in players)
@@ -183,9 +326,15 @@ async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean>
  * @returns True if hand should be settled (RIVER completed), false otherwise
  */
 async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
-  // Recalculate side pots before advancing to next round
-  // (betting round is complete, so final pot structure is known)
-  await createSidePots(handId, tx);
+  // Recalculate pots before advancing to next round
+  // Only create side pots if commitments differ, otherwise update total pot
+  const needsSidePots = await shouldCreateSidePots(handId, tx);
+  
+  if (needsSidePots) {
+    await createSidePots(handId, tx);
+  } else {
+    await updatePotTotal(handId, tx);
+  }
 
   const hand = await (tx as any).hand.findUnique({
     where: { id: handId },
@@ -255,6 +404,9 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   // Check if all non-folded players are all-in
   const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
   const allPlayersAllIn = nonFoldedPlayers.length > 0 && allInPlayers.length === nonFoldedPlayers.length;
+  
+  // Check if there's only one active player and all others are all-in
+  const onlyOneActivePlayer = sortedPlayers.length === 1 && allInPlayers.length > 0;
 
   let firstActionSeat: number | null = null;
 
@@ -268,6 +420,19 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
       // All players folded - this shouldn't happen (hand should have been settled)
       throw new Error('No active players found for next betting round');
     }
+  } else if (onlyOneActivePlayer) {
+    // Only one active player remaining (all others are all-in)
+    // Set firstActionSeat to this player, but the round will be immediately complete
+    // after they act (check/call), so we can proceed
+    firstActionSeat = sortedPlayers[0].seatNumber;
+    
+    // Reset the active player's chips committed for new round
+    await (tx as any).handPlayer.update({
+      where: { id: sortedPlayers[0].id },
+      data: {
+        chipsCommitted: 0n,
+      },
+    });
   } else {
     // Find dealer index in sorted active players
     const dealerIndex = sortedPlayers.findIndex((p: any) => p.seatNumber === dealerPosition);
@@ -297,6 +462,15 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
     });
   }
 
+  // Get table for event
+  const table = await tx.pokerTable.findUnique({
+    where: { id: hand.tableId },
+  });
+
+  if (!table) {
+    throw new Error(`Table ${hand.tableId} not found`);
+  }
+
   // Update hand state
   await (tx as any).hand.update({
     where: { id: handId },
@@ -311,14 +485,258 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
     },
   });
 
+  // Emit community cards event
+  const communityCardsPayload = {
+    kind: 'community_cards',
+    table: {
+      id: table.id,
+      name: table.name,
+    },
+    hand: {
+      id: handId,
+      round: nextRound,
+    },
+    communityCards: newCommunityCards.slice(communityCards.length), // Only the newly dealt cards
+    allCommunityCards: newCommunityCards, // All community cards so far
+  };
+  const communityCardsPayloadJson = JSON.stringify(communityCardsPayload);
+  await createEventInTransaction(tx, EventKind.COMMUNITY_CARDS, communityCardsPayloadJson, null, null);
+
   // If all players are all-in, the round is immediately complete
   // Return true if RIVER (settle hand), false otherwise (will advance again)
   if (allPlayersAllIn && nextRound === 'RIVER') {
     return true; // Hand should be settled
   }
+  
+  // If only one active player remains (all others all-in), the round will be immediately
+  // complete after that player acts. Return true if RIVER, false otherwise.
+  // The caller will handle auto-advancing through rounds.
+  if (onlyOneActivePlayer && nextRound === 'RIVER') {
+    return true; // Hand should be settled after active player acts
+  }
 
   return false; // Round advanced, hand not complete
 }
+
+/**
+ * Automatically advances through betting rounds to RIVER when betting is effectively complete
+ *
+ * This handles two scenarios:
+ * 1. Only one active player remains (all others are all-in) - that player can't be raised
+ * 2. All remaining players are all-in - no one can act further
+ *
+ * In both cases, we automatically deal all community cards and proceed to showdown.
+ *
+ * @param handId - Hand ID
+ * @param tx - Prisma transaction client
+ * @returns True if hand should be settled (reached RIVER), false otherwise
+ */
+async function advanceToRiverIfOnlyOneActivePlayer(
+  handId: number,
+  tx: any
+): Promise<boolean> {
+  // Get current hand state
+  const hand = await (tx as any).hand.findUnique({
+    where: { id: handId },
+    include: {
+      players: true,
+    },
+  });
+
+  if (!hand) {
+    return false;
+  }
+
+  // Get all non-folded players
+  const nonFoldedPlayers = hand.players.filter((p: any) => p.status !== 'FOLDED');
+  
+  // Separate ACTIVE players (who can still act) from ALL_IN players (who can't act further)
+  const activePlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ACTIVE');
+  const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
+
+  // Auto-advance if:
+  // 1. Exactly one active player and at least one all-in player (active player can't be raised)
+  // 2. Zero active players and all remaining are all-in (no one can act)
+  const shouldAutoAdvance = 
+    (activePlayers.length === 1 && allInPlayers.length > 0) ||
+    (activePlayers.length === 0 && allInPlayers.length > 0 && nonFoldedPlayers.length > 0);
+
+  if (!shouldAutoAdvance) {
+    return false; // Not a scenario that requires auto-advance
+  }
+
+  // Keep advancing rounds until we reach RIVER
+  let currentRound = hand.round as BettingRound;
+  
+  while (currentRound !== 'RIVER') {
+    // Check if current betting round is complete
+    let bettingRoundComplete = await isBettingRoundComplete(handId, tx);
+    
+    // If round is not complete and all players are all-in, simulate CHECK actions to complete it
+    if (!bettingRoundComplete) {
+      const currentHandState = await (tx as any).hand.findUnique({
+        where: { id: handId },
+        include: { players: true },
+      });
+      
+      if (!currentHandState) {
+        return false;
+      }
+      
+      const currentNonFoldedPlayers = currentHandState.players.filter((p: any) => p.status !== 'FOLDED');
+      const currentActivePlayers = currentNonFoldedPlayers.filter((p: any) => p.status === 'ACTIVE');
+      const currentAllInPlayers = currentNonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
+      
+      // If all players are all-in, simulate CHECK for each to complete the round
+      if (currentActivePlayers.length === 0 && currentAllInPlayers.length > 0) {
+        for (const player of currentAllInPlayers) {
+          // Check if player already acted this round
+          const existingAction = await (tx as any).handAction.findFirst({
+            where: {
+              handId,
+              seatNumber: player.seatNumber,
+              round: currentRound,
+              action: { not: 'POST_BLIND' },
+            },
+          });
+          
+          if (!existingAction) {
+            // Create CHECK action to complete the round
+            await (tx as any).handAction.create({
+              data: {
+                handId,
+                seatNumber: player.seatNumber,
+                round: currentRound,
+                action: 'CHECK',
+                amount: null,
+              },
+            });
+          }
+        }
+        
+        // Update pot total after CHECK actions
+        await updatePotTotal(handId, tx);
+        
+        // Re-check if round is now complete
+        bettingRoundComplete = await isBettingRoundComplete(handId, tx);
+      } else if (currentActivePlayers.length === 1 && currentAllInPlayers.length > 0) {
+        // Only one active player remains - simulate CHECK for them to complete the round
+        const activePlayer = currentActivePlayers[0];
+        const existingAction = await (tx as any).handAction.findFirst({
+          where: {
+            handId,
+            seatNumber: activePlayer.seatNumber,
+            round: currentRound,
+            action: { not: 'POST_BLIND' },
+          },
+        });
+        
+        if (!existingAction) {
+          // Create CHECK action for the active player to complete the round
+          await (tx as any).handAction.create({
+            data: {
+              handId,
+              seatNumber: activePlayer.seatNumber,
+              round: currentRound,
+              action: 'CHECK',
+              amount: null,
+            },
+          });
+        }
+        
+        // Update pot total after CHECK action
+        await updatePotTotal(handId, tx);
+        
+        // Re-check if round is now complete
+        bettingRoundComplete = await isBettingRoundComplete(handId, tx);
+      }
+    }
+    
+    if (!bettingRoundComplete) {
+      // Round still not complete, can't advance
+      return false;
+    }
+
+    // Advance to next round
+    const shouldSettle = await advanceBettingRound(handId, tx);
+    
+    if (shouldSettle) {
+      // Reached RIVER, hand should be settled
+      return true;
+    }
+
+    // Get updated hand to check current round
+    const updatedHand = await (tx as any).hand.findUnique({
+      where: { id: handId },
+    });
+    
+    if (!updatedHand) {
+      return false;
+    }
+    
+    currentRound = updatedHand.round as BettingRound;
+    
+    // Re-check if we still meet the auto-advance conditions
+    const updatedHandWithPlayers = await (tx as any).hand.findUnique({
+      where: { id: handId },
+      include: {
+        players: true,
+      },
+    });
+    
+    if (!updatedHandWithPlayers) {
+      return false;
+    }
+    
+    const updatedNonFoldedPlayers = updatedHandWithPlayers.players.filter(
+      (p: any) => p.status !== 'FOLDED'
+    );
+    const updatedActivePlayers = updatedNonFoldedPlayers.filter(
+      (p: any) => p.status === 'ACTIVE'
+    );
+    const updatedAllInPlayers = updatedNonFoldedPlayers.filter(
+      (p: any) => p.status === 'ALL_IN'
+    );
+    
+    // Continue auto-advancing if:
+    // 1. Exactly one active player and at least one all-in player, OR
+    // 2. Zero active players and all remaining are all-in
+    const stillShouldAutoAdvance = 
+      (updatedActivePlayers.length === 1 && updatedAllInPlayers.length > 0) ||
+      (updatedActivePlayers.length === 0 && updatedAllInPlayers.length > 0 && updatedNonFoldedPlayers.length > 0);
+    
+    if (!stillShouldAutoAdvance) {
+      return false;
+    }
+  }
+
+  // We've reached RIVER, hand should be settled
+  return true;
+}
+
+/**
+ * Settlement data structure for hand end events
+ */
+type SettlementData = {
+  handId: number;
+  winnerSeatNumbers: number[];
+  totalPotAmount: bigint;
+  shuffleSeed: string;
+  deck: any;
+  isShowdown: boolean;
+  rakeBps: number;
+  potRakeInfo: PotRakeInfo[];
+};
+
+/**
+ * Result of handling betting round completion or advancement
+ */
+type RoundHandlingResult = {
+  handEnded: boolean;
+  roundAdvanced: boolean;
+  settlementData: (SingleWinnerSettlementData | ShowdownSettlementData) | null;
+  winnerSeatNumber: number | null;
+};
 
 /**
  * Context for a player action, containing validated table, hand, seat session, and hand player
@@ -329,6 +747,149 @@ type PlayerActionContext = {
   seatSession: any;
   handPlayer: any;
 };
+
+/**
+ * Creates settlement data from showdown settlement result
+ *
+ * @param handId - Hand ID
+ * @param settlement - Showdown settlement result
+ * @returns Settlement data object
+ */
+function createSettlementData(handId: number, settlement: {
+  winnerSeatNumbers: number[];
+  totalPotAmount: bigint;
+  shuffleSeed: string;
+  deck: any;
+  rakeBps: number;
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
+}): ShowdownSettlementData {
+  return {
+    handId,
+    winnerSeatNumbers: settlement.winnerSeatNumbers,
+    totalPotAmount: settlement.totalPotAmount,
+    shuffleSeed: settlement.shuffleSeed,
+    deck: settlement.deck,
+    isShowdown: true,
+    rakeBps: settlement.rakeBps,
+    potRakeInfo: settlement.potRakeInfo,
+  };
+}
+
+/**
+ * Handles betting round completion logic
+ *
+ * This function encapsulates the common logic for what happens when a betting round completes:
+ * - If RIVER: settle via showdown
+ * - Otherwise: advance to next round, potentially auto-advance to RIVER if only one active player
+ *
+ * @param handId - Hand ID
+ * @param currentRound - Current betting round
+ * @param tx - Prisma transaction client
+ * @returns Round handling result with settlement data if hand ended
+ */
+async function handleBettingRoundComplete(
+  handId: number,
+  currentRound: BettingRound,
+  tx: any
+): Promise<RoundHandlingResult> {
+  const result: RoundHandlingResult = {
+    handEnded: false,
+    roundAdvanced: false,
+    settlementData: null,
+    winnerSeatNumber: null,
+  };
+
+  // Check if this is the RIVER round (last round)
+  if (currentRound === 'RIVER') {
+    // Hand should be settled via showdown
+    result.handEnded = true;
+    const settlement = await settleHandShowdown(handId, tx);
+    result.settlementData = createSettlementData(handId, settlement);
+    result.winnerSeatNumber = settlement.winnerSeatNumbers[0];
+    return result;
+  }
+
+  // Advance to next betting round
+  result.roundAdvanced = true;
+  const shouldSettle = await advanceBettingRound(handId, tx);
+  
+  if (shouldSettle) {
+    // Reached RIVER during advance, settle the hand
+    result.handEnded = true;
+    const settlement = await settleHandShowdown(handId, tx);
+    result.settlementData = createSettlementData(handId, settlement);
+    result.winnerSeatNumber = settlement.winnerSeatNumbers[0];
+  } else {
+    // Check if we should auto-advance to RIVER (only one active player or all all-in)
+    const shouldAutoSettle = await advanceToRiverIfOnlyOneActivePlayer(handId, tx);
+    if (shouldAutoSettle) {
+      result.handEnded = true;
+      const settlement = await settleHandShowdown(handId, tx);
+      result.settlementData = createSettlementData(handId, settlement);
+      result.winnerSeatNumber = settlement.winnerSeatNumbers[0];
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Handles advancing to next active player or completing round if no active players remain
+ *
+ * This function encapsulates the logic for what happens when a betting round is not complete:
+ * - Get next active player
+ * - If no next player (all remaining are all-in): handle round completion
+ * - Otherwise: update currentActionSeat to next player
+ *
+ * @param handId - Hand ID
+ * @param currentSeatNumber - Current player's seat number
+ * @param currentRound - Current betting round
+ * @param tx - Prisma transaction client
+ * @returns Round handling result with settlement data if hand ended
+ */
+async function handleNextPlayerOrRoundComplete(
+  handId: number,
+  currentSeatNumber: number,
+  currentRound: BettingRound,
+  tx: any
+): Promise<RoundHandlingResult> {
+  const result: RoundHandlingResult = {
+    handEnded: false,
+    roundAdvanced: false,
+    settlementData: null,
+    winnerSeatNumber: null,
+  };
+
+  // Advance to next active player
+  const nextSeat = await getNextActivePlayer(handId, currentSeatNumber, tx);
+
+  if (nextSeat === null) {
+    // All remaining players are all-in, round should complete
+    // Check if betting round is complete
+    const bettingRoundComplete = await isBettingRoundComplete(handId, tx);
+    
+    if (!bettingRoundComplete) {
+      throw new Error('No next active player found and betting round is not complete');
+    }
+
+    // Handle round completion (same logic as when round completes normally)
+    const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
+    result.handEnded = roundResult.handEnded;
+    result.roundAdvanced = roundResult.roundAdvanced;
+    result.settlementData = roundResult.settlementData;
+    result.winnerSeatNumber = roundResult.winnerSeatNumber;
+  } else {
+    // Update hand to next active player's turn
+    await (tx as any).hand.update({
+      where: { id: handId },
+      data: {
+        currentActionSeat: nextSeat,
+      },
+    });
+  }
+
+  return result;
+}
 
 /**
  * Gets and validates table and active hand for a player action
@@ -524,9 +1085,17 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
   totalPotAmount: bigint;
   shuffleSeed: string;
   deck: any;
+  rakeBps: number;
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
 }> {
   // Ensure pots are calculated before settlement
-  await createSidePots(handId, tx);
+  // Only create side pots if commitments differ, otherwise update total pot
+  const needsSidePots = await shouldCreateSidePots(handId, tx);
+  if (needsSidePots) {
+    await createSidePots(handId, tx);
+  } else {
+    await updatePotTotal(handId, tx);
+  }
 
   // Get hand with pots
   const hand = await (tx as any).hand.findUnique({
@@ -561,30 +1130,21 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
     throw new Error(`Winner session not found for seat ${winnerSeatNumber}`);
   }
 
-  // Calculate total pot amount and update pots
-  let totalPotAmount = 0n;
-  const potDetails = [];
-  for (const pot of hand.pots) {
-    totalPotAmount += pot.amount;
-    potDetails.push({
-      potNumber: pot.potNumber,
-      amount: pot.amount.toString(),
-    });
-    
-    // Update pot with winner
-    await (tx as any).pot.update({
-      where: { id: pot.id },
-      data: {
-        winnerSeatNumbers: [winnerSeatNumber] as any,
-      },
-    });
-  }
+  // Calculate and deduct rake from each pot
+  const rakeBps = hand.table.perHandRake || 0;
+  const { potRakeInfo, totalPotAmountAfterRake } = await calculateAndDeductRake(
+    hand.pots,
+    rakeBps,
+    handId,
+    tx,
+    [winnerSeatNumber] // Set winner seat numbers on pots
+  );
 
-  // Transfer pot to winner's table balance
+  // Transfer pot to winner's table balance (after rake deduction)
   await tx.tableSeatSession.update({
     where: { id: winnerSession.id },
     data: {
-      tableBalanceGwei: winnerSession.tableBalanceGwei + totalPotAmount,
+      tableBalanceGwei: winnerSession.tableBalanceGwei + totalPotAmountAfterRake,
     },
   });
 
@@ -604,9 +1164,11 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
 
   return {
     tableId: hand.tableId,
-    totalPotAmount,
+    totalPotAmount: totalPotAmountAfterRake, // Return pot amount after rake
     shuffleSeed,
     deck: hand.deck,
+    rakeBps,
+    potRakeInfo, // Include rake info for event payload
   };
 }
 
@@ -617,7 +1179,7 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
  * @param tx - Prisma transaction client
  * @returns Settlement data including winners
  */
-async function settleHandShowdown(handId: number, tx: any): Promise<{
+export async function settleHandShowdown(handId: number, tx: any): Promise<{
   tableId: number;
   winnerSeatNumbers: number[];
   totalPotAmount: bigint;
@@ -629,9 +1191,17 @@ async function settleHandShowdown(handId: number, tx: any): Promise<{
     handRankName: string;
     holeCards: Card[];
   }>;
+  rakeBps: number;
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
 }> {
   // Ensure pots are calculated before settlement
-  await createSidePots(handId, tx);
+  // Only create side pots if commitments differ, otherwise update total pot
+  const needsSidePots = await shouldCreateSidePots(handId, tx);
+  if (needsSidePots) {
+    await createSidePots(handId, tx);
+  } else {
+    await updatePotTotal(handId, tx);
+  }
 
   // Get hand with pots and players
   const hand = await (tx as any).hand.findUnique({
@@ -755,19 +1325,37 @@ async function settleHandShowdown(handId: number, tx: any): Promise<{
     });
   }
 
-  // Distribute winnings to players
+  // Calculate and deduct rake from each pot
+  // Track rake per pot for event payload
+  const rakeBps = hand.table.perHandRake || 0;
+  const { potRakeInfo, totalPotAmountAfterRake } = await calculateAndDeductRake(
+    hand.pots,
+    rakeBps,
+    handId,
+    tx
+    // Note: winnerSeatNumbers are set separately after pot winners are determined
+  );
+
+  // Distribute winnings to players (after rake deduction)
   // Track total winnings per player across all pots
   const playerWinnings: Map<number, bigint> = new Map();
 
-  for (const pot of hand.pots) {
+  // Re-fetch pots to get updated amounts after rake deduction
+  const updatedPots = await (tx as any).pot.findMany({
+    where: { handId },
+    orderBy: { potNumber: 'asc' },
+  });
+
+  for (const pot of updatedPots) {
     const winners = potWinners.get(pot.potNumber) || [];
     if (winners.length === 0) {
       continue; // No winners for this pot (shouldn't happen)
     }
 
-    // Split pot evenly among winners
-    const potPerWinner = pot.amount / BigInt(winners.length);
-    const remainder = pot.amount % BigInt(winners.length);
+    // Split pot evenly among winners (pot amount already has rake deducted)
+    const potAmount = BigInt(pot.amount);
+    const potPerWinner = potAmount / BigInt(winners.length);
+    const remainder = potAmount % BigInt(winners.length);
 
     for (let i = 0; i < winners.length; i++) {
       const winnerSeatNumber = winners[i];
@@ -829,10 +1417,12 @@ async function settleHandShowdown(handId: number, tx: any): Promise<{
   return {
     tableId: hand.tableId,
     winnerSeatNumbers: allWinners.length > 0 ? allWinners : winners, // Fallback to original winners if no pot winners
-    totalPotAmount,
+    totalPotAmount: totalPotAmountAfterRake, // Return pot amount after rake
     shuffleSeed,
     deck: hand.deck,
     handEvaluations,
+    rakeBps,
+    potRakeInfo, // Include rake info for event payload
   };
 }
 
@@ -851,7 +1441,9 @@ async function createHandEndEvent(
   totalPotAmount: bigint,
   shuffleSeed: string,
   deck: any,
-  tableId: number
+  tableId: number,
+  rakeBps: number,
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>
 ): Promise<void> {
   // Get hand details for event
   const hand = await (prisma as any).hand.findUnique({
@@ -868,6 +1460,9 @@ async function createHandEndEvent(
     throw new Error(`Hand ${handId} not found for event creation`);
   }
 
+  // Create a map of pot rake info for easy lookup
+  const potRakeMap = new Map(potRakeInfo.map(info => [info.potNumber, info]));
+
   const payload = {
     kind: 'hand_end',
     table: {
@@ -882,6 +1477,7 @@ async function createHandEndEvent(
       deck, // Full deck for verification
       completedAt: hand.completedAt?.toISOString(),
     },
+    rakeBps, // Rake in basis points
     communityCards: (hand.communityCards || []) as Card[],
     players: hand.players.map((p: any) => ({
       seatNumber: p.seatNumber,
@@ -891,11 +1487,23 @@ async function createHandEndEvent(
       handRank: null,
       handRankName: null,
     })),
-    pots: hand.pots.map((pot: any) => ({
-      potNumber: pot.potNumber,
-      amount: pot.amount.toString(),
-      winnerSeatNumbers: Array.isArray(pot.winnerSeatNumbers) ? pot.winnerSeatNumbers : [],
-    })),
+    pots: hand.pots.map((pot: any) => {
+      // For single winner scenario, each pot's full amount goes to the winner (after rake)
+      const potWinnerSeatNumbers = Array.isArray(pot.winnerSeatNumbers) ? pot.winnerSeatNumbers : [];
+      const potAmount = BigInt(pot.amount); // This is already after rake deduction
+      const rakeInfo = potRakeMap.get(pot.potNumber);
+      
+      return {
+        potNumber: pot.potNumber,
+        amount: pot.amount.toString(), // Amount after rake deduction
+        rakeAmount: rakeInfo ? rakeInfo.rakeAmount.toString() : '0', // Rake taken from this pot
+        winnerSeatNumbers: potWinnerSeatNumbers,
+        winners: potWinnerSeatNumbers.length > 0 ? [{
+          seatNumber: potWinnerSeatNumbers[0],
+          amount: potAmount.toString(),
+        }] : [],
+      };
+    }),
     actions: hand.actions.map((action: any) => ({
       seatNumber: action.seatNumber,
       round: action.round,
@@ -927,7 +1535,9 @@ async function createHandEndEventShowdown(
   totalPotAmount: bigint,
   shuffleSeed: string,
   deck: any,
-  tableId: number
+  tableId: number,
+  rakeBps: number,
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>
 ): Promise<void> {
   // Get hand details for event
   const hand = await (prisma as any).hand.findUnique({
@@ -970,9 +1580,8 @@ async function createHandEndEventShowdown(
     });
   }
 
-  // Calculate pot per winner (for display)
-  const potPerWinner = totalPotAmount / BigInt(winnerSeatNumbers.length);
-  const remainder = totalPotAmount % BigInt(winnerSeatNumbers.length);
+  // Create a map of pot rake info for easy lookup
+  const potRakeMap = new Map(potRakeInfo.map(info => [info.potNumber, info]));
 
   const payload = {
     kind: 'hand_end',
@@ -984,12 +1593,11 @@ async function createHandEndEventShowdown(
       id: hand.id,
       winnerSeatNumbers,
       totalPotAmount: totalPotAmount.toString(),
-      potPerWinner: potPerWinner.toString(),
-      remainder: remainder.toString(),
       shuffleSeed, // Revealed seed for verification
       deck, // Full deck for verification
       completedAt: hand.completedAt?.toISOString(),
     },
+    rakeBps, // Rake in basis points
     communityCards,
     players: hand.players.map((p: any) => {
       const evaluation = playerEvaluations.find(e => e.seatNumber === p.seatNumber);
@@ -1004,15 +1612,32 @@ async function createHandEndEventShowdown(
         handRankName: showHandRank ? (evaluation?.handRankName || null) : null,
       };
     }),
-    pots: hand.pots.map((pot: any) => ({
-      potNumber: pot.potNumber,
-      amount: pot.amount.toString(),
-      winnerSeatNumbers: Array.isArray(pot.winnerSeatNumbers) ? pot.winnerSeatNumbers : [],
-      winners: winnerSeatNumbers.map((seatNum, index) => ({
-        seatNumber: seatNum,
-        amount: (potPerWinner + (index === 0 ? remainder : 0n)).toString(),
-      })),
-    })),
+    pots: hand.pots.map((pot: any) => {
+      // Get winners for this specific pot
+      const potWinnerSeatNumbers = Array.isArray(pot.winnerSeatNumbers) ? pot.winnerSeatNumbers : [];
+      const potAmount = BigInt(pot.amount); // This is already after rake deduction
+      const rakeInfo = potRakeMap.get(pot.potNumber);
+      
+      // Calculate per-pot winnings (matching the actual payout logic)
+      let potWinners: Array<{ seatNumber: number; amount: string }> = [];
+      if (potWinnerSeatNumbers.length > 0) {
+        const potPerWinner = potAmount / BigInt(potWinnerSeatNumbers.length);
+        const potRemainder = potAmount % BigInt(potWinnerSeatNumbers.length);
+        
+        potWinners = potWinnerSeatNumbers.map((seatNum: number, index: number) => ({
+          seatNumber: seatNum,
+          amount: (potPerWinner + (index === 0 ? potRemainder : 0n)).toString(),
+        }));
+      }
+      
+      return {
+        potNumber: pot.potNumber,
+        amount: pot.amount.toString(), // Amount after rake deduction
+        rakeAmount: rakeInfo ? rakeInfo.rakeAmount.toString() : '0', // Rake taken from this pot
+        winnerSeatNumbers: potWinnerSeatNumbers,
+        winners: potWinners,
+      };
+    }),
     actions: hand.actions.map((action: any) => ({
       seatNumber: action.seatNumber,
       round: action.round,
@@ -1030,6 +1655,16 @@ async function createHandEndEventShowdown(
 }
 
 /**
+ * Rake information for a pot
+ */
+type PotRakeInfo = {
+  potNumber: number;
+  potAmountBeforeRake: bigint;
+  rakeAmount: bigint;
+  potAmountAfterRake: bigint;
+};
+
+/**
  * Settlement data for single winner (fold scenario)
  */
 type SingleWinnerSettlementData = {
@@ -1038,6 +1673,8 @@ type SingleWinnerSettlementData = {
   totalPotAmount: bigint;
   shuffleSeed: string;
   deck: any;
+  rakeBps: number;
+  potRakeInfo: PotRakeInfo[];
 };
 
 /**
@@ -1050,6 +1687,8 @@ type ShowdownSettlementData = {
   shuffleSeed: string;
   deck: any;
   isShowdown: boolean;
+  rakeBps: number;
+  potRakeInfo: PotRakeInfo[];
 };
 
 /**
@@ -1079,7 +1718,9 @@ async function handlePostActionSettlement(
       settlementData.totalPotAmount,
       settlementData.shuffleSeed,
       settlementData.deck,
-      tableId
+      tableId,
+      settlementData.rakeBps,
+      settlementData.potRakeInfo
     );
   } else if ('winnerSeatNumber' in settlementData) {
     // Single winner settlement (fold scenario)
@@ -1089,7 +1730,9 @@ async function handlePostActionSettlement(
       settlementData.totalPotAmount,
       settlementData.shuffleSeed,
       settlementData.deck,
-      tableId
+      tableId,
+      settlementData.rakeBps,
+      settlementData.potRakeInfo
     );
   }
 
@@ -1117,26 +1760,17 @@ async function handlePostActionSettlement(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function foldAction(
+  prismaClient: any,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
   const normalizedAddress = walletAddress.toLowerCase();
 
-  type SettlementData = {
-    handId: number;
-    winnerSeatNumber?: number;
-    winnerSeatNumbers?: number[];
-    totalPotAmount: bigint;
-    shuffleSeed: string;
-    deck: any;
-    isShowdown?: boolean;
-  };
-
-  let settlementData: SettlementData | null = null;
+  let settlementData: (SingleWinnerSettlementData | ShowdownSettlementData) | null = null;
   let roundAdvanced = false;
 
   // Use transaction directly so we can build complete event payload with hand data
-  const result = await prisma.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
+  const result = await prismaClient.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
       // 1. Get table and hand (validated)
       const { table, hand } = await getTableAndHand(tableId, tx, false);
 
@@ -1219,6 +1853,8 @@ export async function foldAction(
           totalPotAmount: settlement.totalPotAmount,
           shuffleSeed: settlement.shuffleSeed,
           deck: settlement.deck,
+          rakeBps: settlement.rakeBps,
+          potRakeInfo: settlement.potRakeInfo,
         };
       } else {
         // Advance to next active player
@@ -1248,6 +1884,8 @@ export async function foldAction(
                   shuffleSeed: settlement.shuffleSeed,
                   deck: settlement.deck,
                   isShowdown: true,
+                  rakeBps: settlement.rakeBps,
+                  potRakeInfo: settlement.potRakeInfo,
                 };
                 winnerSeatNumber = settlement.winnerSeatNumbers[0];
                 break;
@@ -1270,6 +1908,8 @@ export async function foldAction(
                 shuffleSeed: settlement.shuffleSeed,
                 deck: settlement.deck,
                 isShowdown: true,
+                rakeBps: settlement.rakeBps,
+                potRakeInfo: settlement.potRakeInfo,
               };
               winnerSeatNumber = settlement.winnerSeatNumbers[0];
             }
@@ -1318,24 +1958,16 @@ export async function foldAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function callAction(
+  prismaClient: any,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
   const normalizedAddress = walletAddress.toLowerCase();
 
-  type SettlementData = {
-    handId: number;
-    winnerSeatNumbers: number[];
-    totalPotAmount: bigint;
-    shuffleSeed: string;
-    deck: any;
-    isShowdown: boolean;
-  };
-
-  let settlementData: SettlementData | null = null;
+  let settlementData: (SingleWinnerSettlementData | ShowdownSettlementData) | null = null;
   let roundAdvanced = false;
 
-  const result = await prisma.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
+  const result = await prismaClient.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
     // 1. Get table and hand (validated)
     const { table, hand } = await getTableAndHand(tableId, tx, true);
 
@@ -1379,7 +2011,7 @@ export async function callAction(
       },
     });
 
-    // 9. Update chips committed
+    // 9. Update chips committed (CALL doesn't change currentBet or lastRaiseAmount)
     await (tx as any).handPlayer.update({
       where: { id: handPlayer.id },
       data: {
@@ -1408,89 +2040,39 @@ export async function callAction(
     let winnerSeatNumber: number | null = null;
 
     if (bettingRoundComplete) {
-      // Check if this is the RIVER round (last round)
-      if (hand.round === 'RIVER') {
-        // Hand should be settled via showdown
-        handEnded = true;
-        const settlement = await settleHandShowdown(hand.id, tx);
-        settlementData = {
-          handId: hand.id,
-          winnerSeatNumbers: settlement.winnerSeatNumbers,
-          totalPotAmount: settlement.totalPotAmount,
-          shuffleSeed: settlement.shuffleSeed,
-          deck: settlement.deck,
-          isShowdown: true,
-        };
-        // For now, return first winner (frontend can handle multiple winners)
-        winnerSeatNumber = settlement.winnerSeatNumbers[0];
-      } else {
-        // Advance to next betting round
-        roundAdvanced = true;
-        const shouldSettle = await advanceBettingRound(hand.id, tx);
-        if (shouldSettle) {
-          // This shouldn't happen, but handle it
-          handEnded = true;
-          const settlement = await settleHandShowdown(hand.id, tx);
-          settlementData = {
-            handId: hand.id,
-            winnerSeatNumbers: settlement.winnerSeatNumbers,
-            totalPotAmount: settlement.totalPotAmount,
-            shuffleSeed: settlement.shuffleSeed,
-            deck: settlement.deck,
-            isShowdown: true,
-          };
-          winnerSeatNumber = settlement.winnerSeatNumbers[0];
-        }
-      }
+      // Handle betting round completion
+      const roundResult = await handleBettingRoundComplete(hand.id, hand.round!, tx);
+      handEnded = roundResult.handEnded;
+      roundAdvanced = roundResult.roundAdvanced;
+      settlementData = roundResult.settlementData;
+      winnerSeatNumber = roundResult.winnerSeatNumber;
     } else {
-      // Advance to next active player
-      const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
-      
-      if (nextSeat === null) {
-        // All remaining players are all-in, round should complete
-        // Check if betting round is complete
-        const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
-        if (bettingRoundComplete) {
-          // Advance to next betting round or settle hand
-          if (hand.round === 'RIVER') {
-            handEnded = true;
-            const settlement = await settleHandShowdown(hand.id, tx);
-            settlementData = {
-              handId: hand.id,
-              winnerSeatNumbers: settlement.winnerSeatNumbers,
-              totalPotAmount: settlement.totalPotAmount,
-              shuffleSeed: settlement.shuffleSeed,
-              deck: settlement.deck,
-              isShowdown: true,
-            };
-            winnerSeatNumber = settlement.winnerSeatNumbers[0];
-          } else {
-            roundAdvanced = true;
-            const shouldSettle = await advanceBettingRound(hand.id, tx);
-            if (shouldSettle) {
-              handEnded = true;
-              const settlement = await settleHandShowdown(hand.id, tx);
-              settlementData = {
-                handId: hand.id,
-                winnerSeatNumbers: settlement.winnerSeatNumbers,
-                totalPotAmount: settlement.totalPotAmount,
-                shuffleSeed: settlement.shuffleSeed,
-                deck: settlement.deck,
-                isShowdown: true,
-              };
-              winnerSeatNumber = settlement.winnerSeatNumbers[0];
-            }
-          }
-        } else {
-          throw new Error('No next active player found and betting round is not complete');
-        }
+      // Check if only one active player remains (others are all-in) - should auto-advance
+      const autoAdvanceResult = await checkAndHandleOnlyOneActivePlayer(
+        hand.id,
+        seatSession.seatNumber,
+        hand.round!,
+        tx
+      );
+
+      if (autoAdvanceResult) {
+        // Auto-advancement occurred
+        handEnded = autoAdvanceResult.handEnded;
+        roundAdvanced = autoAdvanceResult.roundAdvanced;
+        settlementData = autoAdvanceResult.settlementData;
+        winnerSeatNumber = autoAdvanceResult.winnerSeatNumber;
       } else {
-        await (tx as any).hand.update({
-          where: { id: hand.id },
-          data: {
-            currentActionSeat: nextSeat,
-          },
-        });
+        // Handle advancing to next player or completing round if all remaining are all-in
+        const roundResult = await handleNextPlayerOrRoundComplete(
+          hand.id,
+          seatSession.seatNumber,
+          hand.round!,
+          tx
+        );
+        handEnded = roundResult.handEnded;
+        roundAdvanced = roundResult.roundAdvanced;
+        settlementData = roundResult.settlementData;
+        winnerSeatNumber = roundResult.winnerSeatNumber;
       }
     }
 
@@ -1524,24 +2106,16 @@ export async function callAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function checkAction(
+  prismaClient: any,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
   const normalizedAddress = walletAddress.toLowerCase();
 
-  type SettlementData = {
-    handId: number;
-    winnerSeatNumbers: number[];
-    totalPotAmount: bigint;
-    shuffleSeed: string;
-    deck: any;
-    isShowdown: boolean;
-  };
-
-  let settlementData: SettlementData | null = null;
+  let settlementData: (SingleWinnerSettlementData | ShowdownSettlementData) | null = null;
   let roundAdvanced = false;
 
-  const result = await prisma.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
+  const result = await prismaClient.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
     // 1. Get table and hand (validated)
     const { table, hand } = await getTableAndHand(tableId, tx, false);
 
@@ -1605,88 +2179,24 @@ export async function checkAction(
     let winnerSeatNumber: number | null = null;
 
     if (bettingRoundComplete) {
-      // Check if this is the RIVER round (last round)
-      if (hand.round === 'RIVER') {
-        // Hand should be settled via showdown
-        handEnded = true;
-        const settlement = await settleHandShowdown(hand.id, tx);
-        settlementData = {
-          handId: hand.id,
-          winnerSeatNumbers: settlement.winnerSeatNumbers,
-          totalPotAmount: settlement.totalPotAmount,
-          shuffleSeed: settlement.shuffleSeed,
-          deck: settlement.deck,
-          isShowdown: true,
-        };
-        winnerSeatNumber = settlement.winnerSeatNumbers[0];
-      } else {
-        // Advance to next betting round
-        roundAdvanced = true;
-        const shouldSettle = await advanceBettingRound(hand.id, tx);
-        if (shouldSettle) {
-          handEnded = true;
-          const settlement = await settleHandShowdown(hand.id, tx);
-          settlementData = {
-            handId: hand.id,
-            winnerSeatNumbers: settlement.winnerSeatNumbers,
-            totalPotAmount: settlement.totalPotAmount,
-            shuffleSeed: settlement.shuffleSeed,
-            deck: settlement.deck,
-            isShowdown: true,
-          };
-          winnerSeatNumber = settlement.winnerSeatNumbers[0];
-        }
-      }
+      // Handle betting round completion
+      const roundResult = await handleBettingRoundComplete(hand.id, hand.round!, tx);
+      handEnded = roundResult.handEnded;
+      roundAdvanced = roundResult.roundAdvanced;
+      settlementData = roundResult.settlementData;
+      winnerSeatNumber = roundResult.winnerSeatNumber;
     } else {
-      // Advance to next active player
-      const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
-      
-      if (nextSeat === null) {
-        // All remaining players are all-in, round should complete
-        // Check if betting round is complete
-        const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
-        if (bettingRoundComplete) {
-          // Advance to next betting round or settle hand
-          if (hand.round === 'RIVER') {
-            handEnded = true;
-            const settlement = await settleHandShowdown(hand.id, tx);
-            settlementData = {
-              handId: hand.id,
-              winnerSeatNumbers: settlement.winnerSeatNumbers,
-              totalPotAmount: settlement.totalPotAmount,
-              shuffleSeed: settlement.shuffleSeed,
-              deck: settlement.deck,
-              isShowdown: true,
-            };
-            winnerSeatNumber = settlement.winnerSeatNumbers[0];
-          } else {
-            roundAdvanced = true;
-            const shouldSettle = await advanceBettingRound(hand.id, tx);
-            if (shouldSettle) {
-              handEnded = true;
-              const settlement = await settleHandShowdown(hand.id, tx);
-              settlementData = {
-                handId: hand.id,
-                winnerSeatNumbers: settlement.winnerSeatNumbers,
-                totalPotAmount: settlement.totalPotAmount,
-                shuffleSeed: settlement.shuffleSeed,
-                deck: settlement.deck,
-                isShowdown: true,
-              };
-              winnerSeatNumber = settlement.winnerSeatNumbers[0];
-            }
-          }
-        } else {
-          throw new Error('No next active player found and betting round is not complete');
-        }
-      } else {
-        await (tx as any).hand.update({
-          where: { id: hand.id },
-          data: {
-            currentActionSeat: nextSeat,
-          },
-        });
-      }
+      // Handle advancing to next player or completing round if all remaining are all-in
+      const roundResult = await handleNextPlayerOrRoundComplete(
+        hand.id,
+        seatSession.seatNumber,
+        hand.round!,
+        tx
+      );
+      handEnded = roundResult.handEnded;
+      roundAdvanced = roundResult.roundAdvanced;
+      settlementData = roundResult.settlementData;
+      winnerSeatNumber = roundResult.winnerSeatNumber;
     }
 
     return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
@@ -1694,6 +2204,234 @@ export async function checkAction(
 
   // After transaction completes, handle post-settlement work
   await handlePostActionSettlement(result, settlementData, tableId);
+
+  return result;
+}
+
+/**
+ * Processes a betting amount: deducts balance, updates chips committed, and updates hand betting state
+ *
+ * @param tx - Prisma transaction client
+ * @param seatSession - Player's seat session
+ * @param handPlayer - Player's hand player record
+ * @param hand - Hand record
+ * @param amountToDeduct - Amount to deduct from player's balance (incremental amount)
+ * @param currentBet - Current bet amount before this action
+ * @param isAllIn - Whether this is an all-in action
+ * @returns The new total bet amount after this action
+ */
+async function processBettingAmount(
+  tx: any,
+  seatSession: any,
+  handPlayer: any,
+  hand: any,
+  amountToDeduct: bigint,
+  currentBet: bigint,
+  isAllIn: boolean
+): Promise<bigint> {
+  const chipsCommitted = (handPlayer.chipsCommitted as bigint) || 0n;
+  const actualBetAmount = chipsCommitted + amountToDeduct;
+
+  // Deduct from table balance
+  await tx.tableSeatSession.update({
+    where: { id: seatSession.id },
+    data: {
+      tableBalanceGwei: seatSession.tableBalanceGwei - amountToDeduct,
+    },
+  });
+
+  // Update chips committed and player status
+  await (tx as any).handPlayer.update({
+    where: { id: handPlayer.id },
+    data: {
+      chipsCommitted: actualBetAmount,
+      status: isAllIn ? 'ALL_IN' : 'ACTIVE',
+    },
+  });
+
+  // Update hand betting state
+  const raiseAmount = actualBetAmount - currentBet;
+  const newLastRaiseAmount = raiseAmount > 0n ? raiseAmount : hand.lastRaiseAmount;
+
+  await (tx as any).hand.update({
+    where: { id: hand.id },
+    data: {
+      currentBet: actualBetAmount,
+      lastRaiseAmount: newLastRaiseAmount,
+    },
+  });
+
+  return actualBetAmount;
+}
+
+/**
+ * Updates pots conditionally based on betting round completion status
+ *
+ * @param handId - Hand ID
+ * @param tx - Prisma transaction client
+ * @returns True if pots were updated (round complete or all players all-in)
+ */
+async function updatePotsIfNeeded(handId: number, tx: any): Promise<boolean> {
+  const needsSidePots = await shouldCreateSidePots(handId, tx);
+  if (needsSidePots) {
+    await createSidePots(handId, tx);
+  } else {
+    await updatePotTotal(handId, tx);
+  }
+  return true;
+}
+
+/**
+ * Checks if all remaining non-folded players are all-in and updates pots if so
+ *
+ * @param handId - Hand ID
+ * @param tx - Prisma transaction client
+ * @returns True if all players are all-in, false otherwise
+ */
+async function checkAndHandleAllPlayersAllIn(handId: number, tx: any): Promise<boolean> {
+  const handPlayers = await (tx as any).handPlayer.findMany({
+    where: { handId },
+  });
+  const nonFoldedPlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
+  const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
+
+  if (nonFoldedPlayers.length > 0 && allInPlayers.length === nonFoldedPlayers.length) {
+    // All remaining players are all-in - update pots
+    await updatePotsIfNeeded(handId, tx);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks if only one active player remains and triggers auto-advancement if needed
+ *
+ * @param handId - Hand ID
+ * @param currentSeatNumber - Current player's seat number
+ * @param currentRound - Current betting round
+ * @param tx - Prisma transaction client
+ * @returns Round handling result if auto-advancement occurred, null otherwise
+ */
+async function checkAndHandleOnlyOneActivePlayer(
+  handId: number,
+  currentSeatNumber: number,
+  currentRound: BettingRound,
+  tx: any
+): Promise<RoundHandlingResult | null> {
+  const handPlayers = await (tx as any).handPlayer.findMany({
+    where: { handId },
+  });
+  const nonFoldedPlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
+  const activePlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ACTIVE');
+  const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
+
+  // If only one active player remains and others are all-in, trigger auto-advancement
+  if (activePlayers.length === 1 && allInPlayers.length > 0) {
+    const shouldAutoSettle = await advanceToRiverIfOnlyOneActivePlayer(handId, tx);
+    if (shouldAutoSettle) {
+      const settlement = await settleHandShowdown(handId, tx);
+      return {
+        handEnded: true,
+        roundAdvanced: false,
+        settlementData: createSettlementData(handId, settlement),
+        winnerSeatNumber: settlement.winnerSeatNumbers[0],
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Handles round completion or advances to next player after a betting action
+ *
+ * @param handId - Hand ID
+ * @param currentSeatNumber - Current player's seat number
+ * @param currentRound - Current betting round
+ * @param bettingRoundComplete - Whether the betting round is complete
+ * @param isAllIn - Whether the player went all-in
+ * @param tx - Prisma transaction client
+ * @returns Round handling result with settlement data if hand ended
+ */
+async function handleBettingActionCompletion(
+  handId: number,
+  currentSeatNumber: number,
+  currentRound: BettingRound,
+  bettingRoundComplete: boolean,
+  isAllIn: boolean,
+  tx: any
+): Promise<RoundHandlingResult> {
+  const result: RoundHandlingResult = {
+    handEnded: false,
+    roundAdvanced: false,
+    settlementData: null,
+    winnerSeatNumber: null,
+  };
+
+  if (bettingRoundComplete) {
+    // Betting round is complete - update pots and handle round completion
+    // Note: handleBettingRoundComplete calls advanceBettingRound which updates pots,
+    // but we need to update pots here first for the current round
+    await updatePotsIfNeeded(handId, tx);
+    const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
+    result.handEnded = roundResult.handEnded;
+    result.roundAdvanced = roundResult.roundAdvanced;
+    result.settlementData = roundResult.settlementData;
+    result.winnerSeatNumber = roundResult.winnerSeatNumber;
+  } else if (isAllIn) {
+    // Player went all-in but round is not complete yet
+    const allPlayersAllIn = await checkAndHandleAllPlayersAllIn(handId, tx);
+    
+    if (allPlayersAllIn) {
+      // All players are all-in - check if round is complete and trigger auto-advancement
+      const roundComplete = await isBettingRoundComplete(handId, tx);
+      if (roundComplete) {
+        const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
+        result.handEnded = roundResult.handEnded;
+        result.roundAdvanced = roundResult.roundAdvanced;
+        result.settlementData = roundResult.settlementData;
+        result.winnerSeatNumber = roundResult.winnerSeatNumber;
+      } else {
+        // Round not complete yet (shouldn't happen when all are all-in, but handle gracefully)
+        const roundResult = await handleNextPlayerOrRoundComplete(
+          handId,
+          currentSeatNumber,
+          currentRound,
+          tx
+        );
+        result.handEnded = roundResult.handEnded;
+        result.roundAdvanced = roundResult.roundAdvanced;
+        result.settlementData = roundResult.settlementData;
+        result.winnerSeatNumber = roundResult.winnerSeatNumber;
+      }
+    } else {
+      // Not all players are all-in yet, just update pot total for display
+      await updatePotTotal(handId, tx);
+      const roundResult = await handleNextPlayerOrRoundComplete(
+        handId,
+        currentSeatNumber,
+        currentRound,
+        tx
+      );
+      result.handEnded = roundResult.handEnded;
+      result.roundAdvanced = roundResult.roundAdvanced;
+      result.settlementData = roundResult.settlementData;
+      result.winnerSeatNumber = roundResult.winnerSeatNumber;
+    }
+  } else {
+    // Normal betting action - advance to next player
+    const roundResult = await handleNextPlayerOrRoundComplete(
+      handId,
+      currentSeatNumber,
+      currentRound,
+      tx
+    );
+    result.handEnded = roundResult.handEnded;
+    result.roundAdvanced = roundResult.roundAdvanced;
+    result.settlementData = roundResult.settlementData;
+    result.winnerSeatNumber = roundResult.winnerSeatNumber;
+  }
 
   return result;
 }
@@ -1717,16 +2455,17 @@ export async function checkAction(
  *
  * @param tableId - Table ID
  * @param walletAddress - Player's wallet address
- * @param amountGwei - Total bet amount in gwei (must be ≥ big blind)
+ * @param incrementalAmountGwei - Incremental amount to bet in gwei (what player is adding from their balance)
  * @returns Success indicator with round advancement status
  * @throws {Error} If validation fails or transaction fails
  */
 export async function betAction(
+  prismaClient: any,
   tableId: number,
   walletAddress: string,
-  amountGwei: bigint
+  incrementalAmountGwei: bigint
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
-  return await raiseAction(tableId, walletAddress, amountGwei, true);
+  return await raiseAction(prismaClient, tableId, walletAddress, incrementalAmountGwei, true);
 }
 
 /**
@@ -1734,7 +2473,7 @@ export async function betAction(
  *
  * Atomically:
  * 1. Validates it's the player's turn
- * 2. Validates amount (≥ minimum raise, ≤ balance, in increments)
+ * 2. Validates incremental amount (≥ minimum raise, ≤ balance, in increments)
  * 3. Deducts from table balance
  * 4. Updates chips committed and current bet
  * 5. Updates lastRaiseAmount
@@ -1749,32 +2488,24 @@ export async function betAction(
  *
  * @param tableId - Table ID
  * @param walletAddress - Player's wallet address
- * @param amountGwei - Total bet amount in gwei (must be ≥ currentBet + minimumRaise)
+ * @param incrementalAmountGwei - Incremental amount to bet/raise in gwei (what player is adding from their balance)
  * @param isBet - Whether this is a bet (currentBet === 0) or raise
  * @returns Success indicator with round advancement status
  * @throws {Error} If validation fails or transaction fails
  */
 export async function raiseAction(
+  prismaClient: any,
   tableId: number,
   walletAddress: string,
-  amountGwei: bigint,
+  incrementalAmountGwei: bigint,
   isBet: boolean = false
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
   const normalizedAddress = walletAddress.toLowerCase();
 
-  type SettlementData = {
-    handId: number;
-    winnerSeatNumbers: number[];
-    totalPotAmount: bigint;
-    shuffleSeed: string;
-    deck: any;
-    isShowdown: boolean;
-  };
-
-  let settlementData: SettlementData | null = null;
+  let settlementData: (SingleWinnerSettlementData | ShowdownSettlementData) | null = null;
   let roundAdvanced = false;
 
-  const result = await prisma.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
+  const result = await prismaClient.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
     // 1. Get table and hand (validated)
     const { table, hand } = await getTableAndHand(tableId, tx, true);
 
@@ -1798,21 +2529,31 @@ export async function raiseAction(
     // 4. Validate it's the player's turn
     validatePlayerTurn(hand, seatSession.seatNumber);
 
-    // 7. Round amount to nearest big blind increment
-    const roundedAmount = roundToIncrement(amountGwei, table.bigBlind);
-    if (roundedAmount !== amountGwei) {
-      throw new Error(`Bet amount must be in increments of ${table.bigBlind} gwei (big blind). Rounded: ${roundedAmount} gwei`);
+    // 5. Check if this is an all-in move (player is betting their entire balance)
+    // For all-in, we allow any amount up to the full balance, even if not a perfect big blind increment
+    const isAllIn = seatSession.tableBalanceGwei <= incrementalAmountGwei;
+    
+    let roundedIncremental: bigint;
+    if (isAllIn) {
+      // All-in: use entire balance, no rounding restriction
+      roundedIncremental = seatSession.tableBalanceGwei;
+    } else {
+      // Not all-in: round to nearest big blind increment and validate
+      roundedIncremental = roundToIncrement(incrementalAmountGwei, table.bigBlind);
+      if (roundedIncremental !== incrementalAmountGwei) {
+        throw new Error(`Bet amount must be in increments of ${table.bigBlind} gwei (big blind). Rounded: ${roundedIncremental} gwei`);
+      }
     }
 
-    // 8. Get minimum bet/raise amount
+    // 6. Get minimum bet/raise amount
     const minimumRaise = isBet
       ? getMinimumBetAmount(table)
       : getMinimumRaiseAmount(hand, table);
 
-    // 9. Validate bet amount
+    // 7. Validate incremental bet amount
     const chipsCommitted = (handPlayer.chipsCommitted as bigint) || 0n;
     const validation = validateBetAmount(
-      roundedAmount,
+      roundedIncremental,
       currentBet,
       chipsCommitted,
       seatSession.tableBalanceGwei,
@@ -1824,143 +2565,56 @@ export async function raiseAction(
       throw new Error(validation.error || 'Invalid bet amount');
     }
 
-    // 10. Check if this makes player all-in
-    const additionalNeeded = roundedAmount - chipsCommitted;
-    const isAllIn = seatSession.tableBalanceGwei <= additionalNeeded;
-    const actualBetAmount = isAllIn
-      ? chipsCommitted + seatSession.tableBalanceGwei
-      : roundedAmount;
-
-    // 11. Calculate incremental amount (what's being added in this action)
-    const amountToDeduct = actualBetAmount - chipsCommitted;
+    // 8. Amount to deduct (already set to full balance if all-in, otherwise rounded incremental)
+    const amountToDeduct = roundedIncremental;
     
-    // Deduct from table balance
-    await tx.tableSeatSession.update({
-      where: { id: seatSession.id },
-      data: {
-        tableBalanceGwei: seatSession.tableBalanceGwei - amountToDeduct,
-      },
-    });
+    // 9. Process betting amount: deduct balance, update chips committed, update hand state
+    const actualBetAmount = await processBettingAmount(
+      tx,
+      seatSession,
+      handPlayer,
+      hand,
+      amountToDeduct,
+      currentBet,
+      isAllIn
+    );
 
-    // 12. Update chips committed and hand state
-    await (tx as any).handPlayer.update({
-      where: { id: handPlayer.id },
-      data: {
-        chipsCommitted: actualBetAmount,
-        status: isAllIn ? 'ALL_IN' : 'ACTIVE',
-      },
-    });
-
-    // 13. Update hand betting state
-    const raiseAmount = actualBetAmount - currentBet;
-    const newLastRaiseAmount = raiseAmount > 0n ? raiseAmount : hand.lastRaiseAmount;
-
-    await (tx as any).hand.update({
-      where: { id: hand.id },
-      data: {
-        currentBet: actualBetAmount,
-        lastRaiseAmount: newLastRaiseAmount,
-      },
-    });
-
-    // 14. Create bet/raise action record and event
-    // Store incremental amount (amountToDeduct) instead of total (actualBetAmount)
+    // 10. Create bet/raise action record and event
+    // Store incremental amount (amountToDeduct) - this is what we received as input
     // Pot splitting deferred until round completes or player goes all-in
+    // Use 'ALL_IN' action type if player went all-in, otherwise 'RAISE' or 'BET'
+    const actionType = isAllIn ? 'ALL_IN' : 'RAISE';
+    // Event action type: if all-in, use 'ALL_IN', otherwise use 'BET' or 'RAISE' based on context
+    const eventActionType = isAllIn ? 'ALL_IN' : (isBet ? 'BET' : 'RAISE');
     const handAction = await createActionAndEvent(
       tx,
       hand.id,
       seatSession.seatNumber,
       hand.round!,
-      'RAISE',
-      amountToDeduct, // Store incremental amount, not total
+      actionType,
+      amountToDeduct, // Store incremental amount (what we received as input)
       table,
       hand,
       normalizedAddress,
-      isBet ? 'BET' : 'RAISE', // Use BET/RAISE in event payload for clarity
+      eventActionType,
       isAllIn
     );
 
-    // 15. If player went all-in, recalculate side pots immediately
-    // (all-in players can't match further raises, so side pots are needed now)
-    if (isAllIn) {
-      await createSidePots(hand.id, tx);
-    }
-
-    // 17. Check if betting round is complete
+    // 15. Check if betting round is complete and handle round completion or next player
     const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
-
-    let handEnded = false;
-    let winnerSeatNumber: number | null = null;
-
-    if (bettingRoundComplete) {
-      // Betting round is complete - recalculate side pots now (if not already done for all-in)
-      if (!isAllIn) {
-        await createSidePots(hand.id, tx);
-      }
-
-      // Check if this is the RIVER round (last round)
-      if (hand.round === 'RIVER') {
-        // Hand should be settled via showdown
-        handEnded = true;
-        const settlement = await settleHandShowdown(hand.id, tx);
-        settlementData = {
-          handId: hand.id,
-          winnerSeatNumbers: settlement.winnerSeatNumbers,
-          totalPotAmount: settlement.totalPotAmount,
-          shuffleSeed: settlement.shuffleSeed,
-          deck: settlement.deck,
-          isShowdown: true,
-        };
-        winnerSeatNumber = settlement.winnerSeatNumbers[0];
-      } else {
-        // Advance to next betting round
-        roundAdvanced = true;
-        const shouldSettle = await advanceBettingRound(hand.id, tx);
-        if (shouldSettle) {
-          handEnded = true;
-          const settlement = await settleHandShowdown(hand.id, tx);
-          settlementData = {
-            handId: hand.id,
-            winnerSeatNumbers: settlement.winnerSeatNumbers,
-            totalPotAmount: settlement.totalPotAmount,
-            shuffleSeed: settlement.shuffleSeed,
-            deck: settlement.deck,
-            isShowdown: true,
-          };
-          winnerSeatNumber = settlement.winnerSeatNumbers[0];
-        }
-      }
-    } else {
-      // Advance to next active player (skip all-in players)
-      const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
-      
-      if (nextSeat === null) {
-        // All remaining players are all-in, round should complete
-        // This shouldn't happen if isBettingRoundComplete is correct, but handle it
-        roundAdvanced = true;
-        const shouldSettle = await advanceBettingRound(hand.id, tx);
-        if (shouldSettle) {
-          handEnded = true;
-          const settlement = await settleHandShowdown(hand.id, tx);
-          settlementData = {
-            handId: hand.id,
-            winnerSeatNumbers: settlement.winnerSeatNumbers,
-            totalPotAmount: settlement.totalPotAmount,
-            shuffleSeed: settlement.shuffleSeed,
-            deck: settlement.deck,
-            isShowdown: true,
-          };
-          winnerSeatNumber = settlement.winnerSeatNumbers[0];
-        }
-      } else {
-        await (tx as any).hand.update({
-          where: { id: hand.id },
-          data: {
-            currentActionSeat: nextSeat,
-          },
-        });
-      }
-    }
+    const roundResult = await handleBettingActionCompletion(
+      hand.id,
+      seatSession.seatNumber,
+      hand.round!,
+      bettingRoundComplete,
+      isAllIn,
+      tx
+    );
+    
+    let handEnded = roundResult.handEnded;
+    let winnerSeatNumber: number | null = roundResult.winnerSeatNumber;
+    roundAdvanced = roundResult.roundAdvanced;
+    settlementData = roundResult.settlementData;
 
     return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
   });
@@ -1995,24 +2649,16 @@ export async function raiseAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function allInAction(
+  prismaClient: any,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
   const normalizedAddress = walletAddress.toLowerCase();
 
-  type SettlementData = {
-    handId: number;
-    winnerSeatNumbers: number[];
-    totalPotAmount: bigint;
-    shuffleSeed: string;
-    deck: any;
-    isShowdown: boolean;
-  };
-
-  let settlementData: SettlementData | null = null;
+  let settlementData: (SingleWinnerSettlementData | ShowdownSettlementData) | null = null;
   let roundAdvanced = false;
 
-  const result = await prisma.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
+  const result = await prismaClient.$transaction(async (tx): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> => {
     // 1. Get table and hand (validated)
     const { table, hand } = await getTableAndHand(tableId, tx, true);
 
@@ -2089,67 +2735,24 @@ export async function allInAction(
 
     if (bettingRoundComplete) {
       // Betting round is complete - pots already recalculated above for all-in
-      // Check if this is the RIVER round (last round)
-      if (hand.round === 'RIVER') {
-        // Hand should be settled via showdown
-        handEnded = true;
-        const settlement = await settleHandShowdown(hand.id, tx);
-        settlementData = {
-          handId: hand.id,
-          winnerSeatNumbers: settlement.winnerSeatNumbers,
-          totalPotAmount: settlement.totalPotAmount,
-          shuffleSeed: settlement.shuffleSeed,
-          deck: settlement.deck,
-          isShowdown: true,
-        };
-        winnerSeatNumber = settlement.winnerSeatNumbers[0];
-      } else {
-        // Advance to next betting round
-        roundAdvanced = true;
-        const shouldSettle = await advanceBettingRound(hand.id, tx);
-        if (shouldSettle) {
-          handEnded = true;
-          const settlement = await settleHandShowdown(hand.id, tx);
-          settlementData = {
-            handId: hand.id,
-            winnerSeatNumbers: settlement.winnerSeatNumbers,
-            totalPotAmount: settlement.totalPotAmount,
-            shuffleSeed: settlement.shuffleSeed,
-            deck: settlement.deck,
-            isShowdown: true,
-          };
-          winnerSeatNumber = settlement.winnerSeatNumbers[0];
-        }
-      }
+      // Handle betting round completion
+      const roundResult = await handleBettingRoundComplete(hand.id, hand.round!, tx);
+      handEnded = roundResult.handEnded;
+      roundAdvanced = roundResult.roundAdvanced;
+      settlementData = roundResult.settlementData;
+      winnerSeatNumber = roundResult.winnerSeatNumber;
     } else {
-      // Advance to next active player (skip all-in players)
-      const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
-      
-      if (nextSeat === null) {
-        // All remaining players are all-in, round should complete
-        roundAdvanced = true;
-        const shouldSettle = await advanceBettingRound(hand.id, tx);
-        if (shouldSettle) {
-          handEnded = true;
-          const settlement = await settleHandShowdown(hand.id, tx);
-          settlementData = {
-            handId: hand.id,
-            winnerSeatNumbers: settlement.winnerSeatNumbers,
-            totalPotAmount: settlement.totalPotAmount,
-            shuffleSeed: settlement.shuffleSeed,
-            deck: settlement.deck,
-            isShowdown: true,
-          };
-          winnerSeatNumber = settlement.winnerSeatNumbers[0];
-        }
-      } else {
-        await (tx as any).hand.update({
-          where: { id: hand.id },
-          data: {
-            currentActionSeat: nextSeat,
-          },
-        });
-      }
+      // Handle advancing to next player or completing round if all remaining are all-in
+      const roundResult = await handleNextPlayerOrRoundComplete(
+        hand.id,
+        seatSession.seatNumber,
+        hand.round!,
+        tx
+      );
+      handEnded = roundResult.handEnded;
+      roundAdvanced = roundResult.roundAdvanced;
+      settlementData = roundResult.settlementData;
+      winnerSeatNumber = roundResult.winnerSeatNumber;
     }
 
     return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };

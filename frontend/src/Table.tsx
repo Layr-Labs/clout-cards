@@ -444,16 +444,47 @@ function Table() {
   /**
    * Handles All-in button click
    */
+  /**
+   * Handles All-in button click
+   * All-in is now handled as a RAISE with the player's incremental amount (full stack).
+   * The incremental amount is simply the player's remaining tableBalanceGwei.
+   */
   async function handleAllInClick() {
     if (!tableId || !address || !signature || isProcessingAction) {
       return
     }
 
+    const userHandPlayer = getUserHandPlayer()
+    if (!userHandPlayer) {
+      setActionError('Player not in hand')
+      return
+    }
+
+    // Get table balance from players array
+    const userPlayer = players.find(p => 
+      p.walletAddress.toLowerCase() === address.toLowerCase()
+    )
+    if (!userPlayer) {
+      setActionError('Player not found')
+      return
+    }
+
+    // For all-in, the incremental amount is the player's entire remaining balance
+    const tableBalanceGwei = BigInt(userPlayer.tableBalanceGwei || '0')
+
     setIsProcessingAction(true)
     setActionError(null)
 
     try {
-      const result = await playerAction(tableId, 'ALL_IN', address, signature)
+      // Call RAISE action with the incremental amount (full stack)
+      // The backend will detect this equals the full stack and handle it as all-in
+      const result = await playerAction(
+        tableId, 
+        'RAISE', 
+        address, 
+        signature,
+        tableBalanceGwei.toString()
+      )
       
       if (result.handEnded) {
         console.log('Hand ended after all-in')
@@ -652,8 +683,8 @@ function Table() {
                           
                           if (!handPlayer) return null
                           
-                          // Show hole cards for authorized player if active
-                          if (isAuthorizedPlayer && handPlayer.holeCards && handPlayer.status === 'ACTIVE') {
+                          // Show hole cards for authorized player if active or all-in
+                          if (isAuthorizedPlayer && handPlayer.holeCards && (handPlayer.status === 'ACTIVE' || handPlayer.status === 'ALL_IN')) {
                             return (
                               <div className="table-seat-cards">
                                 {handPlayer.holeCards.map((card, idx) => (
@@ -667,8 +698,8 @@ function Table() {
                             )
                           }
                           
-                          // Show card backs for other players in hand
-                          if (!isAuthorizedPlayer && handPlayer.status === 'ACTIVE') {
+                          // Show card backs for other players in hand (active or all-in)
+                          if (!isAuthorizedPlayer && (handPlayer.status === 'ACTIVE' || handPlayer.status === 'ALL_IN')) {
                             return (
                               <div className="table-seat-cards">
                                 <Card isBack={true} />
@@ -760,28 +791,45 @@ function Table() {
               >
                 {isProcessingAction ? 'Processing...' : 'Fold'}
               </button>
-              <button
-                className="table-action-button table-action-button-check-call"
-                onClick={handleCheckCallClick}
-                disabled={isProcessingAction}
-              >
-                {(() => {
-                  const callAmount = getCallAmount()
-                  if (callAmount === null) {
-                    return isProcessingAction ? 'Processing...' : 'Check'
-                  } else {
-                    const callAmountEth = formatEth(callAmount)
-                    return isProcessingAction ? 'Processing...' : `Call ${callAmountEth}`
-                  }
-                })()}
-              </button>
-              <button
-                className="table-action-button table-action-button-raise"
-                onClick={handleBetRaiseClick}
-                disabled={isProcessingAction}
-              >
-                {currentHand.currentBet && Number(currentHand.currentBet) > 0 ? 'Raise' : 'Bet'}
-              </button>
+              {(() => {
+                // Check if user can afford to call
+                const callAmount = getCallAmount()
+                const userPlayer = players.find(p => 
+                  p.walletAddress.toLowerCase() === address?.toLowerCase()
+                )
+                const tableBalanceGwei = userPlayer?.tableBalanceGwei ? BigInt(userPlayer.tableBalanceGwei) : 0n
+                const canAffordCall = callAmount === null || callAmount <= tableBalanceGwei
+                
+                return (
+                  <>
+                    {canAffordCall && (
+                      <button
+                        className="table-action-button table-action-button-check-call"
+                        onClick={handleCheckCallClick}
+                        disabled={isProcessingAction}
+                      >
+                        {(() => {
+                          if (callAmount === null) {
+                            return isProcessingAction ? 'Processing...' : 'Check'
+                          } else {
+                            const callAmountEth = formatEth(callAmount)
+                            return isProcessingAction ? 'Processing...' : `Call ${callAmountEth}`
+                          }
+                        })()}
+                      </button>
+                    )}
+                    {canAffordCall && (
+                      <button
+                        className="table-action-button table-action-button-raise"
+                        onClick={handleBetRaiseClick}
+                        disabled={isProcessingAction}
+                      >
+                        {currentHand.currentBet && Number(currentHand.currentBet) > 0 ? 'Raise' : 'Bet'}
+                      </button>
+                    )}
+                  </>
+                )
+              })()}
               <button
                 className="table-action-button table-action-button-all-in"
                 onClick={handleAllInClick}

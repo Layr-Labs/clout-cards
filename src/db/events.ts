@@ -30,6 +30,7 @@ export enum EventKind {
   BET = 'bet',
   HAND_START = 'hand_start',
   HAND_END = 'hand_end',
+  COMMUNITY_CARDS = 'community_cards',
   JOIN_TABLE = 'join_table',
   LEAVE_TABLE = 'leave_table',
   CREATE_TABLE = 'create_table',

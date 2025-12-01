@@ -104,6 +104,120 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
 }
 
 /**
+ * Checks if side pots should be created (commitments differ between players)
+ *
+ * Side pots are only needed when non-folded players who have ALREADY ACTED in the current round
+ * have different total commitment levels. We don't consider players who haven't acted yet,
+ * as their final commitment level is unknown.
+ *
+ * @param handId - Hand ID
+ * @param tx - Prisma transaction client
+ * @returns True if side pots should be created (commitments differ among players who have acted), false otherwise
+ */
+export async function shouldCreateSidePots(handId: number, tx: any): Promise<boolean> {
+  // Get current hand to determine the current round
+  const hand = await (tx as any).hand.findUnique({
+    where: { id: handId },
+  });
+
+  if (!hand || !hand.round) {
+    return false; // Can't determine if side pots needed without current round
+  }
+
+  const currentRound = hand.round;
+
+  // Get all active players (not folded)
+  const handPlayers = await (tx as any).handPlayer.findMany({
+    where: { handId },
+  });
+
+  const activePlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
+
+  // Need at least 2 players for commitments to differ
+  if (activePlayers.length < 2) {
+    return false;
+  }
+
+  // Get all actions taken in the current round (excluding POST_BLIND)
+  // Only players who have acted in the current round should be considered
+  const currentRoundActions = await (tx as any).handAction.findMany({
+    where: {
+      handId,
+      round: currentRound,
+      action: {
+        not: 'POST_BLIND',
+      },
+    },
+  });
+
+  // Create a set of seat numbers that have acted in the current round
+  const actedSeats = new Set(currentRoundActions.map((a: any) => a.seatNumber));
+
+  // Also include ALL_IN players (they've effectively "acted" by going all-in)
+  const allInPlayers = activePlayers.filter((p: any) => p.status === 'ALL_IN');
+  for (const player of allInPlayers) {
+    actedSeats.add(player.seatNumber);
+  }
+
+  // Only consider players who have acted in the current round
+  const playersWhoHaveActed = activePlayers.filter((p: any) => actedSeats.has(p.seatNumber));
+
+  // Need at least 2 players who have acted for commitments to differ
+  if (playersWhoHaveActed.length < 2) {
+    return false; // Not enough players have acted yet to determine if side pots are needed
+  }
+
+  // Get all HandAction records to calculate total chips committed per player
+  const allActions = await (tx as any).handAction.findMany({
+    where: { handId },
+    orderBy: [{ round: 'asc' }, { timestamp: 'asc' }],
+  });
+
+  // Calculate total chips committed per player across all rounds
+  const playerRoundTotals = new Map<string, bigint>(); // key: "seatNumber-round"
+
+  for (const action of allActions) {
+    const seatNumber = action.seatNumber;
+    const round = action.round;
+    const actionType = action.action;
+    const amount = (action.amount as bigint) || 0n;
+
+    // Skip if player folded
+    const player = activePlayers.find((p: any) => p.seatNumber === seatNumber);
+    if (!player) {
+      continue;
+    }
+
+    // Skip CHECK and FOLD actions (no amount)
+    if (actionType === 'CHECK' || actionType === 'FOLD') {
+      continue;
+    }
+
+    const roundKey = `${seatNumber}-${round}`;
+    const currentRoundTotal = playerRoundTotals.get(roundKey) || 0n;
+    playerRoundTotals.set(roundKey, currentRoundTotal + amount);
+  }
+
+  // Sum across all rounds for each player
+  const playerTotals = new Map<number, bigint>();
+  for (const [roundKey, roundTotal] of playerRoundTotals) {
+    const seatNumber = parseInt(roundKey.split('-')[0]);
+    const currentTotal = playerTotals.get(seatNumber) || 0n;
+    playerTotals.set(seatNumber, currentTotal + roundTotal);
+  }
+
+  // Get unique commitment levels ONLY for players who have acted in the current round
+  const commitmentLevels = new Set<bigint>();
+  for (const player of playersWhoHaveActed) {
+    const total = playerTotals.get(player.seatNumber) || 0n;
+    commitmentLevels.add(total);
+  }
+
+  // Side pots are needed if there are different commitment levels among players who have acted
+  return commitmentLevels.size > 1;
+}
+
+/**
  * Creates side pots based on player commitments
  *
  * When players go all-in with different amounts, we need to create side pots
@@ -292,9 +406,9 @@ export function getMinimumBetAmount(table: { bigBlind: bigint }): bigint {
 }
 
 /**
- * Validates a bet/raise amount
+ * Validates an incremental bet/raise amount
  *
- * @param amount - Amount to bet/raise (total bet amount, not raise amount)
+ * @param incrementalAmount - Incremental amount to bet/raise (what player is adding from their balance)
  * @param currentBet - Current highest bet
  * @param chipsCommitted - Player's current chips committed this round
  * @param tableBalanceGwei - Player's available table balance
@@ -303,49 +417,54 @@ export function getMinimumBetAmount(table: { bigBlind: bigint }): bigint {
  * @returns Object with isValid flag and error message if invalid
  */
 export function validateBetAmount(
-  amount: bigint,
+  incrementalAmount: bigint,
   currentBet: bigint | null,
   chipsCommitted: bigint,
   tableBalanceGwei: bigint,
   minimumRaise: bigint,
   bigBlind: bigint
 ): { isValid: boolean; error?: string } {
-  // Check if amount exceeds available balance
-  if (amount > tableBalanceGwei) {
+  // Check if incremental amount exceeds available balance
+  if (incrementalAmount > tableBalanceGwei) {
     return {
       isValid: false,
-      error: `Insufficient balance. Available: ${tableBalanceGwei} gwei, Requested: ${amount} gwei`,
+      error: `Insufficient balance. Available: ${tableBalanceGwei} gwei, Requested: ${incrementalAmount} gwei`,
     };
   }
 
+  // Calculate total bet amount after this action
+  const totalBetAmount = chipsCommitted + incrementalAmount;
   const currentBetAmount = currentBet || 0n;
+
+  // Check if this is an all-in move (player is betting their entire balance)
+  const isAllIn = incrementalAmount >= tableBalanceGwei;
 
   if (currentBetAmount === 0n) {
     // Betting (no current bet)
-    if (amount < bigBlind) {
+    if (totalBetAmount < bigBlind) {
       return {
         isValid: false,
-        error: `Minimum bet is ${bigBlind} gwei (big blind)`,
+        error: `Minimum bet is ${bigBlind} gwei (big blind). Your total bet would be ${totalBetAmount} gwei`,
       };
     }
   } else {
-    // Raising (current bet exists)
-    const totalBetAmount = amount; // Amount is total bet, not raise amount
+    // Raising or calling (current bet exists)
     const raiseAmount = totalBetAmount - currentBetAmount;
 
-    if (raiseAmount < minimumRaise) {
+    // If player is going all-in, allow it even if it doesn't meet minimum raise
+    // as long as they're matching or exceeding the current bet
+    if (!isAllIn && raiseAmount < minimumRaise && totalBetAmount > currentBetAmount) {
       return {
         isValid: false,
         error: `Minimum raise is ${minimumRaise} gwei. You must raise by at least ${minimumRaise} gwei`,
       };
     }
 
-    // Check that player can afford the raise
-    const additionalNeeded = totalBetAmount - chipsCommitted;
-    if (additionalNeeded > tableBalanceGwei) {
+    // If not all-in and total bet is less than current bet, that's invalid (can't bet less)
+    if (!isAllIn && totalBetAmount < currentBetAmount) {
       return {
         isValid: false,
-        error: `Insufficient balance to raise. Need ${additionalNeeded} gwei, have ${tableBalanceGwei} gwei`,
+        error: `Total bet amount (${totalBetAmount} gwei) must be at least the current bet (${currentBetAmount} gwei). Use CALL to match the current bet.`,
       };
     }
   }

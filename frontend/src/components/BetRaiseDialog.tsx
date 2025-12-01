@@ -39,7 +39,6 @@ export function BetRaiseDialog({
   const [betAmount, setBetAmount] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
 
-  const currentBetNum = currentBet ? BigInt(currentBet) : 0n
   const chipsCommittedNum = BigInt(chipsCommitted)
   const tableBalanceNum = BigInt(tableBalanceGwei)
   const bigBlindNum = BigInt(bigBlind)
@@ -48,44 +47,45 @@ export function BetRaiseDialog({
   // Calculate available balance (what player can bet/raise)
   const availableBalance = tableBalanceNum
 
-  // Calculate minimum and maximum bet amounts
-  const minBetAmount = isBetting ? bigBlindNum : currentBetNum + minimumRaiseNum
-  const maxBetAmount = chipsCommittedNum + availableBalance
+  // Calculate minimum and maximum INCREMENTAL bet amounts (what player adds from balance)
+  // For betting: minimum incremental is bigBlind (since chipsCommitted is 0 or just blinds)
+  // For raising: minimum incremental is minimumRaise (to raise by minimumRaise from currentBet)
+  const minIncrementalAmount = isBetting ? bigBlindNum : minimumRaiseNum
+  const maxIncrementalAmount = availableBalance // Can't bet more than available balance
 
-  // Calculate quick bet amounts
+  // Calculate quick bet amounts (as incremental amounts)
   const quickAmounts = (() => {
     if (isBetting) {
-      // Betting: Min (big blind), 2x, 3x, Pot (if we had pot size), All-in
+      // Betting: Min (big blind), 2x, 3x, All-in
       return [
         { label: 'Min Bet', amount: bigBlindNum },
         { label: '2x', amount: bigBlindNum * 2n },
         { label: '3x', amount: bigBlindNum * 3n },
-        { label: 'All-in', amount: maxBetAmount, isAllIn: true },
+        { label: 'All-in', amount: maxIncrementalAmount, isAllIn: true },
       ]
     } else {
       // Raising: Min Raise, 2x Min, 3x Min, All-in
-      const minRaiseTotal = currentBetNum + minimumRaiseNum
       return [
-        { label: 'Min Raise', amount: minRaiseTotal },
-        { label: '2x Min', amount: currentBetNum + (minimumRaiseNum * 2n) },
-        { label: '3x Min', amount: currentBetNum + (minimumRaiseNum * 3n) },
-        { label: 'All-in', amount: maxBetAmount, isAllIn: true },
+        { label: 'Min Raise', amount: minimumRaiseNum },
+        { label: '2x Min', amount: minimumRaiseNum * 2n },
+        { label: '3x Min', amount: minimumRaiseNum * 3n },
+        { label: 'All-in', amount: maxIncrementalAmount, isAllIn: true },
       ]
     }
   })()
 
-  // Filter quick amounts to only those <= maxBetAmount
-  const validQuickAmounts = quickAmounts.filter(q => q.amount <= maxBetAmount)
+  // Filter quick amounts to only those <= maxIncrementalAmount
+  const validQuickAmounts = quickAmounts.filter(q => q.amount <= maxIncrementalAmount)
 
   // Initialize bet amount to minimum when dialog opens
   useEffect(() => {
     if (isOpen) {
-      setBetAmount(minBetAmount.toString())
+      setBetAmount(minIncrementalAmount.toString())
       setError(null)
     }
-  }, [isOpen, minBetAmount])
+  }, [isOpen, minIncrementalAmount])
 
-  // Validate bet amount
+  // Validate incremental bet amount
   useEffect(() => {
     if (!betAmount) {
       setError(null)
@@ -93,20 +93,20 @@ export function BetRaiseDialog({
     }
 
     try {
-      const amount = BigInt(betAmount)
+      const incrementalAmount = BigInt(betAmount)
 
-      if (amount < minBetAmount) {
-        setError(`Minimum ${isBetting ? 'bet' : 'raise'} is ${formatEth(minBetAmount)}`)
+      if (incrementalAmount < minIncrementalAmount) {
+        setError(`Minimum ${isBetting ? 'bet' : 'raise'} is ${formatEth(minIncrementalAmount)}`)
         return
       }
 
-      if (amount > maxBetAmount) {
-        setError(`Maximum bet is ${formatEth(maxBetAmount)} (your balance)`)
+      if (incrementalAmount > maxIncrementalAmount) {
+        setError(`Maximum ${isBetting ? 'bet' : 'raise'} is ${formatEth(maxIncrementalAmount)} (your balance)`)
         return
       }
 
       // Check if amount is in increments of big blind
-      const remainder = amount % bigBlindNum
+      const remainder = incrementalAmount % bigBlindNum
       if (remainder !== 0n) {
         setError(`Amount must be in increments of ${formatEth(bigBlindNum)} (big blind)`)
         return
@@ -116,11 +116,11 @@ export function BetRaiseDialog({
     } catch (err) {
       setError('Invalid amount')
     }
-  }, [betAmount, minBetAmount, maxBetAmount, bigBlindNum, isBetting])
+  }, [betAmount, minIncrementalAmount, maxIncrementalAmount, bigBlindNum, isBetting])
 
   function handleSliderChange(e: React.ChangeEvent<HTMLInputElement>) {
     const percentage = parseFloat(e.target.value)
-    const amount = minBetAmount + ((maxBetAmount - minBetAmount) * BigInt(Math.floor(percentage * 100)) / 10000n)
+    const amount = minIncrementalAmount + ((maxIncrementalAmount - minIncrementalAmount) * BigInt(Math.floor(percentage * 100)) / 10000n)
     // Round to nearest big blind increment
     const rounded = (amount / bigBlindNum) * bigBlindNum
     setBetAmount(rounded.toString())
@@ -138,7 +138,7 @@ export function BetRaiseDialog({
 
     try {
       const amount = BigInt(betAmount)
-      if (amount < minBetAmount || amount > maxBetAmount) {
+      if (amount < minIncrementalAmount || amount > maxIncrementalAmount) {
         return
       }
 
@@ -150,25 +150,24 @@ export function BetRaiseDialog({
 
   if (!isOpen) return null
 
-  const betAmountNum = betAmount ? BigInt(betAmount) : 0n
-  const sliderPercentage = maxBetAmount > minBetAmount
-    ? Number((betAmountNum - minBetAmount) * 10000n / (maxBetAmount - minBetAmount)) / 100
+  const incrementalAmountNum = betAmount ? BigInt(betAmount) : 0n
+  const sliderPercentage = maxIncrementalAmount > minIncrementalAmount
+    ? Number((incrementalAmountNum - minIncrementalAmount) * 10000n / (maxIncrementalAmount - minIncrementalAmount)) / 100
     : 0
 
-  const totalToBet = betAmountNum > chipsCommittedNum ? betAmountNum - chipsCommittedNum : 0n
-  const remainingBalance = tableBalanceNum - totalToBet
+  // Calculate total bet amount (chipsCommitted + incremental) for display
+  const totalBetAmount = chipsCommittedNum + incrementalAmountNum
+  const remainingBalance = tableBalanceNum - incrementalAmountNum
 
   // Determine which quick button is selected (if any)
-  // Compare betAmount with each quick amount, accounting for rounding to big blind increments
+  // Compare incrementalAmount with each quick amount
   const selectedQuickIndex = validQuickAmounts.findIndex((quick) => {
     if (quick.isAllIn) {
-      // For all-in, check if bet amount equals max bet amount
-      return betAmountNum === maxBetAmount
+      // For all-in, check if incremental amount equals max incremental amount
+      return incrementalAmountNum === maxIncrementalAmount
     }
-    // For other amounts, check if bet amount matches (within rounding tolerance)
-    const roundedQuickAmount = (quick.amount / bigBlindNum) * bigBlindNum
-    const roundedBetAmount = (betAmountNum / bigBlindNum) * bigBlindNum
-    return roundedBetAmount === roundedQuickAmount && betAmountNum > 0n
+    // For other amounts, compare exact values (quick amounts are already multiples of bigBlind/minimumRaise)
+    return incrementalAmountNum === quick.amount && incrementalAmountNum > 0n
   })
 
   return (
@@ -209,7 +208,7 @@ export function BetRaiseDialog({
 
           <div className="bet-raise-amount-section">
             <label htmlFor="bet-amount" className="bet-raise-amount-label">
-              {isBetting ? 'Bet Amount' : 'Total Bet Amount'} (ETH)
+              {isBetting ? 'Bet Amount' : 'Raise Amount'} (ETH)
             </label>
             <input
               id="bet-amount"
@@ -227,7 +226,7 @@ export function BetRaiseDialog({
               }}
               className="bet-raise-amount-input"
               disabled={isLoading}
-              placeholder={formatEth(minBetAmount)}
+              placeholder={formatEth(minIncrementalAmount)}
             />
 
             <input
@@ -256,8 +255,8 @@ export function BetRaiseDialog({
 
           <div className="bet-raise-summary">
             <div className="bet-raise-summary-row">
-              <span>Total to {isBetting ? 'bet' : 'raise'}:</span>
-              <span className="bet-raise-summary-value">{formatEth(totalToBet)}</span>
+              <span>Total bet after this {isBetting ? 'bet' : 'raise'}:</span>
+              <span className="bet-raise-summary-value">{formatEth(totalBetAmount)}</span>
             </div>
             <div className="bet-raise-summary-row">
               <span>Remaining balance:</span>

@@ -746,8 +746,8 @@ app.get('/currentHand', requireWalletAuth({ addressSource: 'query' }), async (re
         twitterAvatarUrl: session?.twitterAvatarUrl || null,
         status: player.status,
         chipsCommitted: player.chipsCommitted.toString(),
-        // Only return hole cards for authorized player if they're active
-        holeCards: isAuthorizedPlayer && player.status === 'ACTIVE' 
+        // Only return hole cards for authorized player if they're active or all-in
+        holeCards: isAuthorizedPlayer && (player.status === 'ACTIVE' || player.status === 'ALL_IN')
           ? (Array.isArray(player.holeCards) ? player.holeCards : [])
           : null,
       };
@@ -835,27 +835,93 @@ app.post('/action', requireWalletAuth({ addressSource: 'query' }), async (req: R
 
     let result;
     if (action === 'FOLD') {
-      result = await foldAction(tableIdNum, walletAddress);
+      result = await foldAction(prisma, tableIdNum, walletAddress);
     } else if (action === 'CALL') {
-      result = await callAction(tableIdNum, walletAddress);
+      result = await callAction(prisma, tableIdNum, walletAddress);
     } else if (action === 'CHECK') {
-      result = await checkAction(tableIdNum, walletAddress);
+      result = await checkAction(prisma, tableIdNum, walletAddress);
     } else if (action === 'BET') {
       const { amountGwei } = req.body;
       if (!amountGwei) {
         throw new ValidationError('amountGwei is required for BET action');
       }
       const amount = BigInt(amountGwei);
-      result = await betAction(tableIdNum, walletAddress, amount);
+      result = await betAction(prisma, tableIdNum, walletAddress, amount);
     } else if (action === 'RAISE') {
       const { amountGwei } = req.body;
       if (!amountGwei) {
         throw new ValidationError('amountGwei is required for RAISE action');
       }
       const amount = BigInt(amountGwei);
-      result = await raiseAction(tableIdNum, walletAddress, amount);
+      
+      // Check if there's a current bet - if not, this should be a BET, not a RAISE
+      // (This can happen when frontend sends RAISE for all-in at start of new betting round)
+      const hand = await (prisma as any).hand.findFirst({
+        where: {
+          tableId: tableIdNum,
+          status: { not: 'COMPLETED' },
+        },
+      });
+      
+      const currentBet = hand?.currentBet || 0n;
+      if (currentBet === 0n) {
+        // No current bet - use BET action instead
+        result = await betAction(prisma, tableIdNum, walletAddress, amount);
+      } else {
+        // Current bet exists - use RAISE action
+        result = await raiseAction(prisma, tableIdNum, walletAddress, amount);
+      }
     } else if (action === 'ALL_IN') {
-      result = await allInAction(tableIdNum, walletAddress);
+      // ALL_IN is now handled as a RAISE with the player's full stack (incremental amount)
+      // Get current hand and player state to get tableBalanceGwei
+      const hand = await (prisma as any).hand.findFirst({
+        where: {
+          tableId: tableIdNum,
+          status: { not: 'COMPLETED' },
+        },
+        include: {
+          players: true,
+        },
+      });
+
+      if (!hand) {
+        throw new NotFoundError('No active hand found');
+      }
+
+      // Get player's seat session
+      const seatSession = await prisma.tableSeatSession.findFirst({
+        where: {
+          tableId: tableIdNum,
+          walletAddress: walletAddress.toLowerCase(),
+          isActive: true,
+        },
+      });
+
+      if (!seatSession) {
+        throw new NotFoundError('Player not seated at table');
+      }
+
+      // Get hand player record
+      const handPlayer = hand.players.find(
+        (p: any) => p.seatNumber === seatSession.seatNumber
+      );
+
+      if (!handPlayer) {
+        throw new NotFoundError('Player not in hand');
+      }
+
+      // For all-in, the incremental amount is the player's entire remaining balance
+      const allInIncrementalAmount = seatSession.tableBalanceGwei;
+      const currentBet = hand.currentBet || 0n;
+
+      // ALL_IN is handled as a BET if currentBet === 0, otherwise as a RAISE
+      if (currentBet === 0n) {
+        // No current bet - use BET action
+        result = await betAction(prisma, tableIdNum, walletAddress, allInIncrementalAmount);
+      } else {
+        // Current bet exists - use RAISE action
+        result = await raiseAction(prisma, tableIdNum, walletAddress, allInIncrementalAmount);
+      }
     } else {
       throw new ValidationError(`Action ${action} is not implemented`);
     }
