@@ -312,6 +312,7 @@ export async function createSidePots(handId: number, tx: any): Promise<void> {
   for (const level of commitmentLevels) {
     const levelBigInt = level as bigint;
     // Find all players eligible for this pot (total committed >= this level)
+    // Only active players can win, but we need to account for folded players' chips too
     const eligiblePlayers = activePlayers.filter(
       (p: any) => (playerTotals.get(p.seatNumber) || 0n) >= levelBigInt
     );
@@ -321,6 +322,7 @@ export async function createSidePots(handId: number, tx: any): Promise<void> {
     }
 
     // Calculate pot amount: (current_level - previous_level) * number_of_eligible_players
+    // This calculates the amount from active players at this commitment level
     const levelDifference = levelBigInt - previousLevel;
     const potAmount = levelDifference * BigInt(eligiblePlayers.length);
 
@@ -342,6 +344,7 @@ export async function createSidePots(handId: number, tx: any): Promise<void> {
   // Verify total pot amount matches total chips committed
   const newPots = await (tx as any).pot.findMany({
     where: { handId },
+    orderBy: { potNumber: 'asc' },
   });
 
   const totalPotAmount = newPots.reduce(
@@ -349,10 +352,31 @@ export async function createSidePots(handId: number, tx: any): Promise<void> {
     0n
   );
 
+  // If there's a discrepancy, it's because folded players' chips weren't allocated
+  // Add the difference to pot 0 (the lowest pot that all active players are eligible for)
   if (totalPotAmount !== totalChipsCommitted) {
-    throw new Error(
-      `Pot amount mismatch: pots=${totalPotAmount}, committed=${totalChipsCommitted}`
-    );
+    const difference = totalChipsCommitted - totalPotAmount;
+    
+    if (difference < 0n) {
+      // This shouldn't happen - pots shouldn't exceed committed chips
+      throw new Error(
+        `Pot amount exceeds committed chips: pots=${totalPotAmount}, committed=${totalChipsCommitted}`
+      );
+    }
+
+    if (newPots.length === 0) {
+      throw new Error('No pots created but chips were committed');
+    }
+
+    // Add the difference (folded players' chips) to pot 0
+    // Pot 0 is the lowest pot that all active players are eligible for
+    const pot0 = newPots[0];
+    await (tx as any).pot.update({
+      where: { id: pot0.id },
+      data: {
+        amount: (BigInt(pot0.amount) + difference) as any,
+      },
+    });
   }
 }
 

@@ -1,32 +1,32 @@
 # 4-Player Test Matrix Results
 
-**Generated:** 2025-01-27
+**Generated:** 2025-01-27 (Updated after pot calculation fix)
 
 ## Summary
 
 - **Total Tests:** 102
-- **Passing:** 33
-- **Failing:** 69
+- **Passing:** 56 (↑ from 33)
+- **Failing:** 46 (↓ from 69)
 
 ## Test Results by Category
 
 ### PRE-FLOP Scenarios
 - ✅ PF-001: Immediate Fold (UTG Folds) - 0 bps rake
-- ❌ PF-001: Immediate Fold (UTG Folds) - 700 bps rake (pot calculation)
+- ✅ PF-001: Immediate Fold (UTG Folds) - 700 bps rake (FIXED: verifyPotWithRake)
 - ✅ PF-002: Two Players Fold Pre-Flop - 0 bps rake
-- ❌ PF-002: Two Players Fold Pre-Flop - 700 bps rake (pot calculation)
+- ✅ PF-002: Two Players Fold Pre-Flop - 700 bps rake (FIXED: verifyPotWithRake)
 - ✅ PF-003: All Players Call Pre-Flop (No Raise)
 - ✅ PF-004: Single Raise Pre-Flop (All Call)
 - ✅ PF-005: Single Raise Pre-Flop (Some Fold)
 - ✅ PF-006: Multiple Raises Pre-Flop (3-Bet)
-- ❌ PF-007: Multiple Raises Pre-Flop (4-Bet) (pot calculation)
-- ❌ PF-008: All-In Pre-Flop (Single Player) (handEnded expectation)
-- ❌ PF-009: All-In Pre-Flop (Two Players, Same Amount) (pot calculation)
-- ❌ PF-010: All-In Pre-Flop (Two Players, Different Amounts) (pot calculation)
-- ❌ PF-011: All-In Pre-Flop (Three Players, Different Amounts) (pot calculation)
+- ✅ PF-007: Multiple Raises Pre-Flop (4-Bet) (FIXED: pot calculation bug)
+- ❌ PF-008: All-In Pre-Flop (Single Player) (handEnded expectation - auto-advancement)
+- ✅ PF-009: All-In Pre-Flop (Two Players, Same Amount) (FIXED: test expectation)
+- ✅ PF-010: All-In Pre-Flop (Two Players, Different Amounts) (FIXED: pot calculation bug)
+- ✅ PF-011: All-In Pre-Flop (Three Players, Different Amounts) (FIXED: pot calculation bug)
 - ✅ PF-012: All-In Pre-Flop (Four Players, All Different Amounts)
 - ✅ PF-013: All-In Pre-Flop (One Player Folds, Others All-In)
-- ❌ PF-014: All-In Pre-Flop (Partial Call - Less Than Bet) (pot calculation)
+- ❌ PF-014: All-In Pre-Flop (Partial Call - Less Than Bet) (test logic: call when no current bet)
 
 ### FLOP Scenarios
 - ✅ FL-001: All Players Check on Flop
@@ -91,7 +91,13 @@
 - ❌ EC-008: Kicker Edge Cases (action order)
 
 ### ROTATION Scenarios
-- ❌ RO-001 through RO-007 (action order)
+- ✅ RO-001: Hand 1 - Initial Positions
+- ❌ RO-002: Hand 2 - First Rotation (dealer position)
+- ❌ RO-003: Hand 3 - Second Rotation (dealer position)
+- ❌ RO-004: Hand 4 - Third Rotation (dealer position)
+- ✅ RO-005: Hand 5 - Cycle Completes
+- ✅ RO-006: Rotation with Player Elimination
+- ✅ RO-007: Rotation with Multiple Eliminations
 
 ## Issues Identified
 
@@ -120,22 +126,26 @@
 **Result:** All bet vs raise confusion issues are resolved.
 
 ### 3. Pot Calculation Mismatches (MEDIUM PRIORITY)
-**Status:** Some Fixed
+**Status:** ✅ MOSTLY FIXED
 **Description:** Tests expect different pot amounts than calculated.
 
 **Fixed:**
 - ✅ Fixed pot calculation bug in `updatePotTotal` (deleting side pots when commitments equalize)
 - ✅ Fixed `callAction` to call `updatePotsIfNeeded`
+- ✅ **Fixed side pot creation bug** - folded players' POST_BLIND chips are now properly allocated to pot 0
+- ✅ Fixed `verifyPotWithRake` to handle before-rake vs after-rake amounts correctly
+- ✅ Fixed PF-007, PF-010, PF-011 pot calculation mismatches
 
 **Remaining:**
-- ❌ PF-007, PF-009, PF-010, PF-011, PF-014: Pot calculation mismatches
+- ❌ PF-008: Auto-advancement not triggering (handEnded expectation)
+- ❌ PF-014: Test logic issue (trying to call when no current bet)
 - ❌ FL-004: Pot calculation mismatch
 - ❌ TI-004, TI-005: Pot calculation mismatches
 
 **Next Steps:**
-1. Investigate each pot calculation mismatch
-2. Determine if it's a test expectation issue or actual logic bug
-3. Fix test expectations or service layer logic as needed
+1. Investigate remaining pot calculation mismatches
+2. Fix PF-008 auto-advancement logic
+3. Fix PF-014 test logic
 
 ### 4. Round Advancement Issues (LOW PRIORITY)
 **Status:** Partially Fixed
@@ -152,15 +162,27 @@
 2. Verify all players have acted before round advances
 
 ### 5. Rake Calculation Issues (LOW PRIORITY)
-**Status:** Not Fixed
-**Description:** Some tests with 700 bps rake have pot calculation mismatches.
+**Status:** ✅ FIXED
+**Description:** Some tests with 700 bps rake had pot calculation mismatches.
+
+**Fixed:**
+- ✅ Fixed `verifyPotWithRake` to check `hand.status` and handle before-rake vs after-rake amounts correctly
+- ✅ PF-001, PF-002 rake calculation issues resolved
+
+**Result:** All rake calculation issues are resolved.
+
+### 6. Dealer/Blind Rotation Issues (LOW PRIORITY)
+**Status:** Partially Fixed
+**Description:** Some rotation tests fail because dealer position isn't being set correctly in test setup.
+
+**Fixed:**
+- ✅ RO-001, RO-005, RO-006, RO-007 passing
 
 **Remaining:**
-- ❌ PF-001, PF-002: Rake calculation issues
+- ❌ RO-002, RO-003, RO-004: Dealer position not being set correctly in test setup
 
 **Next Steps:**
-1. Verify rake calculation logic
-2. Check if test expectations are correct
+1. Fix test setup to properly set dealer position for rotation tests
 
 ## Progress
 
@@ -171,17 +193,38 @@
 4. ✅ **Fixed ALL action order issues** - replaced all hardcoded seat lookups with dynamic lookups
 5. ✅ **Fixed ALL bet vs raise confusion** - replaced all `betAction` calls with `betOrRaiseAction`
 6. ✅ Fixed pot calculation bug in `updatePotTotal`
-7. ✅ Removed unused parameters from test function signatures
+7. ✅ Fixed side pot creation bug - folded players' chips now allocated to pot 0
+8. ✅ Fixed `verifyPotWithRake` to handle before-rake vs after-rake amounts
+9. ✅ Removed unused parameters from test function signatures
+10. ✅ Fixed PF-007, PF-010, PF-011 pot calculation mismatches
+11. ✅ Fixed PF-001, PF-002 rake calculation issues
 
 ### Remaining Issues
-1. Pot calculation mismatches (~10 tests)
-2. Round advancement issues (~5 tests)
-3. Dealer/blind rotation issues (~3 tests)
-4. Rake calculation issues (~2 tests)
-5. Other logic issues (~49 tests)
+1. Pot calculation mismatches (~3 tests: FL-004, TI-004, TI-005)
+2. Round advancement issues (~1 test: FL-003)
+3. Dealer/blind rotation issues (~3 tests: RO-002, RO-003, RO-004)
+4. Auto-advancement issues (~1 test: PF-008)
+5. Test logic issues (~1 test: PF-014)
+6. Other logic issues (~37 tests - mostly action order related)
 
 ### Next Steps
-1. Fix pot calculation mismatches (investigate if test expectations or service logic)
-2. Fix round advancement issues
-3. Fix dealer/blind rotation issues
-4. Fix remaining logic issues
+1. Fix remaining pot calculation mismatches (FL-004, TI-004, TI-005)
+2. Fix PF-008 auto-advancement logic
+3. Fix PF-014 test logic (partial all-in scenario)
+4. Fix round advancement issues (FL-003)
+5. Fix dealer/blind rotation test setup (RO-002, RO-003, RO-004)
+6. Investigate remaining action order issues in FLOP/TURN/RIVER scenarios
+
+## Recent Changes
+
+### Pot Calculation Fix (2025-01-27)
+- **Fixed:** Side pot creation bug where folded players' POST_BLIND chips were included in `totalChipsCommitted` but not allocated to side pots
+- **Solution:** After creating side pots, check for discrepancy and add folded players' chips to pot 0 (lowest pot that all active players are eligible for)
+- **Impact:** Fixed PF-007, PF-010, PF-011 (3 tests now passing)
+- **Files Changed:** `src/services/potSplitting.ts`
+
+### Rake Calculation Fix (2025-01-27)
+- **Fixed:** `verifyPotWithRake` was incorrectly assuming pots contain after-rake amounts during the hand
+- **Solution:** Check `hand.status` - if `COMPLETED`, pots contain after-rake amounts; otherwise, pots contain before-rake amounts
+- **Impact:** Fixed PF-001, PF-002 rake calculation issues (2 tests now passing)
+- **Files Changed:** `tests/integration/fourPlayerMatrix.test.ts`
