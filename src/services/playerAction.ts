@@ -5,6 +5,7 @@
  * Manages turn progression, hand resolution, and settlement.
  */
 
+import { PrismaClient } from '@prisma/client';
 import { prisma } from '../db/client';
 import { withEvent, EventKind, createEventInTransaction } from '../db/events';
 import { getTeePublicKey } from '../db/eip712';
@@ -434,12 +435,24 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
       },
     });
   } else {
-    // Find dealer index in sorted active players
-    const dealerIndex = sortedPlayers.findIndex((p: any) => p.seatNumber === dealerPosition);
-    const firstActionIndex = dealerIndex >= 0 
-      ? (dealerIndex + 1) % sortedPlayers.length
-      : 0; // If dealer not in active players, start with first active player
-    firstActionSeat = sortedPlayers[firstActionIndex].seatNumber;
+    // Post-flop: first to act is the small blind (or first active player after small blind if small blind folded/all-in)
+    // Find small blind seat from hand
+    const smallBlindSeat = hand.smallBlindSeat;
+    const smallBlindPlayer = sortedPlayers.find((p: any) => p.seatNumber === smallBlindSeat);
+    
+    if (smallBlindPlayer) {
+      // Small blind is active, they act first
+      firstActionSeat = smallBlindPlayer.seatNumber;
+    } else {
+      // Small blind is not active (folded/all-in), find first active player after small blind
+      const smallBlindIndex = sortedPlayers.findIndex((p: any) => p.seatNumber > smallBlindSeat);
+      if (smallBlindIndex >= 0) {
+        firstActionSeat = sortedPlayers[smallBlindIndex].seatNumber;
+      } else {
+        // Wrap around - first active player is first in sorted list
+        firstActionSeat = sortedPlayers[0].seatNumber;
+      }
+    }
 
     // Reset all active players' chips committed for new round
     for (const player of sortedPlayers) {
@@ -762,6 +775,7 @@ function createSettlementData(handId: number, settlement: {
   deck: any;
   rakeBps: number;
   potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
+  handData?: any;
 }): ShowdownSettlementData {
   return {
     handId,
@@ -772,6 +786,7 @@ function createSettlementData(handId: number, settlement: {
     isShowdown: true,
     rakeBps: settlement.rakeBps,
     potRakeInfo: settlement.potRakeInfo,
+    handData: settlement.handData, // Include hand data to avoid re-querying after transaction
   };
 }
 
@@ -879,6 +894,42 @@ async function handleNextPlayerOrRoundComplete(
     result.settlementData = roundResult.settlementData;
     result.winnerSeatNumber = roundResult.winnerSeatNumber;
   } else {
+    // Check if the next player has already matched the current bet
+    // If so, the round is complete (e.g., big blind already matched, action comes back to them)
+    const hand = await (tx as any).hand.findUnique({
+      where: { id: handId },
+      include: { players: true },
+    });
+    
+    if (hand) {
+      const nextPlayer = hand.players.find((p: any) => p.seatNumber === nextSeat);
+      if (nextPlayer) {
+        const currentBet = hand.currentBet || 0n;
+        const chipsCommitted = (nextPlayer.chipsCommitted as bigint) || 0n;
+        
+        // If next player has already matched the bet, round is complete
+        // (e.g., big blind already matched by posting blind, action comes back to them)
+        if (chipsCommitted >= currentBet && currentBet > 0n) {
+          // Check if all active players have matched the bet
+          const allActivePlayers = hand.players.filter((p: any) => p.status === 'ACTIVE');
+          const allMatched = allActivePlayers.every((p: any) => {
+            const pChipsCommitted = (p.chipsCommitted as bigint) || 0n;
+            return pChipsCommitted >= currentBet;
+          });
+          
+          if (allMatched) {
+            // Round is complete - all players have matched the bet
+            const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
+            result.handEnded = roundResult.handEnded;
+            result.roundAdvanced = roundResult.roundAdvanced;
+            result.settlementData = roundResult.settlementData;
+            result.winnerSeatNumber = roundResult.winnerSeatNumber;
+            return result;
+          }
+        }
+      }
+    }
+    
     // Update hand to next active player's turn
     await (tx as any).hand.update({
       where: { id: handId },
@@ -1087,6 +1138,7 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
   deck: any;
   rakeBps: number;
   potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
+  handData?: any;
 }> {
   // Ensure pots are calculated before settlement
   // Only create side pots if commitments differ, otherwise update total pot
@@ -1152,6 +1204,17 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
   // The seed was Date.now() when the hand started, so we use startedAt
   const shuffleSeed = hand.startedAt.getTime().toString();
 
+  // Query full hand data WITHIN transaction before updating status (to avoid race conditions)
+  const handForEvent = await (tx as any).hand.findUnique({
+    where: { id: handId },
+    include: {
+      table: true,
+      pots: true,
+      players: true,
+      actions: true,
+    },
+  });
+
   // Update hand status and reveal shuffle seed
   await (tx as any).hand.update({
     where: { id: handId },
@@ -1169,6 +1232,7 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
     deck: hand.deck,
     rakeBps,
     potRakeInfo, // Include rake info for event payload
+    handData: handForEvent, // Include hand data to avoid re-querying after transaction
   };
 }
 
@@ -1193,6 +1257,7 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
   }>;
   rakeBps: number;
   potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
+  handData?: any;
 }> {
   // Ensure pots are calculated before settlement
   // Only create side pots if commitments differ, otherwise update total pot
@@ -1217,7 +1282,37 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
     throw new Error(`Hand ${handId} not found`);
   }
 
-  const communityCards = (hand.communityCards || []) as Card[];
+  let communityCards = (hand.communityCards || []) as Card[];
+  
+  // If community cards haven't been dealt yet (e.g., all-in pre-flop), deal them now
+  if (communityCards.length < 5) {
+    const deck = hand.deck as Card[];
+    const deckPosition = hand.deckPosition || 0;
+    const cardsNeeded = 5 - communityCards.length;
+    
+    // Ensure we have enough cards in the deck
+    if (deckPosition + cardsNeeded > deck.length) {
+      throw new Error(`Not enough cards in deck to deal ${cardsNeeded} community cards`);
+    }
+    
+    // Deal the remaining community cards
+    const newCommunityCards = [...communityCards];
+    for (let i = 0; i < cardsNeeded; i++) {
+      newCommunityCards.push(deck[deckPosition + i]);
+    }
+    
+    // Update hand with all community cards
+    await (tx as any).hand.update({
+      where: { id: handId },
+      data: {
+        communityCards: newCommunityCards as any,
+        deckPosition: deckPosition + cardsNeeded,
+      },
+    });
+    
+    communityCards = newCommunityCards;
+  }
+  
   if (communityCards.length !== 5) {
     throw new Error(`Expected 5 community cards, got ${communityCards.length}`);
   }
@@ -1393,6 +1488,17 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
   // Get shuffle seed
   const shuffleSeed = hand.startedAt.getTime().toString();
 
+  // Query full hand data WITHIN transaction before updating status (to avoid race conditions)
+  const handForEvent = await (tx as any).hand.findUnique({
+    where: { id: handId },
+    include: {
+      table: true,
+      pots: true,
+      players: true,
+      actions: true,
+    },
+  });
+
   // Update hand status
   await (tx as any).hand.update({
     where: { id: handId },
@@ -1423,6 +1529,7 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
     handEvaluations,
     rakeBps,
     potRakeInfo, // Include rake info for event payload
+    handData: handForEvent, // Include hand data to avoid re-querying after transaction
   };
 }
 
@@ -1443,21 +1550,28 @@ async function createHandEndEvent(
   deck: any,
   tableId: number,
   rakeBps: number,
-  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>,
+  handData?: any // Optional hand data to avoid re-querying
 ): Promise<void> {
-  // Get hand details for event
-  const hand = await (prisma as any).hand.findUnique({
-    where: { id: handId },
-    include: {
-      table: true,
-      pots: true,
-      players: true,
-      actions: true,
-    },
-  });
+  // Use provided hand data or query once
+  let hand = handData;
+  
+  if (!hand) {
+    hand = await (prisma as any).hand.findUnique({
+      where: { id: handId },
+      include: {
+        table: true,
+        pots: true,
+        players: true,
+        actions: true,
+      },
+    });
+  }
 
   if (!hand) {
-    throw new Error(`Hand ${handId} not found for event creation`);
+    // Hand not found - might have been cleaned up, skip event creation
+    console.warn(`Hand ${handId} not found for event creation, skipping`);
+    return;
   }
 
   // Create a map of pot rake info for easy lookup
@@ -1504,13 +1618,26 @@ async function createHandEndEvent(
         }] : [],
       };
     }),
-    actions: hand.actions.map((action: any) => ({
-      seatNumber: action.seatNumber,
-      round: action.round,
-      action: action.action,
-      amount: action.amount?.toString() || null,
-      timestamp: action.timestamp.toISOString(),
-    })),
+    actions: hand.actions
+      .sort((a: any, b: any) => {
+        // Sort by round order, then by timestamp
+        const roundOrder: Record<string, number> = {
+          PRE_FLOP: 0,
+          FLOP: 1,
+          TURN: 2,
+          RIVER: 3,
+        };
+        const roundDiff = roundOrder[a.round] - roundOrder[b.round];
+        if (roundDiff !== 0) return roundDiff;
+        return a.timestamp.getTime() - b.timestamp.getTime();
+      })
+      .map((action: any) => ({
+        seatNumber: action.seatNumber,
+        round: action.round,
+        action: action.action,
+        amount: action.amount?.toString() || null,
+        timestamp: action.timestamp.toISOString(),
+      })),
   };
 
   const payloadJson = JSON.stringify(payload);
@@ -1537,24 +1664,61 @@ async function createHandEndEventShowdown(
   deck: any,
   tableId: number,
   rakeBps: number,
-  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>
+  potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>,
+  handData?: any // Optional hand data to avoid re-querying
 ): Promise<void> {
-  // Get hand details for event
-  const hand = await (prisma as any).hand.findUnique({
-    where: { id: handId },
-    include: {
-      table: true,
-      pots: true,
-      players: true,
-      actions: true,
-    },
-  });
-
+  // Use provided hand data or query once
+  let hand = handData;
+  
   if (!hand) {
-    throw new Error(`Hand ${handId} not found for event creation`);
+    hand = await (prisma as any).hand.findUnique({
+      where: { id: handId },
+      include: {
+        table: true,
+        pots: true,
+        players: true,
+        actions: true,
+      },
+    });
   }
 
-  const communityCards = (hand.communityCards || []) as Card[];
+  if (!hand) {
+    // Hand not found - might have been cleaned up, skip event creation
+    console.warn(`Hand ${handId} not found for event creation, skipping`);
+    return;
+  }
+
+  let communityCards = (hand.communityCards || []) as Card[];
+  
+  // If community cards haven't been dealt yet (e.g., all-in pre-flop), deal them now
+  if (communityCards.length < 5) {
+    const deck = hand.deck as Card[];
+    const deckPosition = hand.deckPosition || 0;
+    const cardsNeeded = 5 - communityCards.length;
+    
+    // Ensure we have enough cards in the deck
+    if (deckPosition + cardsNeeded > deck.length) {
+      throw new Error(`Not enough cards in deck to deal ${cardsNeeded} community cards`);
+    }
+    
+    // Deal the remaining community cards
+    const newCommunityCards = [...communityCards];
+    for (let i = 0; i < cardsNeeded; i++) {
+      newCommunityCards.push(deck[deckPosition + i]);
+    }
+    
+    // Update hand with all community cards (using prisma client directly since we're outside transaction)
+    await (prisma as any).hand.update({
+      where: { id: handId },
+      data: {
+        communityCards: newCommunityCards as any,
+        deckPosition: deckPosition + cardsNeeded,
+      },
+    });
+    
+    communityCards = newCommunityCards;
+  }
+  
   const nonFoldedPlayers = hand.players.filter((p: any) => p.status !== 'FOLDED');
 
   // Evaluate hands for all non-folded players (ACTIVE and ALL_IN)
@@ -1638,13 +1802,26 @@ async function createHandEndEventShowdown(
         winners: potWinners,
       };
     }),
-    actions: hand.actions.map((action: any) => ({
-      seatNumber: action.seatNumber,
-      round: action.round,
-      action: action.action,
-      amount: action.amount?.toString() || null,
-      timestamp: action.timestamp.toISOString(),
-    })),
+    actions: hand.actions
+      .sort((a: any, b: any) => {
+        // Sort by round order, then by timestamp
+        const roundOrder: Record<string, number> = {
+          PRE_FLOP: 0,
+          FLOP: 1,
+          TURN: 2,
+          RIVER: 3,
+        };
+        const roundDiff = roundOrder[a.round] - roundOrder[b.round];
+        if (roundDiff !== 0) return roundDiff;
+        return a.timestamp.getTime() - b.timestamp.getTime();
+      })
+      .map((action: any) => ({
+        seatNumber: action.seatNumber,
+        round: action.round,
+        action: action.action,
+        amount: action.amount?.toString() || null,
+        timestamp: action.timestamp.toISOString(),
+      })),
   };
 
   const payloadJson = JSON.stringify(payload);
@@ -1675,6 +1852,7 @@ type SingleWinnerSettlementData = {
   deck: any;
   rakeBps: number;
   potRakeInfo: PotRakeInfo[];
+  handData?: any; // Optional hand data queried within transaction to avoid race conditions
 };
 
 /**
@@ -1689,6 +1867,7 @@ type ShowdownSettlementData = {
   isShowdown: boolean;
   rakeBps: number;
   potRakeInfo: PotRakeInfo[];
+  handData?: any; // Optional hand data queried within transaction to avoid race conditions
 };
 
 /**
@@ -1709,9 +1888,34 @@ async function handlePostActionSettlement(
     return;
   }
 
+  // Use hand data from settlement if available (queried within transaction to avoid race conditions)
+  // Otherwise, query once as fallback
+  let hand = settlementData.handData;
+  
+  if (!hand) {
+    // Fallback: Query hand data once
+    hand = await (prisma as any).hand.findUnique({
+      where: { id: settlementData.handId },
+      include: {
+        table: true,
+        pots: true,
+        players: true,
+        actions: true,
+      },
+    });
+
+    if (!hand) {
+      // Hand not found - might have been cleaned up or transaction issue
+      // Just skip event creation in this case
+      console.warn(`Hand ${settlementData.handId} not found for event creation, skipping`);
+      return;
+    }
+  }
+
   // Check if this is a showdown settlement (has winnerSeatNumbers array)
   if ('winnerSeatNumbers' in settlementData && settlementData.isShowdown) {
     // Showdown settlement (multiple winners possible)
+    // Pass hand data directly to avoid re-querying
     await createHandEndEventShowdown(
       settlementData.handId,
       settlementData.winnerSeatNumbers,
@@ -1720,10 +1924,12 @@ async function handlePostActionSettlement(
       settlementData.deck,
       tableId,
       settlementData.rakeBps,
-      settlementData.potRakeInfo
+      settlementData.potRakeInfo,
+      hand // Pass hand data directly
     );
   } else if ('winnerSeatNumber' in settlementData) {
     // Single winner settlement (fold scenario)
+    // Pass hand data directly to avoid re-querying
     await createHandEndEvent(
       settlementData.handId,
       settlementData.winnerSeatNumber,
@@ -1732,11 +1938,12 @@ async function handlePostActionSettlement(
       settlementData.deck,
       tableId,
       settlementData.rakeBps,
-      settlementData.potRakeInfo
+      settlementData.potRakeInfo,
+      hand // Pass hand data directly
     );
   }
 
-  // Start new hand if conditions are met
+  // Start new hand if conditions are met (both players have enough balance for big blind)
   await startNewHandIfPossible(tableId);
 }
 
@@ -1760,7 +1967,7 @@ async function handlePostActionSettlement(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function foldAction(
-  prismaClient: any,
+  prismaClient: PrismaClient,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
@@ -1855,6 +2062,7 @@ export async function foldAction(
           deck: settlement.deck,
           rakeBps: settlement.rakeBps,
           potRakeInfo: settlement.potRakeInfo,
+          handData: settlement.handData, // Include hand data queried within transaction
         };
       } else {
         // Advance to next active player
@@ -1886,6 +2094,7 @@ export async function foldAction(
                   isShowdown: true,
                   rakeBps: settlement.rakeBps,
                   potRakeInfo: settlement.potRakeInfo,
+                  handData: settlement.handData, // Include hand data queried within transaction
                 };
                 winnerSeatNumber = settlement.winnerSeatNumbers[0];
                 break;
@@ -1910,6 +2119,7 @@ export async function foldAction(
                 isShowdown: true,
                 rakeBps: settlement.rakeBps,
                 potRakeInfo: settlement.potRakeInfo,
+                handData: settlement.handData, // Include hand data queried within transaction
               };
               winnerSeatNumber = settlement.winnerSeatNumbers[0];
             }
@@ -1958,7 +2168,7 @@ export async function foldAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function callAction(
-  prismaClient: any,
+  prismaClient: PrismaClient,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
@@ -2069,10 +2279,20 @@ export async function callAction(
           hand.round!,
           tx
         );
-        handEnded = roundResult.handEnded;
-        roundAdvanced = roundResult.roundAdvanced;
-        settlementData = roundResult.settlementData;
-        winnerSeatNumber = roundResult.winnerSeatNumber;
+        
+        // If round was completed in handleNextPlayerOrRoundComplete, update flags
+        if (roundResult.roundAdvanced || roundResult.handEnded) {
+          handEnded = roundResult.handEnded;
+          roundAdvanced = roundResult.roundAdvanced;
+          settlementData = roundResult.settlementData;
+          winnerSeatNumber = roundResult.winnerSeatNumber;
+        } else {
+          // Round not complete, just advancing to next player
+          handEnded = roundResult.handEnded;
+          roundAdvanced = roundResult.roundAdvanced;
+          settlementData = roundResult.settlementData;
+          winnerSeatNumber = roundResult.winnerSeatNumber;
+        }
       }
     }
 
@@ -2106,7 +2326,7 @@ export async function callAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function checkAction(
-  prismaClient: any,
+  prismaClient: PrismaClient,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
@@ -2326,8 +2546,11 @@ async function checkAndHandleOnlyOneActivePlayer(
   const activePlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ACTIVE');
   const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
 
-  // If only one active player remains and others are all-in, trigger auto-advancement
-  if (activePlayers.length === 1 && allInPlayers.length > 0) {
+  // Trigger auto-advancement if:
+  // 1. Only one active player remains and others are all-in (active player can't be raised)
+  // 2. All remaining players are all-in (no one can act further)
+  if ((activePlayers.length === 1 && allInPlayers.length > 0) ||
+      (activePlayers.length === 0 && allInPlayers.length >= 2 && nonFoldedPlayers.length >= 2)) {
     const shouldAutoSettle = await advanceToRiverIfOnlyOneActivePlayer(handId, tx);
     if (shouldAutoSettle) {
       const settlement = await settleHandShowdown(handId, tx);
@@ -2460,7 +2683,7 @@ async function handleBettingActionCompletion(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function betAction(
-  prismaClient: any,
+  prismaClient: PrismaClient,
   tableId: number,
   walletAddress: string,
   incrementalAmountGwei: bigint
@@ -2494,7 +2717,7 @@ export async function betAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function raiseAction(
-  prismaClient: any,
+  prismaClient: PrismaClient,
   tableId: number,
   walletAddress: string,
   incrementalAmountGwei: bigint,
@@ -2538,11 +2761,9 @@ export async function raiseAction(
       // All-in: use entire balance, no rounding restriction
       roundedIncremental = seatSession.tableBalanceGwei;
     } else {
-      // Not all-in: round to nearest big blind increment and validate
-      roundedIncremental = roundToIncrement(incrementalAmountGwei, table.bigBlind);
-      if (roundedIncremental !== incrementalAmountGwei) {
-        throw new Error(`Bet amount must be in increments of ${table.bigBlind} gwei (big blind). Rounded: ${roundedIncremental} gwei`);
-      }
+      // Not all-in: use the incremental amount as-is
+      // The minimum bet/raise validation will ensure it meets requirements
+      roundedIncremental = incrementalAmountGwei;
     }
 
     // 6. Get minimum bet/raise amount
@@ -2649,7 +2870,7 @@ export async function raiseAction(
  * @throws {Error} If validation fails or transaction fails
  */
 export async function allInAction(
-  prismaClient: any,
+  prismaClient: PrismaClient,
   tableId: number,
   walletAddress: string
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
@@ -2724,8 +2945,8 @@ export async function allInAction(
       true
     );
 
-    // 11. Recalculate side pots immediately (all-in players can't match further raises)
-    await createSidePots(hand.id, tx);
+    // 11. Update pots conditionally (create side pots if commitments differ, otherwise update total)
+    await updatePotsIfNeeded(hand.id, tx);
 
     // 12. Check if betting round is complete
     const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);

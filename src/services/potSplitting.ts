@@ -17,15 +17,15 @@ import { prisma } from '../db/client';
  * @param tx - Prisma transaction client
  */
 export async function updatePotTotal(handId: number, tx: any): Promise<void> {
-  // Get all active players (not folded)
+  // Get all players (including folded - their chips are still in the pot)
   const handPlayers = await (tx as any).handPlayer.findMany({
     where: { handId },
   });
 
   const activePlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
 
-  if (activePlayers.length === 0) {
-    return; // No active players, no pot to update
+  if (handPlayers.length === 0) {
+    return; // No players, no pot to update
   }
 
   // Get all HandAction records for this hand to calculate total chips committed
@@ -36,6 +36,7 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
 
   // Calculate total chips committed per player across all rounds
   // All actions store incremental amounts - simply sum them
+  // Include ALL players (even folded ones) because their chips are still in the pot
   const playerRoundTotals = new Map<string, bigint>(); // key: "seatNumber-round"
 
   // Process all actions - sum incremental amounts per player per round
@@ -45,13 +46,9 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
     const actionType = action.action;
     const amount = (action.amount as bigint) || 0n;
 
-    // Skip if player folded (they're not in activePlayers, but check anyway)
-    const player = activePlayers.find((p: any) => p.seatNumber === seatNumber);
-    if (!player) {
-      continue; // Player folded, skip their actions
-    }
-
     // Skip CHECK and FOLD actions (no amount)
+    // Note: We include folded players' previous actions (POST_BLIND, CALL, RAISE, ALL_IN)
+    // because their chips are still in the pot
     if (actionType === 'CHECK' || actionType === 'FOLD') {
       continue;
     }
@@ -69,7 +66,7 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
     playerTotals.set(seatNumber, currentTotal + roundTotal);
   }
 
-  // Calculate total chips committed by all active players
+  // Calculate total chips committed by all players (including folded - their chips are still in the pot)
   const totalChipsCommitted = Array.from(playerTotals.values()).reduce(
     (sum: bigint, total: bigint) => sum + total,
     0n
@@ -82,6 +79,7 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
 
   if (existingPot) {
     // Update existing pot 0 with total amount
+    // eligibleSeatNumbers should only include active players (they can win), but pot includes all chips
     await (tx as any).pot.update({
       where: { id: existingPot.id },
       data: {
@@ -91,6 +89,7 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
     });
   } else {
     // Create pot 0 if it doesn't exist
+    // eligibleSeatNumbers should only include active players (they can win), but pot includes all chips
     await (tx as any).pot.create({
       data: {
         handId,
@@ -246,15 +245,15 @@ export async function shouldCreateSidePots(handId: number, tx: any): Promise<boo
  * @param tx - Prisma transaction client
  */
 export async function createSidePots(handId: number, tx: any): Promise<void> {
-  // Get all active players (not folded)
+  // Get all players (including folded - their chips are still in the pot)
   const handPlayers = await (tx as any).handPlayer.findMany({
     where: { handId },
   });
 
   const activePlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
 
-  if (activePlayers.length === 0) {
-    throw new Error('No active players found for pot creation');
+  if (handPlayers.length === 0) {
+    throw new Error('No players found for pot creation');
   }
 
   // Get all HandAction records for this hand to calculate total chips committed
@@ -266,12 +265,8 @@ export async function createSidePots(handId: number, tx: any): Promise<void> {
   // Calculate total chips committed per player across all rounds
   // All actions now store incremental amounts (POST_BLIND, CALL, RAISE, ALL_IN)
   // Simply sum all actions per player per round, then sum across rounds
+  // Include ALL players (even folded ones) because their chips are still in the pot
   const playerRoundTotals = new Map<string, bigint>(); // key: "seatNumber-round", tracks total per round
-
-  // Initialize totals
-  for (const player of activePlayers) {
-    // Initialize for all rounds (we'll populate as we process actions)
-  }
 
   // Process all actions - sum incremental amounts per player per round
   for (const action of allActions) {
@@ -280,13 +275,9 @@ export async function createSidePots(handId: number, tx: any): Promise<void> {
     const actionType = action.action;
     const amount = (action.amount as bigint) || 0n;
 
-    // Skip if player folded (they're not in activePlayers, but check anyway)
-    const player = activePlayers.find((p: any) => p.seatNumber === seatNumber);
-    if (!player) {
-      continue; // Player folded, skip their actions
-    }
-
     // Skip CHECK and FOLD actions (no amount)
+    // Note: We include folded players' previous actions (POST_BLIND, CALL, RAISE, ALL_IN)
+    // because their chips are still in the pot
     if (actionType === 'CHECK' || actionType === 'FOLD') {
       continue;
     }

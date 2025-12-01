@@ -7,6 +7,11 @@ export default defineConfig({
     setupFiles: ['./tests/setup/database.ts'],
     testTimeout: 60000, // 60 seconds for container startup
     hookTimeout: 120000, // 2 minutes for beforeAll/afterAll
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/onchain/lib/**', // Exclude OpenZeppelin and other library tests
+    ],
   },
 });
 
