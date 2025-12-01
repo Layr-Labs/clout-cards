@@ -72,34 +72,24 @@ export async function updatePotTotal(handId: number, tx: any): Promise<void> {
     0n
   );
 
-  // Get or create pot 0
-  const existingPot = await (tx as any).pot.findFirst({
-    where: { handId, potNumber: 0 },
+  // Delete all existing pots (including side pots) before creating/updating pot 0
+  // This ensures that if side pots were created earlier but commitments are now equal,
+  // we consolidate everything into a single pot
+  await (tx as any).pot.deleteMany({
+    where: { handId },
   });
 
-  if (existingPot) {
-    // Update existing pot 0 with total amount
-    // eligibleSeatNumbers should only include active players (they can win), but pot includes all chips
-    await (tx as any).pot.update({
-      where: { id: existingPot.id },
-      data: {
-        amount: totalChipsCommitted,
-        eligibleSeatNumbers: activePlayers.map((p: any) => p.seatNumber) as any,
-      },
-    });
-  } else {
-    // Create pot 0 if it doesn't exist
-    // eligibleSeatNumbers should only include active players (they can win), but pot includes all chips
-    await (tx as any).pot.create({
-      data: {
-        handId,
-        potNumber: 0,
-        amount: totalChipsCommitted,
-        eligibleSeatNumbers: activePlayers.map((p: any) => p.seatNumber) as any,
-        winnerSeatNumbers: null,
-      },
-    });
-  }
+  // Create pot 0 with total amount
+  // eligibleSeatNumbers should only include active players (they can win), but pot includes all chips
+  await (tx as any).pot.create({
+    data: {
+      handId,
+      potNumber: 0,
+      amount: totalChipsCommitted,
+      eligibleSeatNumbers: activePlayers.map((p: any) => p.seatNumber) as any,
+      winnerSeatNumbers: null,
+    },
+  });
 }
 
 /**

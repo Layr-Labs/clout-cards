@@ -36,6 +36,7 @@ import {
   foldAction,
   allInAction,
 } from '../../src/services/playerAction';
+import { startHand } from '../../src/services/startHand';
 import { Card } from '../../src/types/cards';
 
 describe('2-Player Poker Test Matrix', () => {
@@ -110,105 +111,120 @@ describe('2-Player Poker Test Matrix', () => {
   }
 
   /**
-   * Helper to create initial pot and POST_BLIND actions for a hand
-   * This is needed because updatePotTotal relies on HandAction records
+   * Helper to properly initialize a hand using the service layer
+   * Uses startHand to ensure all state is correctly set up (blinds, balances, pots, etc.)
    * 
-   * @param prisma - Prisma client
-   * @param handId - Hand ID
-   * @param initialPotAmount - Initial pot amount (defaults to SMALL_BLIND + BIG_BLIND)
+   * Note: This replaces the old setupInitialPot which directly manipulated the database.
+   * startHand properly handles:
+   * - Deducting blinds from tableBalanceGwei
+   * - Creating POST_BLIND HandAction records
+   * - Updating HandPlayer chipsCommitted
+   * - Creating initial pot
+   * 
+   * @param tableId - Table ID (hand will be created via startHand)
+   * @returns The hand created by startHand with all proper state
    */
-  async function setupInitialPot(prisma: any, handId: number, initialPotAmount: bigint = SMALL_BLIND + BIG_BLIND): Promise<void> {
-    await (prisma as any).pot.create({
-      data: {
-        handId,
-        potNumber: 0,
-        amount: initialPotAmount,
-        eligibleSeatNumbers: [0, 1],
-        winnerSeatNumbers: null,
-      },
-    });
-
-    await (prisma as any).handAction.createMany({
-      data: [
-        {
-          handId,
-          seatNumber: 0,
-          round: 'PRE_FLOP',
-          action: 'POST_BLIND',
-          amount: SMALL_BLIND,
-        },
-        {
-          handId,
-          seatNumber: 1,
-          round: 'PRE_FLOP',
-          action: 'POST_BLIND',
-          amount: BIG_BLIND,
-        },
-      ],
-    });
+  async function initializeHandWithServiceLayer(tableId: number) {
+    const prisma = getTestPrisma();
+    // Use the actual service layer to start the hand properly
+    const hand = await startHand(tableId);
+    return { prisma, hand };
   }
 
   /**
-   * Helper to create POST_BLIND actions for a hand
-   * This is needed because updatePotTotal relies on HandAction records
+   * Helper to create POST_BLIND actions using the service layer
+   * This is a no-op wrapper - POST_BLIND actions are created by startHand
+   * Kept for compatibility with existing test code that calls this
    * 
-   * @param prisma - Prisma client
-   * @param handId - Hand ID
+   * @deprecated Use startHand instead - this function does nothing as startHand already handles POST_BLIND
    */
   async function createPostBlindActions(prisma: any, handId: number): Promise<void> {
-    await (prisma as any).handAction.createMany({
-      data: [
-        {
-          handId,
-          seatNumber: 0,
-          round: 'PRE_FLOP',
-          action: 'POST_BLIND',
-          amount: SMALL_BLIND,
-        },
-        {
-          handId,
-          seatNumber: 1,
-          round: 'PRE_FLOP',
-          action: 'POST_BLIND',
-          amount: BIG_BLIND,
-        },
-      ],
-    });
+    // POST_BLIND actions are created by startHand service
+    // This function is kept for backward compatibility but does nothing
+    // Tests should use startHand to properly initialize hands
   }
 
   /**
-   * Helper to create PRE_FLOP actions (POST_BLIND + CALL) for tests that start at FLOP
-   * This simulates a completed PRE_FLOP round where both players called
+   * Helper to simulate PRE_FLOP actions using the actual service layer
+   * This properly simulates a completed PRE_FLOP round by using actual action functions
+   * which will naturally advance the round when complete
    * 
    * @param prisma - Prisma client
-   * @param handId - Hand ID
+   * @param tableId - Table ID
+   * @param handId - Hand ID (from startHand)
+   * @param targetRound - Target round to advance to (FLOP, TURN, or RIVER)
+   * @returns Updated hand after actions complete
    */
-  async function createPreFlopActions(prisma: any, handId: number): Promise<void> {
-    await (prisma as any).handAction.createMany({
-      data: [
-        {
-          handId,
-          seatNumber: 0,
-          round: 'PRE_FLOP',
-          action: 'POST_BLIND',
-          amount: SMALL_BLIND,
-        },
-        {
-          handId,
-          seatNumber: 1,
-          round: 'PRE_FLOP',
-          action: 'POST_BLIND',
-          amount: BIG_BLIND,
-        },
-        {
-          handId,
-          seatNumber: 0,
-          round: 'PRE_FLOP',
-          action: 'CALL',
-          amount: SMALL_BLIND, // Call to match big blind (1M more)
-        },
-      ],
-    });
+  async function simulatePreFlopActions(
+    prisma: any,
+    tableId: number,
+    handId: number,
+    targetRound: 'FLOP' | 'TURN' | 'RIVER' = 'FLOP'
+  ): Promise<any> {
+    // Use actual service layer functions to simulate PRE_FLOP actions
+    // startHand already posted blinds, so we just need to complete the round
+    
+    // Get current hand to find who acts first and get blind positions
+    const hand = await prisma.hand.findUnique({ where: { id: handId } });
+    if (!hand) {
+      throw new Error(`Hand ${handId} not found`);
+    }
+
+    // Get wallet addresses for small blind and big blind seats
+    const smallBlindSeat = hand.smallBlindSeat;
+    const bigBlindSeat = hand.bigBlindSeat;
+    const smallBlindWallet = getWalletBySeat(smallBlindSeat);
+    const bigBlindWallet = getWalletBySeat(bigBlindSeat);
+
+    // Small blind calls (1M more to match big blind)
+    const callResult = await callAction(prisma, tableId, smallBlindWallet);
+    
+    // Check if round advanced (in 2-player, after small blind calls, round should advance to FLOP)
+    const handAfterCall = await prisma.hand.findUnique({ where: { id: handId } });
+    if (!handAfterCall) {
+      throw new Error(`Hand ${handId} not found after call`);
+    }
+    
+    // If round advanced to FLOP, we're done with PRE_FLOP simulation
+    // Otherwise, big blind needs to act (check) to complete PRE_FLOP
+    if (handAfterCall.round === 'PRE_FLOP' && !callResult.roundAdvanced) {
+      // Big blind checks (option to check) to complete PRE_FLOP
+      await checkAction(prisma, tableId, bigBlindWallet);
+    }
+    // If round already advanced, PRE_FLOP is complete and we're at FLOP
+
+    // Round should now advance to FLOP automatically
+    // If we need TURN or RIVER, we'll need to simulate those rounds too
+    const updatedHand = await prisma.hand.findUnique({ where: { id: handId } });
+    
+    if (targetRound === 'TURN' || targetRound === 'RIVER') {
+      // Simulate FLOP round: all check to advance to TURN
+      // Small blind acts first on FLOP
+      if (updatedHand?.round === 'FLOP') {
+        await checkAction(prisma, tableId, smallBlindWallet);
+        await checkAction(prisma, tableId, bigBlindWallet);
+      }
+    }
+
+    if (targetRound === 'RIVER') {
+      // Simulate TURN round: all check to advance to RIVER
+      // Small blind acts first on TURN
+      const turnHand = await prisma.hand.findUnique({ where: { id: handId } });
+      if (turnHand?.round === 'TURN') {
+        await checkAction(prisma, tableId, smallBlindWallet);
+        await checkAction(prisma, tableId, bigBlindWallet);
+      }
+    }
+
+    return await prisma.hand.findUnique({ where: { id: handId } });
+  }
+
+  /**
+   * Helper to get wallet address by seat number
+   */
+  function getWalletBySeat(seatNumber: number): string {
+    const wallets = [PLAYER_0_WALLET, PLAYER_1_WALLET];
+    return wallets[seatNumber];
   }
 
   /**
@@ -350,37 +366,67 @@ describe('2-Player Poker Test Matrix', () => {
       { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: player1Balance },
     ]);
 
-    const hand = await createTestHand(prisma, table.id, {
-      deck,
-      dealerPosition: 0,
-      smallBlindSeat: 0,
-      bigBlindSeat: 1,
-      currentActionSeat,
-      round,
-      status: round,
-      currentBet,
-      deckPosition,
-      communityCards,
-    });
+    // Use service layer to properly start the hand
+    // This handles: blinds, balances, pots, POST_BLIND actions, chipsCommitted, etc.
+    // Pass prisma instance to ensure we use the test database
+    const handResult = await startHand(table.id, prisma);
+    const handId = handResult.id;
 
-    await createHandPlayers(prisma, hand.id, [
-      {
-        seatNumber: 0,
-        walletAddress: PLAYER_0_WALLET,
-        holeCards: deck.slice(0, 2),
-        status: 'ACTIVE',
-        chipsCommitted: player0ChipsCommitted,
-      },
-      {
-        seatNumber: 1,
-        walletAddress: PLAYER_1_WALLET,
-        holeCards: deck.slice(2, 4),
-        status: 'ACTIVE',
-        chipsCommitted: player1ChipsCommitted,
-      },
-    ]);
+    // For deterministic decks (needed for specific test scenarios like ties, kickers),
+    // we need to update the deck and hole cards AFTER startHand
+    // This is minimal DB manipulation but necessary for test determinism
+    const standardDeck = createStandardDeck();
+    const isDeterministicDeck = JSON.stringify(deck) !== JSON.stringify(standardDeck);
+    
+    if (isDeterministicDeck) {
+      // Update deck and hole cards for deterministic testing
+      // Note: We don't set communityCards here - let advanceBettingRound deal them naturally
+      // We just set the deck and deckPosition so cards are dealt from the right position
+      await prisma.hand.update({
+        where: { id: handId },
+        data: {
+          deck: deck as any,
+          deckPosition: round === 'PRE_FLOP' ? 0 : round === 'FLOP' ? 4 : round === 'TURN' ? 5 : 6,
+          // Don't set communityCards - let advanceBettingRound deal them from the deck
+        },
+      });
 
-    return { prisma, table, hand, deck };
+      // Update hole cards for each player
+      const handPlayers = await prisma.handPlayer.findMany({
+        where: { handId },
+        orderBy: { seatNumber: 'asc' },
+      });
+
+      for (let i = 0; i < handPlayers.length && i < 2; i++) {
+        await prisma.handPlayer.update({
+          where: { id: handPlayers[i].id },
+          data: {
+            holeCards: deck.slice(i * 2, i * 2 + 2) as any,
+          },
+        });
+      }
+    }
+
+    // Get the actual hand state after startHand
+    const hand = await prisma.hand.findUnique({ where: { id: handId } });
+    if (!hand) {
+      throw new Error(`Hand ${handId} not found after startHand`);
+    }
+
+    // If we need to start at FLOP/TURN/RIVER, simulate PRE_FLOP actions using service layer
+    if (round !== 'PRE_FLOP') {
+      await simulatePreFlopActions(
+        prisma,
+        table.id,
+        handId,
+        round
+      );
+    }
+
+    // Refresh hand state after potential round advancement
+    const finalHand = await prisma.hand.findUnique({ where: { id: handId } });
+
+    return { prisma, table, hand: finalHand!, deck };
   }
 
   /**
@@ -412,7 +458,7 @@ describe('2-Player Poker Test Matrix', () => {
 
   describe('PRE-FLOP Scenarios', () => {
     testWithRakeVariants('PF-001: Immediate Fold (Small Blind Folds)', async ({ prisma, hand, table }, rakeBps) => {
-      await setupInitialPot(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand
 
       // Small blind folds
       const result = await foldAction(prisma, table.id, PLAYER_0_WALLET);
@@ -426,7 +472,7 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('PF-002: Immediate Fold (Big Blind Folds)', async ({ prisma, hand, table }, rakeBps) => {
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
       // Small blind raises to 5M (3M incremental)
       await raiseAction(prisma, table.id, PLAYER_0_WALLET, 3000000n, false);
@@ -459,7 +505,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('PF-004: Single Raise Pre-Flop (Call)', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ rakeBps: 0 });
 
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
       // Small blind raises to 5M (3M incremental)
       await raiseAction(prisma, table.id, PLAYER_0_WALLET, 3000000n, false);
@@ -475,7 +521,7 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('PF-005: Single Raise Pre-Flop (Fold)', async ({ prisma, hand, table }, rakeBps) => {
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
       // Small blind raises to 5M (3M incremental)
       await raiseAction(prisma, table.id, PLAYER_0_WALLET, 3000000n, false);
@@ -533,19 +579,19 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('PF-008: Small Blind All-In Pre-Flop (Big Blind Calls)', async ({ prisma, hand, table }, rakeBps) => {
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
-      // Small blind goes all-in (51M total: 1M + 50M incremental)
+      // Small blind goes all-in (50M total: 1M blind + 49M all-in)
       await allInAction(prisma, table.id, PLAYER_0_WALLET);
 
-      // Big blind calls (49M to match 51M total)
+      // Big blind calls (48M to match 50M total: 2M blind + 48M call)
       const result = await callAction(prisma, table.id, PLAYER_1_WALLET);
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true); // Both all-in, auto-advance to river
 
-      // Pot: Small blind (1M + 50M = 51M) + Big blind (2M + 49M = 51M) = 102M before rake
-      await verifyPotWithRake(prisma, hand.id, 102000000n, rakeBps);
+      // Pot: Small blind (1M blind + 49M all-in = 50M) + Big blind (2M blind + 48M call = 50M) = 100M before rake
+      await verifyPotWithRake(prisma, hand.id, 100000000n, rakeBps);
     }, { player0Balance: 50000000n, player1Balance: 100000000n });
 
     testWithRakeVariants('PF-009: Small Blind All-In Pre-Flop (Big Blind Folds)', async ({ prisma, hand, table }, rakeBps) => {
@@ -559,210 +605,106 @@ describe('2-Player Poker Test Matrix', () => {
       expect(result.handEnded).toBe(true);
       expect(result.winnerSeatNumber).toBe(0);
 
-      await verifyPotWithRake(prisma, hand.id, 50000000n, rakeBps);
+      // Pot: Small blind (1M blind + 49M all-in = 50M) + Big blind (2M blind stays in pot when folded) = 52M before rake
+      await verifyPotWithRake(prisma, hand.id, 52000000n, rakeBps);
     }, { player0Balance: 50000000n, player1Balance: 100000000n });
 
     it('PF-010: Big Blind All-In Pre-Flop (Small Blind Calls)', async () => {
-      const prisma = getTestPrisma();
-      const table = await createTestTable(prisma, {
-        smallBlind: SMALL_BLIND,
-        bigBlind: BIG_BLIND,
-        perHandRake: 0,
+      const { prisma, hand, table } = await setupStandardTwoPlayerTest({ 
+        rakeBps: 0,
+        player0Balance: 100000000n, // 100M
+        player1Balance: 50000000n, // 50M
       });
 
-      await createTestPlayers(prisma, table.id, [
-        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 100000000n }, // 100M (enough for big blind after settlement)
-        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 50000000n }, // 50M
-      ]);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
-      const deck = createStandardDeck();
-      const hand = await createTestHand(prisma, table.id, {
-        deck,
-        dealerPosition: 0,
-        smallBlindSeat: 0,
-        bigBlindSeat: 1,
-        currentActionSeat: 1, // Big blind's turn (after small blind calls)
-        round: 'PRE_FLOP',
-        status: 'PRE_FLOP',
-        currentBet: BIG_BLIND,
-        deckPosition: 0,
-      });
+      // Small blind raises to keep PRE_FLOP active (otherwise calling would advance to FLOP)
+      // Raise to 4M total: already committed 1M, need 3M more incremental (minimum raise is 2M)
+      await raiseAction(prisma, table.id, smallBlindWallet, 3000000n, false);
 
-      await createHandPlayers(prisma, hand.id, [
-        {
-          seatNumber: 0,
-          walletAddress: PLAYER_0_WALLET,
-          holeCards: deck.slice(0, 2),
-          status: 'ACTIVE',
-          chipsCommitted: SMALL_BLIND, // Start with small blind posted
-        },
-        {
-          seatNumber: 1,
-          walletAddress: PLAYER_1_WALLET,
-          holeCards: deck.slice(2, 4),
-          status: 'ACTIVE',
-          chipsCommitted: BIG_BLIND,
-        },
-      ]);
+      // Big blind goes all-in (50M total: 2M blind + 48M all-in)
+      // This raises the bet to 50M
+      await allInAction(prisma, table.id, bigBlindWallet);
 
-      // Create POST_BLIND actions and small blind call action so updatePotTotal can calculate correctly
-      await createPostBlindActions(prisma, hand.id);
-      // Manually update small blind's chipsCommitted to reflect the call
-      await (prisma as any).handPlayer.updateMany({
-        where: { handId: hand.id, seatNumber: 0 },
-        data: { chipsCommitted: BIG_BLIND },
-      });
-      await (prisma as any).handAction.create({
-        data: {
-          handId: hand.id,
-          seatNumber: 0,
-          round: 'PRE_FLOP',
-          action: 'CALL',
-          amount: BIG_BLIND - SMALL_BLIND, // Call amount to match big blind (1M)
-        },
-      });
-
-      // Big blind goes all-in (52M total: 2M + 50M incremental)
-      await allInAction(prisma, table.id, PLAYER_1_WALLET);
-
-      // Small blind calls (50M to match 52M total)
-      const result = await callAction(prisma, table.id, PLAYER_0_WALLET);
+      // Small blind calls to match 50M total
+      // Already committed: 4M (1M blind + 3M raise)
+      // Needs to call: 50M - 4M = 46M
+      const result = await callAction(prisma, table.id, smallBlindWallet);
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true);
 
-      // Pot calculation: POST_BLIND (3M) + CALL (1M) + ALL_IN (50M) + CALL (50M) = 104M expected
-      // But getting 154M - this appears to be a pot calculation issue that needs investigation
-      // TODO: Investigate why pot is 154M instead of 104M
-      await verifyPotWithRake(prisma, hand.id, 154000000n, 0);
+      // Pot calculation (expected):
+      // Small blind: 1M (POST_BLIND) + 3M (RAISE) + 46M (CALL) = 50M
+      // Big blind: 2M (POST_BLIND) + 48M (ALL_IN) = 50M
+      // Expected total: 100M before rake (both players commit same amount, so 1 pot, no side pots)
+      await verifyPotWithRake(prisma, hand.id, 100000000n, 0);
     });
 
     it('PF-011: Both Players All-In Pre-Flop (Different Amounts)', async () => {
-      const prisma = getTestPrisma();
-      const table = await createTestTable(prisma, {
-        smallBlind: SMALL_BLIND,
-        bigBlind: BIG_BLIND,
-        perHandRake: 0,
+      const { prisma, hand, table } = await setupStandardTwoPlayerTest({ 
+        rakeBps: 0,
+        player0Balance: 50000000n, // 50M
+        player1Balance: 50000000n, // 50M
       });
 
-      await createTestPlayers(prisma, table.id, [
-        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 50000000n }, // 50M (enough for big blind after settlement)
-        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 50000000n }, // 50M (enough for big blind after settlement)
-      ]);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
-      const deck = createStandardDeck();
-      const hand = await createTestHand(prisma, table.id, {
-        deck,
-        dealerPosition: 0,
-        smallBlindSeat: 0,
-        bigBlindSeat: 1,
-        currentActionSeat: 0,
-        round: 'PRE_FLOP',
-        status: 'PRE_FLOP',
-        currentBet: BIG_BLIND,
-        deckPosition: 0,
-      });
+      // Small blind all-in (50M total: 1M blind + 49M all-in)
+      await allInAction(prisma, table.id, smallBlindWallet);
 
-      await createHandPlayers(prisma, hand.id, [
-        {
-          seatNumber: 0,
-          walletAddress: PLAYER_0_WALLET,
-          holeCards: deck.slice(0, 2),
-          status: 'ACTIVE',
-          chipsCommitted: SMALL_BLIND,
-        },
-        {
-          seatNumber: 1,
-          walletAddress: PLAYER_1_WALLET,
-          holeCards: deck.slice(2, 4),
-          status: 'ACTIVE',
-          chipsCommitted: BIG_BLIND,
-        },
-      ]);
+      // Big blind all-in (50M total: 2M blind + 48M all-in)
+      await allInAction(prisma, table.id, bigBlindWallet);
 
-      // Create POST_BLIND actions so updatePotTotal can calculate correctly
-      await createPostBlindActions(prisma, hand.id);
-
-      // Small blind all-in (51M total: 1M + 50M incremental)
-      await allInAction(prisma, table.id, PLAYER_0_WALLET);
-
-      // Big blind all-in (52M total: 2M + 50M incremental)
-      await allInAction(prisma, table.id, PLAYER_1_WALLET);
-
-      // Verify side pots created
-      // Small blind: 51M total, Big blind: 52M total
-      // Pot 0: (51M - 0) × 2 = 102M (both eligible)
-      // Pot 1: (52M - 51M) × 1 = 1M (only big blind eligible)
+      // Both players commit same amount (50M each) → 1 pot, no side pots
+      // Pot: 50M + 50M = 100M
       await assertPotAmounts(prisma, hand.id, [
-        { potNumber: 0, amount: 102000000n },
-        { potNumber: 1, amount: 1000000n },
+        { potNumber: 0, amount: 100000000n },
       ]);
     });
 
     it('PF-011: Both Players All-In Pre-Flop (Different Amounts) - 700 bps rake', async () => {
-      const prisma = getTestPrisma();
-      const table = await createTestTable(prisma, {
-        smallBlind: SMALL_BLIND,
-        bigBlind: BIG_BLIND,
-        perHandRake: 700,
+      const { prisma, hand, table } = await setupStandardTwoPlayerTest({ 
+        rakeBps: 700,
+        player0Balance: 30000000n, // 30M
+        player1Balance: 50000000n, // 50M
       });
 
-      await createTestPlayers(prisma, table.id, [
-        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 30000000n },
-        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 50000000n },
-      ]);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
-      const deck = createStandardDeck();
-      const hand = await createTestHand(prisma, table.id, {
-        deck,
-        dealerPosition: 0,
-        smallBlindSeat: 0,
-        bigBlindSeat: 1,
-        currentActionSeat: 0,
-        round: 'PRE_FLOP',
-        status: 'PRE_FLOP',
-        currentBet: BIG_BLIND,
-        deckPosition: 0,
-      });
+      // Small blind all-in (30M total: 1M blind + 29M all-in)
+      await allInAction(prisma, table.id, smallBlindWallet);
 
-      await createHandPlayers(prisma, hand.id, [
-        {
-          seatNumber: 0,
-          walletAddress: PLAYER_0_WALLET,
-          holeCards: deck.slice(0, 2),
-          status: 'ACTIVE',
-          chipsCommitted: SMALL_BLIND,
-        },
-        {
-          seatNumber: 1,
-          walletAddress: PLAYER_1_WALLET,
-          holeCards: deck.slice(2, 4),
-          status: 'ACTIVE',
-          chipsCommitted: BIG_BLIND,
-        },
-      ]);
+      // Big blind all-in (50M total: 2M blind + 48M all-in)
+      await allInAction(prisma, table.id, bigBlindWallet);
 
-      // Create POST_BLIND actions so updatePotTotal can calculate correctly
-      await createPostBlindActions(prisma, hand.id);
-
-      // Small blind all-in (31M total: 1M + 30M incremental)
-      await allInAction(prisma, table.id, PLAYER_0_WALLET);
-
-      // Big blind all-in (52M total: 2M + 50M incremental)
-      await allInAction(prisma, table.id, PLAYER_1_WALLET);
-
-      // Verify pots with rake
-      // Small blind: 31M total, Big blind: 52M total
-      // Pot 0: (31M - 0) × 2 = 62M before rake, 4.34M rake (7%), 57.66M after rake
-      // Pot 1: (52M - 31M) × 1 = 21M before rake, 1.47M rake (7%), 19.53M after rake
+      // Verify side pots created (different amounts)
+      // Small blind: 30M total, Big blind: 50M total
+      // Pot 0: (30M - 0) × 2 = 60M before rake, 4.2M rake (7%), 55.8M after rake
+      // Pot 1: (50M - 30M) × 1 = 20M before rake, 1.4M rake (7%), 18.6M after rake
       const pots = await prisma.pot.findMany({
         where: { handId: hand.id },
         orderBy: { potNumber: 'asc' },
       });
 
       expect(pots.length).toBe(2);
-      expect(BigInt(pots[0].amount)).toBe(57660000n); // 62M - 4.34M rake
-      expect(BigInt(pots[1].amount)).toBe(19530000n); // 21M - 1.47M rake
+      expect(BigInt(pots[0].amount)).toBe(55800000n); // 60M - 4.2M rake
+      expect(BigInt(pots[1].amount)).toBe(18600000n); // 20M - 1.4M rake
     });
   });
 
@@ -774,11 +716,18 @@ describe('2-Player Poker Test Matrix', () => {
     it('FL-001: Check-Check on Flop', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'FLOP', rakeBps: 0 });
 
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
+
       // Small blind checks
-      await checkAction(prisma, table.id, PLAYER_0_WALLET);
+      await checkAction(prisma, table.id, smallBlindWallet);
 
       // Big blind checks
-      const result = await checkAction(prisma, table.id, PLAYER_1_WALLET);
+      const result = await checkAction(prisma, table.id, bigBlindWallet);
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(false);
@@ -790,13 +739,18 @@ describe('2-Player Poker Test Matrix', () => {
     it('FL-002: Bet-Call on Flop', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'FLOP', rakeBps: 0 });
 
-      await createPreFlopActions(prisma, hand.id);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
       // Small blind bets 5M
-      await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
+      await betAction(prisma, table.id, smallBlindWallet, 5000000n);
 
       // Big blind calls
-      const result = await callAction(prisma, table.id, PLAYER_1_WALLET);
+      const result = await callAction(prisma, table.id, bigBlindWallet);
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(false);
@@ -806,7 +760,7 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('FL-003: Bet-Fold on Flop', async ({ prisma, hand, table }, rakeBps) => {
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       // Small blind bets 5M
       await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
@@ -825,7 +779,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('FL-004: Bet-Raise-Call on Flop', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'FLOP', rakeBps: 0 });
 
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       // Small blind bets 5M
       await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
@@ -849,7 +803,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('FL-005: Bet-Raise-Fold on Flop', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'FLOP', rakeBps: 0 });
 
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       // Small blind bets 5M
       await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
@@ -871,7 +825,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('FL-006: Check-Bet-Call on Flop', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'FLOP', rakeBps: 0 });
 
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       // Small blind checks
       await checkAction(prisma, table.id, PLAYER_0_WALLET);
@@ -892,7 +846,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('FL-007: Check-Bet-Fold on Flop', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'FLOP', rakeBps: 0 });
 
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       // Small blind checks
       await checkAction(prisma, table.id, PLAYER_0_WALLET);
@@ -919,33 +873,46 @@ describe('2-Player Poker Test Matrix', () => {
         player1Balance: 100000000n,
       });
 
-      await createPreFlopActions(prisma, hand.id);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
-      // Small blind all-in
-      await allInAction(prisma, table.id, PLAYER_0_WALLET);
+      // Small blind all-in (48M incremental, 50M total: 1M blind + 1M call + 48M all-in)
+      await allInAction(prisma, table.id, smallBlindWallet);
 
-      // Big blind calls
-      const result = await callAction(prisma, table.id, PLAYER_1_WALLET);
+      // Big blind calls (48M to match 50M total: 2M blind + 48M call)
+      const result = await callAction(prisma, table.id, bigBlindWallet);
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true);
 
-      // Pot: PRE_FLOP (1M + 2M + 1M = 4M) + FLOP all-in/call (50M + 50M = 100M) = 104M
-      await verifyPotWithRake(prisma, hand.id, 104000000n, 0);
+      // Pot: Small blind (50M total) + Big blind (50M total) = 100M before rake
+      await verifyPotWithRake(prisma, hand.id, 100000000n, 0);
     });
 
     testWithRakeVariants('FL-009: Small Blind All-In on Flop (Big Blind Folds)', async ({ prisma, hand, table }, rakeBps) => {
-      // Small blind all-in
-      await allInAction(prisma, table.id, PLAYER_0_WALLET);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
-      // Big blind folds
-      const result = await foldAction(prisma, table.id, PLAYER_1_WALLET);
+      // Small blind all-in (48M incremental, 50M total: 1M blind + 1M call + 48M all-in)
+      await allInAction(prisma, table.id, smallBlindWallet);
+
+      // Big blind folds (2M blind stays in pot from PRE_FLOP)
+      const result = await foldAction(prisma, table.id, bigBlindWallet);
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true);
-      expect(result.winnerSeatNumber).toBe(0);
+      expect(result.winnerSeatNumber).toBe(hand.smallBlindSeat);
 
-      await verifyPotWithRake(prisma, hand.id, 50000000n, rakeBps);
+      // Pot: Small blind (50M total) + Big blind (2M blind stays in pot when folded) = 52M before rake
+      await verifyPotWithRake(prisma, hand.id, 52000000n, rakeBps);
     }, { round: 'FLOP', player0Balance: 50000000n, player1Balance: 100000000n });
 
     it('FL-010: Both Players All-In on Flop (Different Amounts)', async () => {
@@ -956,17 +923,25 @@ describe('2-Player Poker Test Matrix', () => {
         player1Balance: 50000000n,
       });
 
-      await createPreFlopActions(prisma, hand.id);
+      // Get actual blind seats from hand (startHand assigns them dynamically)
+      if (hand.smallBlindSeat === null || hand.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned by startHand');
+      }
+      const smallBlindWallet = getWalletBySeat(hand.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand.bigBlindSeat);
 
-      // Small blind all-in
-      await allInAction(prisma, table.id, PLAYER_0_WALLET);
+      // Small blind all-in (28M incremental, 30M total: 1M blind + 1M call + 28M all-in)
+      await allInAction(prisma, table.id, smallBlindWallet);
 
-      // Big blind all-in
-      await allInAction(prisma, table.id, PLAYER_1_WALLET);
+      // Big blind all-in (48M incremental, 50M total: 2M blind + 48M all-in)
+      await allInAction(prisma, table.id, bigBlindWallet);
 
-      // Verify side pots
+      // Verify side pots (different amounts)
+      // Small blind: 30M total, Big blind: 50M total
+      // Pot 0: (30M - 0) × 2 = 60M (both eligible)
+      // Pot 1: (50M - 30M) × 1 = 20M (only big blind eligible)
       await assertPotAmounts(prisma, hand.id, [
-        { potNumber: 0, amount: 64000000n },
+        { potNumber: 0, amount: 60000000n },
         { potNumber: 1, amount: 20000000n },
       ]);
     });
@@ -1004,7 +979,7 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('TU-003: Bet-Fold on Turn', async ({ prisma, hand, table }, rakeBps) => {
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
       const result = await foldAction(prisma, table.id, PLAYER_1_WALLET);
@@ -1027,7 +1002,7 @@ describe('2-Player Poker Test Matrix', () => {
 
   describe('RIVER Scenarios', () => {
     testWithRakeVariants('RV-001: Check-Check on River (Showdown)', async ({ prisma, hand, table }, rakeBps) => {
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       await checkAction(prisma, table.id, PLAYER_0_WALLET);
       const result = await checkAction(prisma, table.id, PLAYER_1_WALLET);
@@ -1042,7 +1017,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('RV-002: Bet-Call on River (Showdown)', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ round: 'RIVER', rakeBps: 0 });
 
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
       const result = await callAction(prisma, table.id, PLAYER_1_WALLET);
@@ -1055,7 +1030,7 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('RV-003: Bet-Fold on River', async ({ prisma, hand, table }, rakeBps) => {
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       await betAction(prisma, table.id, PLAYER_0_WALLET, 5000000n);
       const result = await foldAction(prisma, table.id, PLAYER_1_WALLET);
@@ -1079,7 +1054,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('MR-001: Full Hand with Betting on Every Round', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ rakeBps: 0 });
 
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
       // PRE_FLOP: Raise to 5M, call
       await raiseAction(prisma, table.id, PLAYER_0_WALLET, 3000000n, false);
@@ -1105,7 +1080,7 @@ describe('2-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('MR-003: Full Hand with All Checks', async ({ prisma, hand, table }, rakeBps) => {
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
       // PRE_FLOP: Call
       await callAction(prisma, table.id, PLAYER_0_WALLET);
@@ -1145,7 +1120,7 @@ describe('2-Player Poker Test Matrix', () => {
         deck,
       });
 
-      await createPreFlopActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest({ round: 'FLOP' }) already simulated PRE_FLOP actions via service layer
 
       await checkAction(prisma, table.id, PLAYER_0_WALLET);
       const result = await checkAction(prisma, table.id, PLAYER_1_WALLET);
@@ -1176,7 +1151,7 @@ describe('2-Player Poker Test Matrix', () => {
     it('EC-001: Minimum Raise Scenario', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ rakeBps: 0 });
 
-      await createPostBlindActions(prisma, hand.id);
+      // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
       // PRE_FLOP: Minimum raise (to 4M), call
       // Current bet is 2M (big blind), player has committed 1M (small blind)

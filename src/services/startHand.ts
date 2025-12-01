@@ -5,6 +5,7 @@
  * Creates hand, shuffles deck, assigns dealer/blinds, posts blinds, deals cards.
  */
 
+import { PrismaClient } from '@prisma/client';
 import { prisma } from '../db/client';
 import { createEventInTransaction, EventKind } from '../db/events';
 import { keccak256, toUtf8Bytes } from 'ethers';
@@ -66,10 +67,11 @@ function shuffleDeck(deck: Card[], seed: number): Card[] {
  * 9. Creates start_hand event
  *
  * @param tableId - Table ID to start hand at
+ * @param prismaClient - Optional Prisma client instance (defaults to global prisma)
  * @returns The created hand record
  * @throws {Error} If validation fails or transaction fails
  */
-export async function startHand(tableId: number): Promise<{
+export async function startHand(tableId: number, prismaClient?: PrismaClient): Promise<{
   id: number;
   tableId: number;
   status: HandStatus;
@@ -78,7 +80,8 @@ export async function startHand(tableId: number): Promise<{
   bigBlindSeat: number;
   currentActionSeat: number;
 }> {
-  return await prisma.$transaction(async (tx) => {
+  const client = prismaClient || prisma;
+  return await client.$transaction(async (tx) => {
     // 1. Validate table exists and is active
     const table = await validateTableExistsAndActive(tableId, tx);
 
@@ -148,8 +151,22 @@ export async function startHand(tableId: number): Promise<{
     }
 
     const dealerPosition = eligiblePlayers[dealerIndex].seatNumber;
-    const smallBlindIndex = (dealerIndex + 1) % eligiblePlayers.length;
-    const bigBlindIndex = (dealerIndex + 2) % eligiblePlayers.length;
+    
+    // In 2-player (heads-up) poker, the dealer posts the small blind
+    // In 3+ player games, small blind is after dealer, big blind is after small blind
+    let smallBlindIndex: number;
+    let bigBlindIndex: number;
+    
+    if (eligiblePlayers.length === 2) {
+      // Heads-up: dealer is small blind, other player is big blind
+      smallBlindIndex = dealerIndex;
+      bigBlindIndex = (dealerIndex + 1) % eligiblePlayers.length;
+    } else {
+      // 3+ players: small blind after dealer, big blind after small blind
+      smallBlindIndex = (dealerIndex + 1) % eligiblePlayers.length;
+      bigBlindIndex = (dealerIndex + 2) % eligiblePlayers.length;
+    }
+    
     const smallBlindSeat = eligiblePlayers[smallBlindIndex].seatNumber;
     const bigBlindSeat = eligiblePlayers[bigBlindIndex].seatNumber;
 

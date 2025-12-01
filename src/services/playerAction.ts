@@ -627,8 +627,8 @@ async function advanceToRiverIfOnlyOneActivePlayer(
           }
         }
         
-        // Update pot total after CHECK actions
-        await updatePotTotal(handId, tx);
+        // Update pots conditionally after CHECK actions (preserves side pots if they exist)
+        await updatePotsIfNeeded(handId, tx);
         
         // Re-check if round is now complete
         bettingRoundComplete = await isBettingRoundComplete(handId, tx);
@@ -657,8 +657,8 @@ async function advanceToRiverIfOnlyOneActivePlayer(
           });
         }
         
-        // Update pot total after CHECK action
-        await updatePotTotal(handId, tx);
+        // Update pots conditionally after CHECK action (preserves side pots if they exist)
+        await updatePotsIfNeeded(handId, tx);
         
         // Re-check if round is now complete
         bettingRoundComplete = await isBettingRoundComplete(handId, tx);
@@ -1094,8 +1094,9 @@ async function createActionAndEvent(
     },
   });
 
-  // 2. Update pot total (for UI display) - doesn't split, just updates total amount
-  await updatePotTotal(handId, tx);
+  // 2. Update pots conditionally (for UI display) - checks if side pots needed, otherwise updates total
+  // Note: This ensures side pots are preserved if they exist
+  await updatePotsIfNeeded(handId, tx);
 
   // 3. Create hand action event
   const actionPayload = {
@@ -2243,7 +2244,11 @@ export async function callAction(
       'CALL'
     );
 
-    // 11. Check if betting round is complete
+    // 11. Update pots conditionally (create side pots if commitments differ, otherwise update total)
+    // This ensures pots are recalculated after the call, in case commitments have changed
+    await updatePotsIfNeeded(hand.id, tx);
+
+    // 12. Check if betting round is complete
     const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
 
     let handEnded = false;
@@ -2629,8 +2634,8 @@ async function handleBettingActionCompletion(
         result.winnerSeatNumber = roundResult.winnerSeatNumber;
       }
     } else {
-      // Not all players are all-in yet, just update pot total for display
-      await updatePotTotal(handId, tx);
+      // Not all players are all-in yet, update pots conditionally (preserves side pots if they exist)
+      await updatePotsIfNeeded(handId, tx);
       const roundResult = await handleNextPlayerOrRoundComplete(
         handId,
         currentSeatNumber,
