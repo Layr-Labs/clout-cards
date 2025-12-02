@@ -1,7 +1,7 @@
 import './App.css'
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
+import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, watchCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
@@ -135,9 +135,10 @@ function Table() {
   /**
    * Loads current hand state
    * Only polls if there are at least 2 players at the table
+   * Uses /watchCurrentHand when not fully logged in, /currentHand when fully logged in
    */
   useEffect(() => {
-    if (!tableId || !isFullyLoggedIn || !address || !signature) {
+    if (!tableId) {
       setCurrentHand(null)
       return
     }
@@ -149,10 +150,16 @@ function Table() {
     }
 
     async function loadHand() {
-      if (!signature || !address) return
       try {
-        const hand = await getCurrentHand(tableId!, address, signature)
-        setCurrentHand(hand)
+        // Use watchCurrentHand if not fully logged in, getCurrentHand if fully logged in
+        if (isFullyLoggedIn && address && signature) {
+          const hand = await getCurrentHand(tableId!, address, signature)
+          setCurrentHand(hand)
+        } else {
+          // Public endpoint - no authentication required
+          const hand = await watchCurrentHand(tableId!)
+          setCurrentHand(hand)
+        }
       } catch (err: any) {
         // 404 is expected when no hand is active
         if (err?.status !== 404) {

@@ -364,6 +364,31 @@ export async function getCurrentHand(
 }
 
 /**
+ * Watches the current active hand for a table (public, no authentication required)
+ *
+ * GET /watchCurrentHand
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - Query params: tableId
+ *
+ * Response:
+ * - 200: CurrentHand (without hole cards for any players)
+ * - 404: { error: string; message: string } - No active hand found
+ *
+ * @param tableId - The poker table ID
+ * @returns Promise that resolves to the current hand state (without hole cards)
+ * @throws {Error} If the request fails
+ */
+export async function watchCurrentHand(
+  tableId: number
+): Promise<CurrentHand> {
+  return apiClient<CurrentHand>(`/watchCurrentHand?tableId=${tableId}`);
+}
+
+/**
  * Response from player action
  */
 export interface PlayerActionResponse {
