@@ -2121,7 +2121,9 @@ describe('4-Player Poker Test Matrix', () => {
       const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       expect(result.success).toBe(true);
-      expect(result.handEnded).toBe(false); // Round should advance if not all-in
+      // When players call and exhaust their balance, they become ALL_IN
+      // If all players become all-in, hand auto-advances to river and ends
+      expect(result.handEnded).toBe(true); // Hand ends when all players are all-in
 
       // Side pot should be created
       const pots = await prisma.pot.findMany({
@@ -2149,10 +2151,13 @@ describe('4-Player Poker Test Matrix', () => {
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       // Dealer calls (30M)
+      // Note: Dealer has 20M balance, so calling 30M exhausts their balance, making them ALL_IN
       const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       expect(result.success).toBe(true);
-      expect(result.handEnded).toBe(false); // Round should advance if not all-in
+      // When players call and exhaust their balance, they become ALL_IN
+      // If all players become all-in, hand auto-advances to river and ends
+      expect(result.handEnded).toBe(true); // Hand ends when all players are all-in
 
       // Side pot should be created
       const pots = await prisma.pot.findMany({
