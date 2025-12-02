@@ -284,6 +284,7 @@ function Table() {
     return currentHand.currentActionSeat === userHandPlayer.seatNumber && userHandPlayer.status === 'ACTIVE'
   }
 
+
   /**
    * Checks if it's a specific seat's turn to act
    */
@@ -576,27 +577,11 @@ function Table() {
             className="table-image"
           />
           
-          {/* Community Cards - Center of Table */}
-          {currentHand && currentHand.communityCards.length > 0 && (
-            <div className="table-community-cards">
-              {currentHand.communityCards.map((card, index) => (
-                <Card
-                  key={index}
-                  suit={card.suit}
-                  rank={card.rank}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Pots Display - Below Community Cards */}
+          {/* Pots Display - Above Community Cards */}
           {currentHand && currentHand.pots.length > 0 && (
             <div className="table-pots">
               {currentHand.pots.map((pot) => (
                 <div key={pot.potNumber} className="table-pot">
-                  <div className="table-pot-amount">
-                    {formatEth(pot.amount)}
-                  </div>
                   <div className="table-pot-avatars">
                     {pot.eligibleSeatNumbers.map((seatNum) => {
                       const handPlayer = getHandPlayerBySeat(seatNum)
@@ -611,7 +596,23 @@ function Table() {
                       )
                     })}
                   </div>
+                  <div className="table-pot-amount">
+                    {formatEth(pot.amount)}
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Community Cards - Center of Table */}
+          {currentHand && currentHand.communityCards.length > 0 && (
+            <div className="table-community-cards">
+              {currentHand.communityCards.map((card, index) => (
+                <Card
+                  key={index}
+                  suit={card.suit}
+                  rank={card.rank}
+                />
               ))}
             </div>
           )}
@@ -784,6 +785,7 @@ function Table() {
         <h1 className="table-name">{table ? table.name : `Table ${tableId || '...'}`}</h1>
 
         {/* Action Buttons - Show when it's user's turn */}
+        {/* Positioned above community cards to avoid covering player cards */}
         {currentHand && isUserTurn() && (
           <div className="table-action-buttons">
             <div className="table-action-info">

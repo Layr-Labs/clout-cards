@@ -1632,17 +1632,17 @@
   justify-content: center;
 }
 
-/* Pots Display - Below Community Cards */
+/* Pots Display - Above Community Cards */
 .table-pots {
   position: absolute;
-  top: calc(50% + 100px);
+  top: calc(50% - 150px); /* Above community cards (which are at 50%) - increased spacing */
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   max-width: 90%;
@@ -1653,10 +1653,10 @@
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 2px solid rgba(212, 175, 55, 0.5);
-  border-radius: 12px;
-  padding: 12px 16px;
+  border-radius: 8px;
+  padding: 6px 10px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -1664,22 +1664,34 @@
 
 .table-pot-amount {
   color: #d4af37;
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   font-weight: 700;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: nowrap;
 }
 
 .table-pot-avatars {
   display: flex;
-  gap: 4px;
   align-items: center;
+  /* Negative margin creates overlapping stack effect */
+  margin-right: 4px;
 }
 
 .table-pot-avatar {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  border: 1px solid rgba(212, 175, 55, 0.3);
+  border: 2px solid rgba(212, 175, 55, 0.5);
+  /* Overlap avatars by shifting each one left */
+  margin-left: -6px;
+  /* Ensure avatars are visible even when overlapped */
+  position: relative;
+  z-index: 1;
+}
+
+/* First avatar doesn't need negative margin */
+.table-pot-avatars .table-pot-avatar:first-child {
+  margin-left: 0;
 }
 
 /* Player Cards at Seats */
@@ -1740,8 +1752,8 @@
 
 /* Action Buttons */
 .table-action-buttons {
-  position: fixed;
-  bottom: 32px;
+  position: absolute;
+  top: calc(50% + 150px); /* Below community cards (which are at 50%) - increased spacing */
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
