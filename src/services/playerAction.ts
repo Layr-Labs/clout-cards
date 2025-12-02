@@ -2618,6 +2618,14 @@ export async function checkAction(
     // 1. Get table and hand (validated)
     const { table, hand } = await getTableAndHand(tableId, tx, false);
 
+    // DEBUG: Log stack trace for RIVER calls to identify unexpected callers
+    if (hand.round === 'RIVER') {
+      const stackTrace = new Error().stack;
+      console.log(`[DEBUG checkAction] RIVER call detected! Hand ${hand.id}, Seat ${hand.currentActionSeat}`);
+      console.log(`[DEBUG checkAction] Full stack trace:`);
+      console.log(stackTrace);
+    }
+
     // 2. Get player context (validated)
     const { seatSession, handPlayer } = await getPlayerContext(
       tableId,
