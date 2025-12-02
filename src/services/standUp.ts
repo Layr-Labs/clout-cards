@@ -19,10 +19,11 @@ export interface StandUpInput {
  *
  * Atomically:
  * 1. Validates player has an active session at the table
- * 2. Gets current table balance
- * 3. Adds balance back to escrow
- * 4. Creates "stand_up" event
- * 5. Marks session as inactive and sets leftAt timestamp
+ * 2. Validates player can stand up (no active hand OR player has folded)
+ * 3. Gets current table balance
+ * 4. Adds balance back to escrow
+ * 5. Creates "stand_up" event
+ * 6. Marks session as inactive and sets leftAt timestamp
  *
  * @param walletAddress - Player's wallet address
  * @param input - Stand up parameters
@@ -69,10 +70,37 @@ export async function standUp(
       throw new Error(`No active session found for player at table ${input.tableId}`);
     }
 
-    // 2. Get current table balance
+    // 2. Check if there's an active hand on the table
+    const activeHand = await (tx as any).hand.findFirst({
+      where: {
+        tableId: input.tableId,
+        status: {
+          not: 'COMPLETED',
+        },
+      },
+    });
+
+    // 3. If there's an active hand, verify player has folded
+    if (activeHand) {
+      const handPlayer = await (tx as any).handPlayer.findFirst({
+        where: {
+          handId: activeHand.id,
+          seatNumber: session.seatNumber,
+        },
+      });
+
+      // If player is in the hand but hasn't folded, prevent stand up
+      if (handPlayer && handPlayer.status !== 'FOLDED') {
+        throw new Error(
+          `Cannot stand up: active hand in progress. Player must fold first or wait for hand to complete.`
+        );
+      }
+    }
+
+    // 4. Get current table balance
     const tableBalanceGwei = session.tableBalanceGwei;
 
-    // 3. Add balance back to escrow
+    // 5. Add balance back to escrow
     const existingBalances = await tx.$queryRaw<Array<{ wallet_address: string; balance_gwei: bigint }>>`
       SELECT wallet_address, balance_gwei
       FROM player_escrow_balances
@@ -101,7 +129,7 @@ export async function standUp(
       });
     }
 
-    // 4. Create canonical JSON payload for event
+    // 6. Create canonical JSON payload for event
     const payload = {
       kind: 'leave_table',
       player: normalizedAddress,
@@ -115,10 +143,10 @@ export async function standUp(
     };
     const payloadJson = JSON.stringify(payload);
 
-    // 5. Create "leave_table" event
+    // 7. Create "leave_table" event
     await createEventInTransaction(tx, EventKind.LEAVE_TABLE, payloadJson, normalizedAddress, null);
 
-    // 6. Update session to inactive
+    // 8. Update session to inactive
     const updatedSession = await tx.tableSeatSession.update({
       where: { id: session.id },
       data: {

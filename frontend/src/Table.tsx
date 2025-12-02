@@ -713,30 +713,38 @@ function Table() {
                         
                         {/* Player Info Box */}
                         <div className={`table-seat-player-info ${position.x > 50 ? 'table-seat-player-info-right' : ''} ${isSeatTurn(seatIndex) ? 'table-seat-player-info-turn' : ''}`}>
-                          <a
-                            href={`https://twitter.com/${player.twitterHandle.replace('@', '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="table-seat-twitter-handle"
+                          <div 
+                            className="table-seat-player-info-content"
+                            style={{
+                              marginTop: (isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand) ? '60px' : '0'
+                            }}
                           >
-                            {player.twitterHandle}
-                          </a>
-                          {tableBalanceEth && (
-                            <div className="table-seat-stack">
-                              {tableBalanceEth}
-                            </div>
-                          )}
-                          {/* Stand Up Button - only show if this is the current user's seat and no hand active */}
-                          {isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand && (
-                            <button
-                              className="table-seat-stand-up-button"
-                              onClick={handleStandUpClick}
-                              disabled={isStandingUp}
-                              title="Stand up from the table"
+                            <a
+                              href={`https://twitter.com/${player.twitterHandle.replace('@', '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="table-seat-twitter-handle"
                             >
-                              Stand Up
-                            </button>
-                          )}
+                              {player.twitterHandle}
+                            </a>
+                            {tableBalanceEth && (
+                              <div className="table-seat-stack">
+                                {tableBalanceEth}
+                              </div>
+                            )}
+                            {/* Stand Up Button - only show if this is the current user's seat and no hand active */}
+                            {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand && (
+                              <button
+                                className="table-seat-stand-up-button"
+                                onClick={handleStandUpClick}
+                                disabled={isStandingUp}
+                                title="Stand up from the table"
+                                style={{ marginTop: '20px' }}
+                              >
+                                Stand Up
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </>
                     ) : (
