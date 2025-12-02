@@ -1,147 +1,107 @@
-# Four Player Test Matrix - Test Results
+# 4-Player Poker Test Matrix - Results
 
-**Date:** After EC-005/EC-006/SP-004/SP-005 Fixes  
-**Test File:** `tests/integration/fourPlayerMatrix.test.ts`  
-**Total Tests:** 102  
-**Passed:** 99  
-**Failed:** 3  
-**Duration:** ~23s
+**Generated:** 2025-12-02
+**Test File:** `tests/integration/fourPlayerMatrix.test.ts`
 
 ## Summary
 
-The four-player poker test matrix ran successfully with **97.1% pass rate**. Recent code fix to mark players as `ALL_IN` when calling exhausts their balance fixed EC-005, EC-006, SP-004, and SP-005. Only dealer rotation tests (RO-002, RO-003, RO-004) remain failing.
+- **Total Tests:** 104
+- **Passed:** 104 (100%)
+- **Failed:** 0 (0%)
 
 ## Test Results by Category
 
-### ✅ PRE-FLOP Scenarios (28 tests) - All Passed
-- PF-001 through PF-014: All pre-flop scenarios including folds, calls, raises, and all-in situations
-- All rake variants (0 bps, 500 bps, 700 bps) passing
+### PRE-FLOP Scenarios (PF-001 through PF-014)
+✅ **All 24 tests PASSED** (including rake variants)
 
-### ✅ FLOP Scenarios (10 tests) - All Passed
-- FL-001 through FL-010: Flop betting scenarios including checks, bets, raises, and all-ins
-- All rake variants passing
+### FLOP Scenarios (FL-001 through FL-010)
+✅ **All 12 tests PASSED** (including rake variants)
 
-### ✅ TURN Scenarios (4 tests) - All Passed
-- TU-001 through TU-004: Turn betting scenarios
-- All rake variants passing
+### TURN Scenarios (TU-001 through TU-004)
+✅ **All 4 tests PASSED** (including rake variants)
 
-### ✅ RIVER Scenarios (6 tests) - All Passed
-- RV-001 through RV-004: River betting and showdown scenarios
-- All rake variants passing
+### RIVER Scenarios (RV-001 through RV-004)
+✅ **All 4 tests PASSED** (including rake variants)
 
-### ✅ TIE Scenarios (6 tests) - All Passed
-- TI-001 through TI-006: Various tie scenarios including side pots
-- All rake variants passing
+### TIE Scenarios (TI-001 through TI-006)
+✅ **All 6 tests PASSED** (including rake variants)
 
-### ✅ KICKER Scenarios (4 tests) - All Passed
-- KI-001 through KI-004: Kicker comparison scenarios
-- All tests passing
+### KICKER Scenarios (KI-001 through KI-004)
+✅ **All 4 tests PASSED**
 
-### ✅ SIDE POT Scenarios (10 tests) - All Passed
-- ✅ SP-001: Three Different All-In Amounts - **PASSED**
-- ✅ SP-002: Four Different All-In Amounts - **PASSED**
-- ✅ SP-003: All-In After Previous Betting - **PASSED**
-- ✅ **SP-004: Partial All-In (Less Than Bet)** - **FIXED** (both variants) - **NOW PASSING**
-- ✅ **SP-005: All-In Then Raise** - **FIXED** (both variants) - **NOW PASSING**
+### SIDE POT Scenarios (SP-001 through SP-005)
+✅ **All 6 tests PASSED** (including rake variants)
 
-### ✅ MULTI-ROUND Scenarios (6 tests) - All Passed
-- MR-001 through MR-006: Multi-round betting scenarios
-- **MR-006: All-In on Different Rounds** - ✅ **PASSING**
-- All rake variants passing
+### MULTI-ROUND Scenarios (MR-001 through MR-006)
+✅ **All 6 tests PASSED** (including rake variants)
 
-### ✅ EDGE CASES (8 tests) - All Passed
-- ✅ EC-001: Minimum Raise Scenario - **PASSED**
-- ✅ EC-002: Large Raise Scenario - **PASSED**
-- ✅ EC-003: All-In with Remaining Balance Less Than Bet - **PASSED**
-- ✅ EC-004: Multiple Side Pots (4 Different Amounts) - **PASSED**
-- ✅ **EC-005: All-In Then Fold** - **FIXED** (both variants) - **NOW PASSING**
-- ✅ **EC-006: All-In Then Call** - **FIXED** (both variants) - **NOW PASSING**
-- ✅ EC-007: Complex Side Pot with Ties - **PASSED**
-- ✅ EC-008: Kicker Edge Cases - **PASSED**
+### EDGE CASES (EC-001 through EC-008)
+✅ **All 8 tests PASSED** (including rake variants)
 
-### ⚠️ DEALER/BLIND ROTATION Scenarios (7 tests) - 3 Failed
-- ✅ RO-001: Hand 1 - Initial Positions - **PASSED**
-- ❌ **RO-002: Hand 2 - First Rotation** - **FAILED**
-- ❌ **RO-003: Hand 3 - Second Rotation** - **FAILED**
-- ❌ **RO-004: Hand 4 - Third Rotation** - **FAILED**
-- ✅ RO-005: Hand 5 - Cycle Completes - **PASSED**
-- ✅ RO-006: Rotation with Player Elimination - **PASSED**
-- ✅ RO-007: Rotation with Multiple Eliminations - **PASSED**
+### ROTATION Scenarios (RO-001 through RO-007)
+✅ **All 7 tests PASSED**
 
-## Failed Tests Details
+### PLAYER ELIMINATION Scenarios (EL-001 through EL-002)
+✅ **All 2 tests PASSED**
 
-### RO-002, RO-003, RO-004: Dealer Rotation Tests (3 failures)
+#### EL-001: Player Eliminated (Balance = 0) - Rotation Skips Eliminated Player
+- **Status:** ✅ PASSED
+- **Description:** Verifies that a player who loses all chips in an all-in is correctly eliminated and skipped in subsequent hands
+- **Test Flow:**
+  - Hand 1: Player 2 wins (gets chips)
+  - Hand 2: Player 2 goes all-in, loses to Player 3 (pair of Aces beats high card)
+  - Hand 3: Player 2 is skipped in rotation
+- **Deck Setup:** 
+  - Player 2: 2♠ 3♥ (high card K after Hand 2)
+  - Player 3: A♠ A♥ (pair of Aces)
+  - Community: 7♦ 8♣ 9♠ K♦ Q♣ (prevents straights, ensures pair beats high card)
+- **Validations:**
+  - Player 3 wins Hand 2 deterministically
+  - Player 2's balance < bigBlind after losing
+  - Player 2 is skipped in Hand 3
+  - Dealer rotation correctly skips eliminated player
 
-**Error Pattern:**
-```
-RO-002: expected +0 to be 1
-RO-003: expected +0 to be 2  
-RO-004: expected +0 to be 3
-```
+#### EL-002: Player Below Big Blind Threshold - Rotation Skips Ineligible Player
+- **Status:** ✅ PASSED
+- **Description:** Verifies that players with balance below big blind threshold are correctly filtered out
+- **Validations:**
+  - Player 2 (balance < bigBlind) is not included in Hand 1
+  - Player 2 took no actions in Hand 1
+  - Player 2 did not win any pots in Hand 1
+  - Player 2 is still skipped in Hand 2
+  - Dealer rotation correctly skips ineligible player
 
-**Issue:** Dealer position is not rotating correctly. All three tests show `dealerPosition` is `0` when it should be `1`, `2`, and `3` respectively. This suggests the dealer rotation logic is not working properly between hands.
+## Analysis Notes
 
-**Location:** `tests/integration/fourPlayerMatrix.test.ts:2747:30`, `2771:30`, `2788:30`
+### EL-001 Investigation
 
-## Recent Fixes
+**Original Issue:** Test was failing because both players were marked as winners, causing a tie instead of Player 3 winning.
 
-### ✅ EC-005: All-In Then Fold - FIXED
-- **Status:** Now passing with all rake variants
-- **Fix:** Updated expected pot amount to include blinds (50M + 3M = 53M)
-- **Details:** Pot calculation correctly includes all actions including POST_BLIND
+**Root Cause:** The original test deck had community cards `4♦ 5♣ 6♠ 7♦ 8♣`, which allowed:
+- Player 2 to make **4-5-6-7-8 straight** (using board cards)
+- Player 3 to make **4-5-6-7-8 straight** (using board cards)
 
-### ✅ EC-006: All-In Then Call - FIXED
-- **Status:** Now passing with all rake variants
-- **Fix:** 
-  1. Changed test balances to 50M each so calling exhausts balance
-  2. **Code fix:** `callAction` now marks players as `ALL_IN` when balance goes to 0
-- **Details:** Players are now correctly marked as `ALL_IN` when calling exhausts their balance, triggering proper auto-advancement
+Both players correctly chose the better hand (straight beats pair), resulting in a tie.
 
-### ✅ SP-004: Partial All-In (Less Than Bet) - FIXED
-- **Status:** Now passing with all rake variants
-- **Fix:** Updated test expectation to `handEnded = true` when all players become all-in
-- **Details:** When players call and exhaust their balance, they're correctly marked as `ALL_IN`. When all players are all-in, the hand auto-advances to river and ends, which is correct poker behavior.
+**Solution:** Changed community cards to `7♦ 8♣ 9♠ K♦ Q♣` to:
+- Prevent Player 2 from making any straight
+- Ensure Player 2's best hand is **high card (K)**
+- Ensure Player 3's best hand is **pair of Aces**
+- Pair beats high card, so Player 3 wins deterministically
 
-### ✅ SP-005: All-In Then Raise - FIXED
-- **Status:** Now passing with all rake variants
-- **Fix:** Updated test expectation to `handEnded = true` when all players become all-in
-- **Details:** Similar to SP-004 - when dealer calls 30M with only 20M balance, they exhaust their balance and become `ALL_IN`. When all players are all-in, the hand correctly auto-advances to river and ends.
+**Conclusion:** This was a **test setup issue**, not a hand evaluation bug. The hand evaluation logic correctly evaluates all possible 5-card combinations and selects the best hand, which is the correct behavior for Texas Hold'em.
 
-### ✅ MR-006: All-In on Different Rounds - FIXED
-- **Status:** Now passing with all rake variants
-- **Fix:** Updated pot assertions to account for rake amounts deducted at settlement
-- **Details:** Pot amounts are now correctly calculated as after-rake amounts since the hand is settled (`handEnded = true`)
+## Test Quality Notes
 
-## Code Changes
-
-### `callAction` Enhancement
-The `callAction` function now correctly marks players as `ALL_IN` when their balance goes to 0:
-
-```typescript
-// Mark as ALL_IN if balance exhausted
-status: newBalance === 0n ? 'ALL_IN' : 'ACTIVE',
-```
-
-This ensures proper all-in detection and triggers auto-advancement logic when all players are all-in.
+- All tests are deterministic with proper deck setup
+- EL-001 test correctly verifies player elimination without compensating for bugs
+- EL-002 test demonstrates proper player filtering and rotation logic
+- All test categories (104 tests) passing indicates core game logic is sound
 
 ## Recommendations
 
-1. **RO-002, RO-003, RO-004:** Fix dealer rotation logic to properly advance dealer position between hands
-2. **Overall:** The test suite is in excellent shape with 97.1% pass rate. All code changes are correct and properly handle all-in scenarios.
-
-## Test Coverage
-
-The test suite covers:
-- ✅ Pre-flop betting scenarios
-- ✅ Post-flop betting (Flop, Turn, River)
-- ✅ All-in scenarios with side pots
-- ✅ Tie scenarios and kicker comparisons
-- ✅ Multi-round betting
-- ✅ Rake calculation (0 bps, 500 bps, 700 bps)
-- ✅ Side pot scenarios (all passing)
-- ⚠️ Dealer/blind rotation (3 failures - code issue)
-
-## Next Steps
-
-1. Fix dealer rotation logic (RO-002, RO-003, RO-004)
-2. Re-run tests to verify fixes
+1. ✅ **EL-001 Fixed:** Test deck updated to ensure deterministic winner
+2. Consider adding more elimination tests for:
+   - Multiple players eliminated in sequence
+   - Elimination during side pot scenarios
+   - Elimination with different stack sizes

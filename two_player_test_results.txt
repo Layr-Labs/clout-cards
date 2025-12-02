@@ -12,23 +12,23 @@ Loaded Prisma config from prisma.config.ts.
 
 Prisma config detected, skipping environment variable loading.
 Prisma schema loaded from prisma/schema.prisma
-Datasource "db": PostgreSQL database "cloutcards_test", schema "public" at "localhost:33678"
+Datasource "db": PostgreSQL database "cloutcards_test", schema "public" at "localhost:33699"
 
-🚀  Your database is now in sync with your Prisma schema. Done in 109ms
+🚀  Your database is now in sync with your Prisma schema. Done in 106ms
 
 Loaded Prisma config from prisma.config.ts.
 
 Prisma config detected, skipping environment variable loading.
 Prisma schema loaded from prisma/schema.prisma
 
-✔ Generated Prisma Client (v6.19.0) to ./node_modules/@prisma/client in 48ms
+✔ Generated Prisma Client (v6.19.0) to ./node_modules/@prisma/client in 46ms
 
 Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
 
-Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
 
 stdout | tests/integration/twoPlayerMatrix.test.ts
-Test database: localhost:33678/cloutcards_test
+Test database: localhost:33699/cloutcards_test
 Pushing Prisma schema to test database...
 Generating Prisma client...
 
@@ -7813,8 +7813,8 @@ stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix 
 [DEBUG handleBettingRoundComplete] Hand 29: Auto-advancing to RIVER and settling
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > FLOP Scenarios > FL-010: Both Players All-In on Flop (Different Amounts)
-[DEBUG handleBettingRoundComplete] Hand 29: Hand settled, winnerSeatNumber=1
-[DEBUG handleBettingRoundComplete] Hand 29: RETURNING result with settlement: handEnded=true, roundAdvanced=true, winnerSeatNumber=1
+[DEBUG handleBettingRoundComplete] Hand 29: Hand settled, winnerSeatNumber=0
+[DEBUG handleBettingRoundComplete] Hand 29: RETURNING result with settlement: handEnded=true, roundAdvanced=true, winnerSeatNumber=0
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > TURN Scenarios > TU-001: Check-Check on Turn
 [DEBUG callAction] Hand 30: Player seat 0 calling 1000000 in round PRE_FLOP, currentBet=2000000, chipsCommitted before=1000000
@@ -10532,13 +10532,13 @@ stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix 
 [DEBUG handleBettingRoundComplete] Hand 34: RIVER round, settling hand via showdown
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > RIVER Scenarios > RV-001: Check-Check on River (Showdown)
-[DEBUG handleBettingRoundComplete] Hand 34: Hand settled, winnerSeatNumber=0
-[DEBUG handleBettingRoundComplete] Hand 34: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=0
+[DEBUG handleBettingRoundComplete] Hand 34: Hand settled, winnerSeatNumber=1
+[DEBUG handleBettingRoundComplete] Hand 34: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=1
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > RIVER Scenarios > RV-001: Check-Check on River (Showdown)
 [DEBUG checkAction] Hand 34: handleBettingRoundComplete returned handEnded=true, roundAdvanced=false
 [DEBUG checkAction] Hand 34: RETURNING from transaction - Round complete
-[DEBUG checkAction] Hand 34: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=0
+[DEBUG checkAction] Hand 34: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=1
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > RIVER Scenarios > RV-001: Check-Check on River (Showdown)
 [DEBUG checkAction] RETURNING final result: handEnded=true, roundAdvanced=false, tableId=34
@@ -11244,13 +11244,13 @@ stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix 
 💰 Added rake 280000 gwei to TEE balance (hand 35)
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > RIVER Scenarios > RV-001: Check-Check on River (Showdown) - 700 bps rake
-[DEBUG handleBettingRoundComplete] Hand 35: Hand settled, winnerSeatNumber=1
-[DEBUG handleBettingRoundComplete] Hand 35: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=1
+[DEBUG handleBettingRoundComplete] Hand 35: Hand settled, winnerSeatNumber=0
+[DEBUG handleBettingRoundComplete] Hand 35: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=0
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > RIVER Scenarios > RV-001: Check-Check on River (Showdown) - 700 bps rake
 [DEBUG checkAction] Hand 35: handleBettingRoundComplete returned handEnded=true, roundAdvanced=false
 [DEBUG checkAction] Hand 35: RETURNING from transaction - Round complete
-[DEBUG checkAction] Hand 35: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=1
+[DEBUG checkAction] Hand 35: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=0
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > RIVER Scenarios > RV-001: Check-Check on River (Showdown) - 700 bps rake
 [DEBUG checkAction] RETURNING final result: handEnded=true, roundAdvanced=false, tableId=35
@@ -14819,13 +14819,13 @@ stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix 
 [DEBUG handleBettingRoundComplete] Hand 40: RIVER round, settling hand via showdown
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > MULTI-ROUND Scenarios > MR-003: Full Hand with All Checks
-[DEBUG handleBettingRoundComplete] Hand 40: Hand settled, winnerSeatNumber=0
-[DEBUG handleBettingRoundComplete] Hand 40: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=0
+[DEBUG handleBettingRoundComplete] Hand 40: Hand settled, winnerSeatNumber=1
+[DEBUG handleBettingRoundComplete] Hand 40: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=1
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > MULTI-ROUND Scenarios > MR-003: Full Hand with All Checks
 [DEBUG checkAction] Hand 40: handleBettingRoundComplete returned handEnded=true, roundAdvanced=false
 [DEBUG checkAction] Hand 40: RETURNING from transaction - Round complete
-[DEBUG checkAction] Hand 40: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=0
+[DEBUG checkAction] Hand 40: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=1
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > MULTI-ROUND Scenarios > MR-003: Full Hand with All Checks
 [DEBUG checkAction] RETURNING final result: handEnded=true, roundAdvanced=false, tableId=40
@@ -17072,8 +17072,8 @@ stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix 
 [DEBUG handleBettingRoundComplete] Hand 43: RIVER round, settling hand via showdown
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > EDGE CASES > EC-001: Minimum Raise Scenario
-[DEBUG handleBettingRoundComplete] Hand 43: Hand settled, winnerSeatNumber=0
-[DEBUG handleBettingRoundComplete] Hand 43: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=0
+[DEBUG handleBettingRoundComplete] Hand 43: Hand settled, winnerSeatNumber=1
+[DEBUG handleBettingRoundComplete] Hand 43: RETURNING result with settlement: handEnded=true, roundAdvanced=false, winnerSeatNumber=1
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > EDGE CASES > EC-001: Minimum Raise Scenario
 [DEBUG handleBettingActionCompletion] Hand 43: Round completion handled: handEnded=true, roundAdvanced=false
@@ -17082,8 +17082,8 @@ stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > EDGE CASES > EC-001: Minimum Raise Scenario
 [DEBUG raiseAction] Hand 43: handleBettingActionCompletion returned: handEnded=true, roundAdvanced=false
 [DEBUG raiseAction] Hand 43: RETURNING from transaction
-[DEBUG raiseAction] Hand 43: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=0
-[DEBUG raiseAction] Hand 43: RETURNING from transaction - Final values: handEnded=true, roundAdvanced=false, winnerSeatNumber=0
+[DEBUG raiseAction] Hand 43: Context - hand.round=RIVER, handEnded=true, roundAdvanced=false, winnerSeatNumber=1
+[DEBUG raiseAction] Hand 43: RETURNING from transaction - Final values: handEnded=true, roundAdvanced=false, winnerSeatNumber=1
 
 stdout | tests/integration/twoPlayerMatrix.test.ts > 2-Player Poker Test Matrix > EDGE CASES > EC-001: Minimum Raise Scenario
 [DEBUG raiseAction] RETURNING final result: handEnded=true, roundAdvanced=false, tableId=43
@@ -17094,10 +17094,10 @@ Cleaning up test database...
 stdout | tests/integration/twoPlayerMatrix.test.ts
 PostgreSQL container stopped
 
- ✓ tests/integration/twoPlayerMatrix.test.ts (43 tests) 10057ms
+ ✓ tests/integration/twoPlayerMatrix.test.ts (43 tests) 9727ms
 
  Test Files  1 passed (1)
       Tests  43 passed (43)
-   Start at  20:44:45
-   Duration  10.80s (transform 103ms, setup 165ms, import 513ms, tests 10.06s, environment 0ms)
+   Start at  07:10:09
+   Duration  10.53s (transform 116ms, setup 173ms, import 560ms, tests 9.73s, environment 0ms)
 

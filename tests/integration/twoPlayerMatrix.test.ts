@@ -1208,5 +1208,73 @@ describe('2-Player Poker Test Matrix', () => {
 
     // Additional EDGE CASE scenarios...
   });
+
+  // ============================================================================
+  // PLAYER ELIMINATION SCENARIOS
+  // ============================================================================
+
+  describe('PLAYER ELIMINATION Scenarios', () => {
+    it('EL-001: Both Players All-In, One Eliminated - Next Hand Does Not Start', async () => {
+      // Create table with 2 players
+      const prisma = getTestPrisma();
+      const table = await createTestTable(prisma, {
+        smallBlind: SMALL_BLIND,
+        bigBlind: BIG_BLIND,
+        perHandRake: 0,
+      });
+
+      await createTestPlayers(prisma, table.id, [
+        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 50000000n }, // 50M
+        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 50000000n }, // 50M
+      ]);
+
+      // Start Hand 1
+      const hand1Result = await startHand(table.id, prisma);
+      const hand1Id = hand1Result.id;
+
+      // Get blind seats
+      const hand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      if (!hand1 || hand1.smallBlindSeat === null || hand1.bigBlindSeat === null) {
+        throw new Error('Blind seats not assigned');
+      }
+      const smallBlindWallet = getWalletBySeat(hand1.smallBlindSeat);
+      const bigBlindWallet = getWalletBySeat(hand1.bigBlindSeat);
+
+      // Both players go all-in
+      await allInAction(prisma, table.id, smallBlindWallet);
+      await allInAction(prisma, table.id, bigBlindWallet);
+
+      // Hand should end (both all-in, auto-advance to river)
+      const hand1After = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      expect(hand1After!.status).toBe('COMPLETED');
+
+      // Verify one player has balance > 0, other has balance = 0 (or < bigBlind)
+      const sessions = await prisma.tableSeatSession.findMany({
+        where: { tableId: table.id },
+        orderBy: { seatNumber: 'asc' },
+      });
+
+      const winnerSession = sessions.find(s => s.tableBalanceGwei >= BIG_BLIND);
+      const loserSession = sessions.find(s => s.tableBalanceGwei < BIG_BLIND);
+
+      expect(winnerSession).toBeDefined();
+      expect(loserSession).toBeDefined();
+      expect(loserSession!.tableBalanceGwei).toBeLessThan(BIG_BLIND);
+
+      // Verify no new hand was started (only 1 eligible player)
+      const newHand = await prisma.hand.findFirst({
+        where: {
+          tableId: table.id,
+          id: { not: hand1Id },
+        },
+      });
+
+      expect(newHand).toBeNull(); // No new hand should be created
+
+      // Verify eligible players count
+      const eligiblePlayers = sessions.filter(s => s.tableBalanceGwei >= BIG_BLIND);
+      expect(eligiblePlayers.length).toBe(1); // Only 1 eligible player
+    });
+  });
 });
 

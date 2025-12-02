@@ -2737,63 +2737,223 @@ describe('4-Player Poker Test Matrix', () => {
     });
 
     it('RO-002: Hand 2 - First Rotation', async () => {
-      // This test would require completing hand 1 and starting hand 2
-      // For now, we'll test by creating a hand with rotated positions
-      const { prisma, hand, dealerPosition, smallBlindSeat, bigBlindSeat, utgSeat } = await setupStandardFourPlayerTest({ 
-        rakeBps: 0,
-        dealerPosition: 1,
-        smallBlindSeat: 2,
-        bigBlindSeat: 3,
-        utgSeat: 0,
-        currentActionSeat: 0,
+      // Create table and start Hand 1
+      const prisma = getTestPrisma();
+      const table = await createTestTable(prisma, {
+        smallBlind: SMALL_BLIND,
+        bigBlind: BIG_BLIND,
+        perHandRake: 0,
       });
 
-      // Verify rotated positions
-      expect(dealerPosition).toBe(1);
-      expect(smallBlindSeat).toBe(2);
-      expect(bigBlindSeat).toBe(3);
-      expect(utgSeat).toBe(0);
+      await createTestPlayers(prisma, table.id, [
+        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 2, walletAddress: PLAYER_2_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 3, walletAddress: PLAYER_3_WALLET, tableBalanceGwei: 100000000n },
+      ]);
 
-      // Verify hand has correct positions
-      const handRecord = await (prisma as any).hand.findUnique({ where: { id: hand.id } });
-      expect(handRecord.dealerPosition).toBe(1);
-      expect(handRecord.smallBlindSeat).toBe(2);
-      expect(handRecord.bigBlindSeat).toBe(3);
-      expect(handRecord.currentActionSeat).toBe(0); // UTG acts first
+      // Start Hand 1 (dealer = 0)
+      const hand1Result = await startHand(table.id, prisma);
+      const hand1Id = hand1Result.id;
+      
+      // Verify Hand 1 initial positions
+      const hand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      expect(hand1!.dealerPosition).toBe(0);
+      expect(hand1!.smallBlindSeat).toBe(1);
+      expect(hand1!.bigBlindSeat).toBe(2);
+      expect(hand1!.currentActionSeat).toBe(3); // UTG acts first
+
+      // Complete Hand 1: Have UTG, Dealer, and Small Blind fold, leaving Big Blind as winner
+      // UTG folds first (currentActionSeat = 3)
+      await foldAction(prisma, table.id, PLAYER_3_WALLET);
+      
+      // Dealer folds (seat 0)
+      await foldAction(prisma, table.id, PLAYER_0_WALLET);
+      
+      // Small Blind folds (seat 1)
+      const foldResult = await foldAction(prisma, table.id, PLAYER_1_WALLET);
+      
+      // Hand should be completed
+      expect(foldResult.handEnded).toBe(true);
+      
+      // Verify Hand 1 is marked as COMPLETED
+      const completedHand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      expect(completedHand1!.status).toBe('COMPLETED');
+
+      // Start Hand 2 (dealer should rotate to 1)
+      const hand2Result = await startHand(table.id, prisma);
+      const hand2Id = hand2Result.id;
+      
+      // Verify Hand 2 rotated positions
+      const hand2 = await prisma.hand.findUnique({ where: { id: hand2Id } });
+      expect(hand2!.dealerPosition).toBe(1); // Rotated from 0 to 1
+      expect(hand2!.smallBlindSeat).toBe(2); // Rotated from 1 to 2
+      expect(hand2!.bigBlindSeat).toBe(3); // Rotated from 2 to 3
+      expect(hand2!.currentActionSeat).toBe(0); // UTG rotated to seat 0
     });
 
     it('RO-003: Hand 3 - Second Rotation', async () => {
-      const { prisma, hand, dealerPosition, smallBlindSeat, bigBlindSeat, utgSeat } = await setupStandardFourPlayerTest({ 
-        rakeBps: 0,
-        dealerPosition: 2,
-        smallBlindSeat: 3,
-        bigBlindSeat: 0,
-        utgSeat: 1,
-        currentActionSeat: 1,
+      // Create table and start Hand 1
+      const prisma = getTestPrisma();
+      const table = await createTestTable(prisma, {
+        smallBlind: SMALL_BLIND,
+        bigBlind: BIG_BLIND,
+        perHandRake: 0,
       });
 
-      // Verify rotated positions
-      expect(dealerPosition).toBe(2);
-      expect(smallBlindSeat).toBe(3);
-      expect(bigBlindSeat).toBe(0);
-      expect(utgSeat).toBe(1);
+      await createTestPlayers(prisma, table.id, [
+        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 2, walletAddress: PLAYER_2_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 3, walletAddress: PLAYER_3_WALLET, tableBalanceGwei: 100000000n },
+      ]);
+
+      // Start Hand 1 (dealer = 0)
+      const hand1Result = await startHand(table.id, prisma);
+      const hand1Id = hand1Result.id;
+      
+      // Complete Hand 1: UTG, Dealer, Small Blind fold
+      await foldAction(prisma, table.id, PLAYER_3_WALLET); // UTG
+      await foldAction(prisma, table.id, PLAYER_0_WALLET); // Dealer
+      await foldAction(prisma, table.id, PLAYER_1_WALLET); // Small Blind
+      
+      // Verify Hand 1 completed
+      const completedHand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      expect(completedHand1!.status).toBe('COMPLETED');
+
+      // Start Hand 2 (dealer = 1)
+      const hand2Result = await startHand(table.id, prisma);
+      const hand2Id = hand2Result.id;
+      
+      // Verify Hand 2 positions
+      const hand2 = await prisma.hand.findUnique({ where: { id: hand2Id } });
+      expect(hand2!.dealerPosition).toBe(1);
+      
+      // Complete Hand 2: UTG, Dealer, Small Blind fold
+      await foldAction(prisma, table.id, PLAYER_0_WALLET); // UTG (seat 0)
+      await foldAction(prisma, table.id, PLAYER_1_WALLET); // Dealer (seat 1)
+      await foldAction(prisma, table.id, PLAYER_2_WALLET); // Small Blind (seat 2)
+      
+      // Verify Hand 2 completed
+      const completedHand2 = await prisma.hand.findUnique({ where: { id: hand2Id } });
+      expect(completedHand2!.status).toBe('COMPLETED');
+
+      // Start Hand 3 (dealer should rotate to 2)
+      const hand3Result = await startHand(table.id, prisma);
+      const hand3Id = hand3Result.id;
+      
+      // Verify Hand 3 rotated positions
+      const hand3 = await prisma.hand.findUnique({ where: { id: hand3Id } });
+      expect(hand3!.dealerPosition).toBe(2); // Rotated from 1 to 2
+      expect(hand3!.smallBlindSeat).toBe(3); // Rotated from 2 to 3
+      expect(hand3!.bigBlindSeat).toBe(0); // Rotated from 3 to 0
+      expect(hand3!.currentActionSeat).toBe(1); // UTG rotated to seat 1
     });
 
-    it('RO-004: Hand 4 - Third Rotation', async () => {
-      const { prisma, hand, dealerPosition, smallBlindSeat, bigBlindSeat, utgSeat } = await setupStandardFourPlayerTest({ 
-        rakeBps: 0,
-        dealerPosition: 3,
-        smallBlindSeat: 0,
-        bigBlindSeat: 1,
-        utgSeat: 2,
-        currentActionSeat: 2,
+    it('RO-004: Hand 4 - Third Rotation (Cycle Completes)', async () => {
+      // Create table and start Hand 1
+      const prisma = getTestPrisma();
+      const table = await createTestTable(prisma, {
+        smallBlind: SMALL_BLIND,
+        bigBlind: BIG_BLIND,
+        perHandRake: 0,
       });
 
-      // Verify rotated positions
-      expect(dealerPosition).toBe(3);
-      expect(smallBlindSeat).toBe(0);
-      expect(bigBlindSeat).toBe(1);
-      expect(utgSeat).toBe(2);
+      await createTestPlayers(prisma, table.id, [
+        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 2, walletAddress: PLAYER_2_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 3, walletAddress: PLAYER_3_WALLET, tableBalanceGwei: 100000000n },
+      ]);
+
+      // Helper function to complete a hand by having 3 players fold
+      const completeHand = async (handId: number) => {
+        const wallets = [PLAYER_0_WALLET, PLAYER_1_WALLET, PLAYER_2_WALLET, PLAYER_3_WALLET];
+        
+        // Fold players until hand ends (3 folds should end the hand)
+        let handEnded = false;
+        let foldCount = 0;
+        const maxFolds = 3; // UTG, Dealer, Small Blind
+        
+        while (!handEnded && foldCount < maxFolds) {
+          const hand = await prisma.hand.findUnique({ where: { id: handId } });
+          if (!hand) throw new Error(`Hand ${handId} not found`);
+          
+          if (hand.status === 'COMPLETED') {
+            handEnded = true;
+            break;
+          }
+          
+          const currentActionSeat = hand.currentActionSeat!;
+          const result = await foldAction(prisma, table.id, wallets[currentActionSeat]);
+          
+          if (result.handEnded) {
+            handEnded = true;
+          }
+          
+          foldCount++;
+        }
+        
+        // Verify hand completed
+        const completedHand = await prisma.hand.findUnique({ where: { id: handId } });
+        expect(completedHand!.status).toBe('COMPLETED');
+      };
+
+      // Start Hand 1 (dealer = 0)
+      const hand1Result = await startHand(table.id, prisma);
+      const hand1Id = hand1Result.id;
+      expect(hand1Result.dealerPosition).toBe(0);
+      expect(hand1Result.smallBlindSeat).toBe(1);
+      expect(hand1Result.bigBlindSeat).toBe(2);
+      
+      // Complete Hand 1
+      await completeHand(hand1Id);
+
+      // Start Hand 2 (dealer = 1)
+      const hand2Result = await startHand(table.id, prisma);
+      const hand2Id = hand2Result.id;
+      expect(hand2Result.dealerPosition).toBe(1);
+      expect(hand2Result.smallBlindSeat).toBe(2);
+      expect(hand2Result.bigBlindSeat).toBe(3);
+      
+      // Complete Hand 2
+      await completeHand(hand2Id);
+
+      // Start Hand 3 (dealer = 2)
+      const hand3Result = await startHand(table.id, prisma);
+      const hand3Id = hand3Result.id;
+      expect(hand3Result.dealerPosition).toBe(2);
+      expect(hand3Result.smallBlindSeat).toBe(3);
+      expect(hand3Result.bigBlindSeat).toBe(0);
+      
+      // Complete Hand 3
+      await completeHand(hand3Id);
+
+      // Start Hand 4 (dealer = 3)
+      const hand4Result = await startHand(table.id, prisma);
+      const hand4Id = hand4Result.id;
+      expect(hand4Result.dealerPosition).toBe(3);
+      expect(hand4Result.smallBlindSeat).toBe(0);
+      expect(hand4Result.bigBlindSeat).toBe(1);
+      
+      // Complete Hand 4
+      await completeHand(hand4Id);
+
+      // Start Hand 5 (dealer should rotate back to 0 - cycle completes)
+      const hand5Result = await startHand(table.id, prisma);
+      const hand5Id = hand5Result.id;
+      
+      // Verify Hand 5 positions are back to initial state
+      expect(hand5Result.dealerPosition).toBe(0); // Back to 0
+      expect(hand5Result.smallBlindSeat).toBe(1); // Back to 1
+      expect(hand5Result.bigBlindSeat).toBe(2); // Back to 2
+      expect(hand5Result.currentActionSeat).toBe(3); // UTG back to 3
+      
+      const hand5 = await prisma.hand.findUnique({ where: { id: hand5Id } });
+      expect(hand5!.dealerPosition).toBe(0);
+      expect(hand5!.smallBlindSeat).toBe(1);
+      expect(hand5!.bigBlindSeat).toBe(2);
+      expect(hand5!.currentActionSeat).toBe(3);
     });
 
     it('RO-005: Hand 5 - Cycle Completes', async () => {
@@ -2885,6 +3045,515 @@ describe('4-Player Poker Test Matrix', () => {
       expect(hand.dealerPosition).toBe(1);
       expect(hand.smallBlindSeat).toBe(0);
       expect(hand.bigBlindSeat).toBe(1);
+    });
+  });
+
+  // ============================================================================
+  // PLAYER ELIMINATION SCENARIOS
+  // ============================================================================
+
+  describe('PLAYER ELIMINATION Scenarios', () => {
+    it('EL-001: Player Eliminated (Balance = 0) - Rotation Skips Eliminated Player', async () => {
+      // Create table with 4 players
+      const prisma = getTestPrisma();
+      const table = await createTestTable(prisma, {
+        smallBlind: SMALL_BLIND,
+        bigBlind: BIG_BLIND,
+        perHandRake: 0,
+      });
+
+      await createTestPlayers(prisma, table.id, [
+        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 2, walletAddress: PLAYER_2_WALLET, tableBalanceGwei: 1000000n }, // 1M - below bigBlind, but will participate in Hand 1
+        { seatNumber: 3, walletAddress: PLAYER_3_WALLET, tableBalanceGwei: 100000000n },
+      ]);
+      
+      // Note: Player 2 starts with 1M (below bigBlind), so they won't be in Hand 1
+      // We need to give them enough to participate in Hand 1, then lose in Hand 2
+      // So let's start them with just enough to participate, then they'll lose and be eliminated
+      // Actually, let's give them 2M (exactly bigBlind) so they can participate but will be eliminated if they lose
+      await prisma.tableSeatSession.updateMany({
+        where: { tableId: table.id, seatNumber: 2 },
+        data: { tableBalanceGwei: 2000000n }, // Exactly bigBlind - can participate but will be eliminated if they lose
+      });
+
+      // Start Hand 1 (dealer = 0)
+      const hand1Result = await startHand(table.id, prisma);
+      const hand1Id = hand1Result.id;
+      expect(hand1Result.dealerPosition).toBe(0);
+      expect(hand1Result.smallBlindSeat).toBe(1);
+      expect(hand1Result.bigBlindSeat).toBe(2); // Player 2 is big blind
+
+      // Complete Hand 1: Have UTG, Dealer, and Small Blind fold, leaving Big Blind (player 2) as winner
+      const hand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      const wallets = [PLAYER_0_WALLET, PLAYER_1_WALLET, PLAYER_2_WALLET, PLAYER_3_WALLET];
+      
+      // UTG (seat 3) folds
+      await foldAction(prisma, table.id, wallets[3]);
+      
+      // Dealer (seat 0) folds
+      await foldAction(prisma, table.id, wallets[0]);
+      
+      // Small Blind (seat 1) folds
+      await foldAction(prisma, table.id, wallets[1]);
+
+      // Hand 1 completes, Big Blind (player 2) wins
+      const completedHand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      expect(completedHand1!.status).toBe('COMPLETED');
+
+      // Now set up Hand 2 where player 2 goes all-in and loses (gets eliminated)
+      // Create a deck where player 3 has a pair (clearly better) and player 2 has high card only
+      // Player 2: 2♠ 3♥ (no pair, no straight - will lose)
+      // Player 3: A♠ A♥ (pair of Aces - will win)
+      // Community: 7♦ 8♣ 9♠ K♦ Q♣ (no straight possible with 2-3, gives player 3 pair of Aces)
+      // Note: Changed community to 7-8-9-K-Q to prevent player 2 from making 2-3-4-5-6 straight
+      const eliminationDeck = createFabricatedDeck([
+        // Player 0 hole cards (not relevant - will fold)
+        { rank: 'Q', suit: 'hearts' },
+        { rank: 'J', suit: 'hearts' },
+        // Player 1 hole cards (not relevant - will fold)
+        { rank: 'Q', suit: 'diamonds' },
+        { rank: 'J', suit: 'diamonds' },
+        // Player 2 hole cards (no pair, no straight - will lose)
+        { rank: '2', suit: 'spades' },
+        { rank: '3', suit: 'hearts' },
+        // Player 3 hole cards (pair of Aces - will win)
+        { rank: 'A', suit: 'spades' },
+        { rank: 'A', suit: 'hearts' },
+        // Flop
+        { rank: '7', suit: 'diamonds' },
+        { rank: '8', suit: 'clubs' },
+        { rank: '9', suit: 'spades' },
+        // Turn
+        { rank: 'K', suit: 'diamonds' },
+        // River
+        { rank: 'Q', suit: 'clubs' },
+        // Rest of deck
+        ...Array(40).fill({ rank: '10', suit: 'clubs' }),
+      ]);
+
+      // Start Hand 2 (dealer should rotate to 1)
+      const hand2Result = await startHand(table.id, prisma);
+      const hand2Id = hand2Result.id;
+      expect(hand2Result.dealerPosition).toBe(1);
+      expect(hand2Result.smallBlindSeat).toBe(2); // Player 2 is small blind
+      expect(hand2Result.bigBlindSeat).toBe(3);
+      expect(hand2Result.currentActionSeat).toBe(0); // UTG acts first
+
+      // Update deck and reset deckPosition for deterministic testing
+      // startHand deals 8 hole cards (4 players × 2), so deckPosition is 8
+      // We need to reset it to 8 so community cards come from the right position
+      await prisma.hand.update({
+        where: { id: hand2Id },
+        data: {
+          deck: eliminationDeck as any,
+          deckPosition: 8, // 4 players × 2 hole cards = 8
+          communityCards: [] as any,
+        },
+      });
+
+      // Update hole cards for each player based on seatNumber
+      // startHand deals cards in order of eligiblePlayers (sorted by seatNumber)
+      // So: seat 0 gets deck[0-1], seat 1 gets deck[2-3], seat 2 gets deck[4-5], seat 3 gets deck[6-7]
+      const hand2Players = await prisma.handPlayer.findMany({
+        where: { handId: hand2Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+
+      for (const player of hand2Players) {
+        const seatNumber = player.seatNumber;
+        const holeCardStartIndex = seatNumber * 2;
+        const holeCards = eliminationDeck.slice(holeCardStartIndex, holeCardStartIndex + 2);
+        await prisma.handPlayer.update({
+          where: { id: player.id },
+          data: {
+            holeCards: holeCards as any,
+          },
+        });
+      }
+
+      // Verify hole cards were assigned correctly
+      const hand2PlayersAfterUpdate = await prisma.handPlayer.findMany({
+        where: { handId: hand2Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+      const player2HoleCards = hand2PlayersAfterUpdate.find(p => p.seatNumber === 2)?.holeCards as Card[];
+      const player3HoleCards = hand2PlayersAfterUpdate.find(p => p.seatNumber === 3)?.holeCards as Card[];
+      
+      // Verify player 2 has 2♠ 3♥ (no pair, no straight possible)
+      expect(player2HoleCards).toEqual([
+        { rank: '2', suit: 'spades' },
+        { rank: '3', suit: 'hearts' },
+      ]);
+      
+      // Verify player 3 has A♠ A♥ (pair of Aces)
+      expect(player3HoleCards).toEqual([
+        { rank: 'A', suit: 'spades' },
+        { rank: 'A', suit: 'hearts' },
+      ]);
+
+      // Get player 2's balance before Hand 2
+      const player2SessionBefore = await prisma.tableSeatSession.findFirst({
+        where: { tableId: table.id, seatNumber: 2 },
+      });
+      const player2BalanceBefore = player2SessionBefore!.tableBalanceGwei;
+      expect(player2BalanceBefore).toBeGreaterThanOrEqual(BIG_BLIND);
+
+      // UTG (player 0) folds
+      await foldAction(prisma, table.id, PLAYER_0_WALLET);
+      
+      // Dealer (player 1) folds
+      await foldAction(prisma, table.id, PLAYER_1_WALLET);
+      
+      // Verify hole cards are still correct before actions complete
+      const hand2BeforeActions = await prisma.handPlayer.findMany({
+        where: { handId: hand2Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+      const player2HoleCardsBefore = hand2BeforeActions.find(p => p.seatNumber === 2)?.holeCards as Card[];
+      const player3HoleCardsBefore = hand2BeforeActions.find(p => p.seatNumber === 3)?.holeCards as Card[];
+      
+      // Verify player 2 has 2♠ 3♥ before actions
+      if (!player2HoleCardsBefore || 
+          !((player2HoleCardsBefore[0]?.rank === '2' && player2HoleCardsBefore[0]?.suit === 'spades' && player2HoleCardsBefore[1]?.rank === '3' && player2HoleCardsBefore[1]?.suit === 'hearts') ||
+            (player2HoleCardsBefore[1]?.rank === '2' && player2HoleCardsBefore[1]?.suit === 'spades' && player2HoleCardsBefore[0]?.rank === '3' && player2HoleCardsBefore[0]?.suit === 'hearts'))) {
+        throw new Error(`Test setup failed: Player 2 hole cards incorrect before actions: ${JSON.stringify(player2HoleCardsBefore)}`);
+      }
+      
+      // Verify player 3 has A♠ A♥ before actions
+      if (!player3HoleCardsBefore ||
+          !((player3HoleCardsBefore[0]?.rank === 'A' && player3HoleCardsBefore[0]?.suit === 'spades' && player3HoleCardsBefore[1]?.rank === 'A' && player3HoleCardsBefore[1]?.suit === 'hearts') ||
+            (player3HoleCardsBefore[1]?.rank === 'A' && player3HoleCardsBefore[1]?.suit === 'spades' && player3HoleCardsBefore[0]?.rank === 'A' && player3HoleCardsBefore[0]?.suit === 'hearts'))) {
+        throw new Error(`Test setup failed: Player 3 hole cards incorrect before actions: ${JSON.stringify(player3HoleCardsBefore)}`);
+      }
+
+      // Small Blind (player 2) goes all-in with their remaining balance
+      await allInAction(prisma, table.id, PLAYER_2_WALLET);
+      
+      // Big Blind (player 3) calls the all-in
+      await callAction(prisma, table.id, PLAYER_3_WALLET);
+
+      // Hand 2 completes - player 3 wins deterministically (has A♠ K♠, better than player 2's 2♠ 3♠)
+      const completedHand2 = await prisma.hand.findUnique({ where: { id: hand2Id } });
+      expect(completedHand2!.status).toBe('COMPLETED');
+
+      // Verify hole cards and community cards are correct after hand completes
+      const hand2Final = await prisma.hand.findUnique({ where: { id: hand2Id } });
+      const hand2PlayersFinal = await prisma.handPlayer.findMany({
+        where: { handId: hand2Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+      const player2FinalHoleCards = hand2PlayersFinal.find(p => p.seatNumber === 2)?.holeCards as Card[];
+      const player3FinalHoleCards = hand2PlayersFinal.find(p => p.seatNumber === 3)?.holeCards as Card[];
+      const communityCards = (hand2Final!.communityCards || []) as Card[];
+      
+      // Verify player 2 has 2♠ 3♥ (if not, the test setup is wrong)
+      if (!player2FinalHoleCards || 
+          !((player2FinalHoleCards[0]?.rank === '2' && player2FinalHoleCards[0]?.suit === 'spades' && player2FinalHoleCards[1]?.rank === '3' && player2FinalHoleCards[1]?.suit === 'hearts') ||
+            (player2FinalHoleCards[1]?.rank === '2' && player2FinalHoleCards[1]?.suit === 'spades' && player2FinalHoleCards[0]?.rank === '3' && player2FinalHoleCards[0]?.suit === 'hearts'))) {
+        throw new Error(`Test setup failed: Player 2 hole cards are ${JSON.stringify(player2FinalHoleCards)}, expected [{rank: '2', suit: 'spades'}, {rank: '3', suit: 'hearts'}]. Community cards: ${JSON.stringify(communityCards)}`);
+      }
+      
+      // Verify player 3 has A♠ A♥ (pair of Aces - if not, the test setup is wrong)
+      if (!player3FinalHoleCards ||
+          !((player3FinalHoleCards[0]?.rank === 'A' && player3FinalHoleCards[0]?.suit === 'spades' && player3FinalHoleCards[1]?.rank === 'A' && player3FinalHoleCards[1]?.suit === 'hearts') ||
+            (player3FinalHoleCards[1]?.rank === 'A' && player3FinalHoleCards[1]?.suit === 'spades' && player3FinalHoleCards[0]?.rank === 'A' && player3FinalHoleCards[0]?.suit === 'hearts'))) {
+        throw new Error(`Test setup failed: Player 3 hole cards are ${JSON.stringify(player3FinalHoleCards)}, expected [{rank: 'A', suit: 'spades'}, {rank: 'A', suit: 'hearts'}]. Community cards: ${JSON.stringify(communityCards)}`);
+      }
+      
+      // Verify community cards are correct (should be 7♦ 8♣ 9♠ K♦ Q♣)
+      const expectedCommunityCards = [
+        { rank: '7', suit: 'diamonds' },
+        { rank: '8', suit: 'clubs' },
+        { rank: '9', suit: 'spades' },
+        { rank: 'K', suit: 'diamonds' },
+        { rank: 'Q', suit: 'clubs' },
+      ];
+      if (communityCards.length !== 5) {
+        throw new Error(`Test setup failed: Expected 5 community cards, got ${communityCards.length}. Cards: ${JSON.stringify(communityCards)}`);
+      }
+      // Note: Community cards order might vary, so we check if all expected cards are present
+      for (const expectedCard of expectedCommunityCards) {
+        const found = communityCards.some(c => c.rank === expectedCard.rank && c.suit === expectedCard.suit);
+        if (!found) {
+          throw new Error(`Test setup failed: Expected community card ${JSON.stringify(expectedCard)} not found. Actual cards: ${JSON.stringify(communityCards)}`);
+        }
+      }
+
+      // Verify player 3 won Hand 2 (deterministic - A♠ A♥ (pair of Aces) beats 2♠ 3♥ (high card))
+      // With community cards 7♦ 8♣ 9♠ K♦ Q♣:
+      // - Player 2: 2♠ 3♥ 7♦ 8♣ 9♠ K♦ Q♣ = K high (best 5: K, Q, 9, 8, 7) - no straight possible
+      // - Player 3: A♠ A♥ Q♣ K♦ 9♠ 8♣ 7♦ = Pair of Aces (best 5: A, A, K, Q, 9)
+      // Player 3 must win with pair of Aces (beats high card)
+      
+      // DEEP DIVE: Analyze hand evaluation
+      const hand2Pots = await prisma.pot.findMany({
+        where: { handId: hand2Id },
+        orderBy: { potNumber: 'asc' },
+      });
+      
+      
+      // Check all pots - player 3 should win all pots (has pair, player 2 has no pair)
+      let player3WonAnyPot = false;
+      let player2WonAnyPot = false;
+      const potDetails: string[] = [];
+      
+      for (const pot of hand2Pots) {
+        const winnerSeats = Array.isArray(pot.winnerSeatNumbers)
+          ? (pot.winnerSeatNumbers as number[])
+          : [];
+        const eligibleSeats = Array.isArray(pot.eligibleSeatNumbers)
+          ? (pot.eligibleSeatNumbers as number[])
+          : [];
+        potDetails.push(
+          `Pot ${pot.potNumber}: amount=${pot.amount}, eligible=${JSON.stringify(eligibleSeats)}, winners=${JSON.stringify(winnerSeats)}`
+        );
+        if (winnerSeats.includes(3)) {
+          player3WonAnyPot = true;
+        }
+        if (winnerSeats.includes(2)) {
+          player2WonAnyPot = true;
+        }
+      }
+      
+      // Player 3 must win (A♠ A♥ pair beats 2♠ 3♥ no pair) - deterministic
+      // Player 2 must NOT win (no pair loses to pair)
+      expect(player3WonAnyPot).toBe(true);
+      expect(player2WonAnyPot).toBe(false);
+
+      // Verify player 2 lost and is now ineligible (balance < bigBlind)
+      const player2Session = await prisma.tableSeatSession.findFirst({
+        where: { tableId: table.id, seatNumber: 2 },
+      });
+      // Player 2 lost the all-in, so their balance should be less than bigBlind
+      expect(player2Session!.tableBalanceGwei).toBeLessThan(BIG_BLIND);
+      expect(player2Session!.tableBalanceGwei).toBeLessThan(player2BalanceBefore);
+
+      // Start Hand 3 - player 2 should be skipped
+      const hand3Result = await startHand(table.id, prisma);
+      const hand3Id = hand3Result.id;
+
+      // Verify dealer rotation skips player 2
+      // Hand 1: dealer = 0, Hand 2: dealer = 1, Hand 3: dealer should be 3 (skipping 2)
+      // Eligible players: [0, 1, 3] (player 2 eliminated)
+      expect(hand3Result.dealerPosition).toBe(3); // Rotated from 1, skipping eliminated player 2
+      expect(hand3Result.smallBlindSeat).toBe(0); // After dealer 3, wraps to 0
+      expect(hand3Result.bigBlindSeat).toBe(1); // After small blind 0, wraps to 1
+      expect(hand3Result.currentActionSeat).toBe(3); // UTG is after big blind 1, wraps to 3 (skipping eliminated player 2)
+
+      // Verify player 2 is not in eligible players
+      const hand3 = await prisma.hand.findUnique({ where: { id: hand3Id } });
+      const hand3Players = await prisma.handPlayer.findMany({
+        where: { handId: hand3Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+      
+      // Should only have 3 players (0, 1, 3) - player 2 is skipped
+      expect(hand3Players.length).toBe(3);
+      const seatNumbers = hand3Players.map(p => p.seatNumber).sort((a, b) => a - b);
+      expect(seatNumbers).toEqual([0, 1, 3]); // Player 2 is not included
+    });
+
+    it('EL-002: Player Below Big Blind Threshold - Rotation Skips Ineligible Player', async () => {
+      // Create table with 4 players
+      const prisma = getTestPrisma();
+      const table = await createTestTable(prisma, {
+        smallBlind: SMALL_BLIND, // 1M
+        bigBlind: BIG_BLIND, // 2M
+        perHandRake: 0,
+      });
+
+      await createTestPlayers(prisma, table.id, [
+        { seatNumber: 0, walletAddress: PLAYER_0_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 100000000n },
+        { seatNumber: 2, walletAddress: PLAYER_2_WALLET, tableBalanceGwei: 1000000n }, // 1M - below big blind threshold
+        { seatNumber: 3, walletAddress: PLAYER_3_WALLET, tableBalanceGwei: 100000000n },
+      ]);
+
+      // Start Hand 1 (dealer = 0)
+      const hand1Result = await startHand(table.id, prisma);
+      const hand1Id = hand1Result.id;
+      expect(hand1Result.dealerPosition).toBe(0);
+
+      // Verify player 2 is not included in Hand 1 (balance < bigBlind)
+      const hand1Players = await prisma.handPlayer.findMany({
+        where: { handId: hand1Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+
+      // Should only have 3 players (0, 1, 3) - player 2 is filtered out
+      expect(hand1Players.length).toBe(3);
+      const seatNumbers1 = hand1Players.map(p => p.seatNumber).sort((a, b) => a - b);
+      expect(seatNumbers1).toEqual([0, 1, 3]); // Player 2 is not included
+
+      // Set up deterministic deck for Hand 1
+      // Player 0: A♠ K♠ (best hand - will win if all fold)
+      // Player 1: Q♠ J♠ (worse hand)
+      // Player 3: 10♠ 9♠ (worst hand)
+      // Community: 8♥ 7♦ 6♣ 5♥ 4♦ (no help)
+      const hand1Deck = createFabricatedDeck([
+        // Player 0 hole cards (best hand - will win)
+        { rank: 'A', suit: 'spades' },
+        { rank: 'K', suit: 'spades' },
+        // Player 1 hole cards (worse hand)
+        { rank: 'Q', suit: 'spades' },
+        { rank: 'J', suit: 'spades' },
+        // Player 2 hole cards (not in hand - skipped)
+        { rank: '2', suit: 'hearts' },
+        { rank: '3', suit: 'hearts' },
+        // Player 3 hole cards (worst hand)
+        { rank: '10', suit: 'spades' },
+        { rank: '9', suit: 'spades' },
+        // Flop
+        { rank: '8', suit: 'hearts' },
+        { rank: '7', suit: 'diamonds' },
+        { rank: '6', suit: 'clubs' },
+        // Turn
+        { rank: '5', suit: 'hearts' },
+        // River
+        { rank: '4', suit: 'diamonds' },
+        // Rest of deck
+        ...Array(40).fill({ rank: '2', suit: 'clubs' }),
+      ]);
+
+      // Update deck and hole cards for deterministic testing
+      await prisma.hand.update({
+        where: { id: hand1Id },
+        data: {
+          deck: hand1Deck as any,
+          deckPosition: 6, // 3 players × 2 hole cards = 6
+          communityCards: [] as any,
+        },
+      });
+
+      // Update hole cards for each player based on seatNumber
+      // Only players 0, 1, 3 are in the hand (player 2 is skipped)
+      for (const player of hand1Players) {
+        const seatNumber = player.seatNumber;
+        const holeCardStartIndex = seatNumber * 2;
+        const holeCards = hand1Deck.slice(holeCardStartIndex, holeCardStartIndex + 2);
+        await prisma.handPlayer.update({
+          where: { id: player.id },
+          data: {
+            holeCards: holeCards as any,
+          },
+        });
+      }
+
+      // Verify hole cards were assigned correctly
+      const hand1PlayersAfterUpdate = await prisma.handPlayer.findMany({
+        where: { handId: hand1Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+      const player0HoleCards = hand1PlayersAfterUpdate.find(p => p.seatNumber === 0)?.holeCards as Card[];
+      const player1HoleCards = hand1PlayersAfterUpdate.find(p => p.seatNumber === 1)?.holeCards as Card[];
+      const player3HoleCards = hand1PlayersAfterUpdate.find(p => p.seatNumber === 3)?.holeCards as Card[];
+      
+      // Verify player 0 has A♠ K♠ (best hand)
+      expect(player0HoleCards).toEqual([
+        { rank: 'A', suit: 'spades' },
+        { rank: 'K', suit: 'spades' },
+      ]);
+      
+      // Verify player 1 has Q♠ J♠
+      expect(player1HoleCards).toEqual([
+        { rank: 'Q', suit: 'spades' },
+        { rank: 'J', suit: 'spades' },
+      ]);
+      
+      // Verify player 3 has 10♠ 9♠ (worst hand)
+      expect(player3HoleCards).toEqual([
+        { rank: '10', suit: 'spades' },
+        { rank: '9', suit: 'spades' },
+      ]);
+
+      // Verify player 2 has no actions in Hand 1
+      const hand1Actions = await prisma.handAction.findMany({
+        where: { handId: hand1Id },
+        orderBy: { id: 'asc' },
+      });
+      const player2Actions = hand1Actions.filter(a => a.seatNumber === 2);
+      expect(player2Actions.length).toBe(0); // Player 2 took no actions
+
+      // Complete Hand 1: Have UTG, Dealer, and Small Blind fold
+      // This will leave the Big Blind (player 3) as the winner
+      const hand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      const utgSeat = hand1!.currentActionSeat!;
+      const wallets = [PLAYER_0_WALLET, PLAYER_1_WALLET, PLAYER_3_WALLET];
+      
+      // UTG folds
+      await foldAction(prisma, table.id, wallets[utgSeat === 0 ? 0 : utgSeat === 1 ? 1 : 2]);
+      
+      // Get next action seat and fold
+      const hand1AfterFold1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      if (hand1AfterFold1!.status !== 'COMPLETED') {
+        const nextActionSeat = hand1AfterFold1!.currentActionSeat!;
+        await foldAction(prisma, table.id, wallets[nextActionSeat === 0 ? 0 : nextActionSeat === 1 ? 1 : 2]);
+      }
+
+      // Verify Hand 1 completed
+      const completedHand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
+      expect(completedHand1!.status).toBe('COMPLETED');
+
+      // Verify who won Hand 1 deterministically and that player 2 did not participate
+      const hand1Pots = await prisma.pot.findMany({
+        where: { handId: hand1Id },
+      });
+      
+      // Determine who won (should be the last player standing after folds)
+      let hand1Winner: number | null = null;
+      for (const pot of hand1Pots) {
+        const winnerSeats = Array.isArray(pot.winnerSeatNumbers)
+          ? (pot.winnerSeatNumbers as number[])
+          : [];
+        if (winnerSeats.length > 0) {
+          hand1Winner = winnerSeats[0];
+          break;
+        }
+      }
+      
+      // Verify player 2 did NOT win Hand 1
+      expect(hand1Winner).not.toBe(2);
+      expect(hand1Winner).not.toBeNull();
+      for (const pot of hand1Pots) {
+        // Check eligibleSeatNumbers (players eligible for this pot)
+        const eligibleSeats = Array.isArray(pot.eligibleSeatNumbers) 
+          ? (pot.eligibleSeatNumbers as number[])
+          : [];
+        // Player 2 should not be eligible for any pot since they didn't participate
+        expect(eligibleSeats).not.toContain(2);
+        
+        // Check winnerSeatNumbers (players who won this pot)
+        const winnerSeats = Array.isArray(pot.winnerSeatNumbers)
+          ? (pot.winnerSeatNumbers as number[])
+          : [];
+        // Player 2 should not have won any pot
+        expect(winnerSeats).not.toContain(2);
+      }
+
+      // Start Hand 2 - player 2 should still be skipped
+      const hand2Result = await startHand(table.id, prisma);
+      const hand2Id = hand2Result.id;
+
+      // Verify dealer rotated (from 0 to 1, skipping player 2)
+      expect(hand2Result.dealerPosition).toBe(1);
+      
+      // Verify player 2 is still not included
+      const hand2Players = await prisma.handPlayer.findMany({
+        where: { handId: hand2Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+
+      expect(hand2Players.length).toBe(3);
+      const seatNumbers2 = hand2Players.map(p => p.seatNumber).sort((a, b) => a - b);
+      expect(seatNumbers2).toEqual([0, 1, 3]); // Player 2 is still not included
+
+      // Verify player 2's balance is still below threshold
+      const player2Session = await prisma.tableSeatSession.findFirst({
+        where: { tableId: table.id, seatNumber: 2 },
+      });
+      expect(player2Session!.tableBalanceGwei).toBeLessThan(BIG_BLIND);
     });
   });
 });
