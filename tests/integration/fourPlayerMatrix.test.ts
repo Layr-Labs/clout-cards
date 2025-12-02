@@ -2359,25 +2359,87 @@ describe('4-Player Poker Test Matrix', () => {
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // TURN: Big blind all-in
+      // TURN: Big blind all-in (creates a bet since they have chips remaining after FLOP)
       await allInAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
-      // After all-in, if there's no current bet (all-in was less than previous bet or round advanced), check instead
-      const handBeforeCall = await prisma.hand.findUnique({ where: { id: hand.id } });
-      const result = handBeforeCall?.currentBet && handBeforeCall.currentBet > 0n
-        ? await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id))
-        : await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      // Dealer calls the all-in (this exhausts dealer's balance, making all players all-in)
+      const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true); // All all-in, auto-advance to river
 
-      // Multiple side pots created
+      // Verify side pots created with correct eligibility and balances
+      // Expected commitments:
+      // - UTG (seat 3): 20M (all-in PRE_FLOP)
+      // - Small blind (seat 1): 50M (20M PRE_FLOP + 30M all-in FLOP)
+      // - Big blind (seat 2): 60M (20M PRE_FLOP + 30M call FLOP + 10M all-in TURN)
+      // - Dealer (seat 0): 60M (20M PRE_FLOP + 30M call FLOP + 10M call TURN)
+      // 
+      // Side pots:
+      // - Pot 0: 20M × 4 = 80M (all 4 eligible: [0,1,2,3])
+      // - Pot 1: (50M - 20M) × 3 = 90M (seats [0,1,2] eligible)
+      // - Pot 2: (60M - 50M) × 2 = 20M (seats [0,2] eligible)
+      // Total: 190M
       const pots = await prisma.pot.findMany({
         where: { handId: hand.id },
         orderBy: { potNumber: 'asc' },
       });
 
-      expect(pots.length).toBeGreaterThan(1); // Should have multiple side pots
-    }, { player0Balance: 100000000n, player1Balance: 20000000n, player2Balance: 30000000n, player3Balance: 20000000n });
+      expect(pots.length).toBe(3); // Should have 3 side pots
+
+      // Verify pot amounts and eligibility
+      const pot0 = pots.find((p: any) => p.potNumber === 0);
+      const pot1 = pots.find((p: any) => p.potNumber === 1);
+      const pot2 = pots.find((p: any) => p.potNumber === 2);
+
+      expect(pot0).toBeDefined();
+      expect(pot1).toBeDefined();
+      expect(pot2).toBeDefined();
+
+      // Pot amounts are AFTER rake since hand is settled (handEnded = true)
+      // Expected BEFORE rake: Pot 0: 80M, Pot 1: 90M, Pot 2: 20M, Total: 190M
+      const pot0BeforeRake = 80000000n;
+      const pot1BeforeRake = 90000000n;
+      const pot2BeforeRake = 20000000n;
+      const totalBeforeRake = 190000000n;
+
+      // Calculate expected amounts after rake
+      const pot0Rake = calculateRake(pot0BeforeRake, rakeBps);
+      const pot1Rake = calculateRake(pot1BeforeRake, rakeBps);
+      const pot2Rake = calculateRake(pot2BeforeRake, rakeBps);
+      const pot0AfterRake = pot0BeforeRake - pot0Rake;
+      const pot1AfterRake = pot1BeforeRake - pot1Rake;
+      const pot2AfterRake = pot2BeforeRake - pot2Rake;
+      const totalAfterRake = pot0AfterRake + pot1AfterRake + pot2AfterRake;
+
+      // Pot 0: 80M before rake, all 4 players eligible
+      expect(BigInt(pot0!.amount)).toBe(pot0AfterRake);
+      const eligible0 = Array.isArray(pot0!.eligibleSeatNumbers) 
+        ? (pot0!.eligibleSeatNumbers as number[]).sort((a, b) => a - b) 
+        : [];
+      expect(eligible0).toEqual([0, 1, 2, 3]);
+
+      // Pot 1: 90M before rake, seats 0,1,2 eligible
+      expect(BigInt(pot1!.amount)).toBe(pot1AfterRake);
+      const eligible1 = Array.isArray(pot1!.eligibleSeatNumbers) 
+        ? (pot1!.eligibleSeatNumbers as number[]).sort((a, b) => a - b) 
+        : [];
+      expect(eligible1).toEqual([0, 1, 2]);
+
+      // Pot 2: 20M before rake, seats 0,2 eligible
+      expect(BigInt(pot2!.amount)).toBe(pot2AfterRake);
+      const eligible2 = Array.isArray(pot2!.eligibleSeatNumbers) 
+        ? (pot2!.eligibleSeatNumbers as number[]).sort((a, b) => a - b) 
+        : [];
+      expect(eligible2).toEqual([0, 2]);
+
+      // Verify total pot amount (after rake)
+      const totalPot = pots.reduce((sum: bigint, pot: any) => sum + BigInt(pot.amount), 0n);
+      expect(totalPot).toBe(totalAfterRake);
+      
+      // Verify total rake amount
+      const totalRake = pot0Rake + pot1Rake + pot2Rake;
+      expect(totalRake).toBe(calculateRake(totalBeforeRake, rakeBps));
+    }, { player0Balance: 100000000n, player1Balance: 50000000n, player2Balance: 60000000n, player3Balance: 20000000n });
   });
 
   // ============================================================================
@@ -2549,23 +2611,30 @@ describe('4-Player Poker Test Matrix', () => {
       // Winner should be UTG (the only remaining player after others fold)
       expect(result.winnerSeatNumber).not.toBeNull();
 
-      // Single winner
-      await verifyPotWithRake(prisma, hand.id, 50000000n, rakeBps);
+      // Single winner - pot includes blinds (1M + 2M = 3M) + all-in (50M) = 53M
+      await verifyPotWithRake(prisma, hand.id, 53000000n, rakeBps);
     }, { player0Balance: 100000000n, player1Balance: 100000000n, player2Balance: 100000000n, player3Balance: 50000000n });
 
     testWithRakeVariants('EC-006: All-In Then Call', async ({ prisma, hand, table }, rakeBps) => {
       // setupStandardFourPlayerTest already initialized the hand via startHand (includes POST_BLIND)
+      // 
+      // Test scenario: UTG goes all-in, others call with their entire balance to match
+      // This makes everyone all-in, triggering auto-advancement to river
+      // 
+      // Balances: All players have 50M (after blinds: dealer=0M, small blind=49M, big blind=48M, UTG=50M)
+      // UTG goes all-in: 50M total commitment
+      // Others must call 50M to match, which exhausts their balance, making them all-in
 
-      // UTG all-in
+      // UTG all-in (50M total commitment)
       await allInAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Dealer calls
+      // Dealer calls (50M total commitment - exhausts balance, becomes all-in)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Small blind calls
+      // Small blind calls (50M total commitment - exhausts balance, becomes all-in)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Big blind calls
+      // Big blind calls (50M total commitment - exhausts balance, becomes all-in)
       const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       expect(result.success).toBe(true);
@@ -2578,7 +2647,7 @@ describe('4-Player Poker Test Matrix', () => {
       });
 
       expect(pots.length).toBeGreaterThan(0);
-    }, { player0Balance: 100000000n, player1Balance: 100000000n, player2Balance: 100000000n, player3Balance: 50000000n });
+    }, { player0Balance: 50000000n, player1Balance: 50000000n, player2Balance: 50000000n, player3Balance: 50000000n });
 
     testWithRakeVariants('EC-007: Complex Side Pot with Ties', async ({ prisma, hand, table }, rakeBps) => {
       const deck = createTwoWayTieDeck();

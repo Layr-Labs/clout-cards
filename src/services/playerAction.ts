@@ -2464,18 +2464,21 @@ export async function callAction(
     }
 
     // 8. Deduct from table balance
+    const newBalance = seatSession.tableBalanceGwei - callAmount;
     await tx.tableSeatSession.update({
       where: { id: seatSession.id },
       data: {
-        tableBalanceGwei: seatSession.tableBalanceGwei - callAmount,
+        tableBalanceGwei: newBalance,
       },
     });
 
-    // 9. Update chips committed (CALL doesn't change currentBet or lastRaiseAmount)
+    // 9. Update chips committed and mark as ALL_IN if balance is 0
+    // (CALL doesn't change currentBet or lastRaiseAmount)
     await (tx as any).handPlayer.update({
       where: { id: handPlayer.id },
       data: {
         chipsCommitted: currentBet,
+        status: newBalance === 0n ? 'ALL_IN' : 'ACTIVE', // Mark as ALL_IN if balance exhausted
       },
     });
 
