@@ -454,8 +454,8 @@ describe('4-Player Poker Test Matrix', () => {
       round = 'PRE_FLOP',
       deck = createStandardDeck(),
       currentBet = round === 'PRE_FLOP' ? BIG_BLIND : 0n,
-      deckPosition = round === 'PRE_FLOP' ? 0 : round === 'FLOP' ? 8 : round === 'TURN' ? 9 : 10,
-      communityCards = round === 'PRE_FLOP' ? [] : deck.slice(8, round === 'FLOP' ? 11 : round === 'TURN' ? 12 : 13),
+      // deckPosition is set by startHand after dealing hole cards - don't override it
+      communityCards = [], // Never pre-populate, let round advancement handle it
       dealerPosition = 0,
       smallBlindSeat = 1,
       bigBlindSeat = 2,
@@ -494,12 +494,14 @@ describe('4-Player Poker Test Matrix', () => {
     
     if (isDeterministicDeck) {
       // Update deck and hole cards for deterministic testing
+      // Note: We never pre-populate communityCards - let simulatePreFlopActions handle round advancement
+      // Note: We don't update deckPosition - startHand already set it correctly after dealing hole cards
       await prisma.hand.update({
         where: { id: handId },
         data: {
           deck: deck as any,
-          deckPosition: round === 'PRE_FLOP' ? 0 : round === 'FLOP' ? 8 : round === 'TURN' ? 9 : 10,
-          communityCards: (round === 'PRE_FLOP' ? [] : deck.slice(8, round === 'FLOP' ? 11 : round === 'TURN' ? 12 : 13)) as any,
+          // Don't update deckPosition - startHand already set it correctly (8 for 4 players, 4 for 2 players)
+          communityCards: [] as any, // Never pre-populate, let round advancement handle it
         },
       });
 
@@ -2304,14 +2306,14 @@ describe('4-Player Poker Test Matrix', () => {
       // Dealer checks
       await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // TURN: Small blind folds
-      await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      // TURN: Small blind folds, leaving only dealer
+      const foldResult = await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // RIVER: Showdown with one player (dealer)
-      const result = await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
-
-      expect(result.success).toBe(true);
-      expect(result.handEnded).toBe(true);
+      // When only one player remains, hand ends immediately (no showdown needed)
+      // This is correct poker behavior - remaining player wins without revealing cards
+      expect(foldResult.success).toBe(true);
+      expect(foldResult.handEnded).toBe(true);
+      expect(foldResult.winnerSeatNumber).toBe(0); // Dealer wins
 
       // Pot accumulates from all rounds
       const pots = await prisma.pot.findMany({

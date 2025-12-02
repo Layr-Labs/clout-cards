@@ -348,8 +348,8 @@ describe('2-Player Poker Test Matrix', () => {
       round = 'PRE_FLOP',
       deck = createStandardDeck(),
       currentBet = round === 'PRE_FLOP' ? BIG_BLIND : 0n,
-      deckPosition = round === 'PRE_FLOP' ? 0 : round === 'FLOP' ? 4 : round === 'TURN' ? 5 : 6,
-      communityCards = round === 'PRE_FLOP' ? [] : deck.slice(4, round === 'FLOP' ? 7 : round === 'TURN' ? 8 : 9),
+      // deckPosition is set by startHand after dealing hole cards - don't override it
+      communityCards = [], // Never pre-populate, let round advancement handle it
       player0ChipsCommitted = round === 'PRE_FLOP' ? SMALL_BLIND : BIG_BLIND,
       player1ChipsCommitted = BIG_BLIND,
       currentActionSeat = 0,
@@ -380,14 +380,14 @@ describe('2-Player Poker Test Matrix', () => {
     
     if (isDeterministicDeck) {
       // Update deck and hole cards for deterministic testing
-      // Note: We don't set communityCards here - let advanceBettingRound deal them naturally
-      // We just set the deck and deckPosition so cards are dealt from the right position
+      // Note: We never pre-populate communityCards - let simulatePreFlopActions handle round advancement
+      // Note: We don't update deckPosition - startHand already set it correctly after dealing hole cards
       await prisma.hand.update({
         where: { id: handId },
         data: {
           deck: deck as any,
-          deckPosition: round === 'PRE_FLOP' ? 0 : round === 'FLOP' ? 4 : round === 'TURN' ? 5 : 6,
-          // Don't set communityCards - let advanceBettingRound deal them from the deck
+          // Don't update deckPosition - startHand already set it correctly (8 for 4 players, 4 for 2 players)
+          communityCards: [] as any, // Never pre-populate, let round advancement handle it
         },
       });
 

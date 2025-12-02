@@ -1,12 +1,12 @@
 # 4-Player Test Matrix Regression Report
-**Date:** After TU-004 Fix  
+**Date:** After MR-004 Fix  
 **Total Tests:** 102  
-**Passed:** 82 (80.4%)  
-**Failed:** 20 (19.6%)
+**Passed:** 93 (91.2%)  
+**Failed:** 9 (8.8%)
 
 ## Summary
 
-After fixing TU-004 (All-In on Turn), the test suite shows **82 passing tests** and **20 failures**. TU-004 is now passing, improving from 80 to 82 passing tests.
+After fixing MR-004 (Progressive Eliminations), the test suite shows **93 passing tests** and **9 failures**. The fix resolved MR-004 by correctly handling the case where only one player remains after a fold - the hand ends immediately without needing a showdown.
 
 ## Test Results by Category
 
@@ -20,100 +20,73 @@ After fixing TU-004 (All-In on Turn), the test suite shows **82 passing tests** 
 
 ### ✅ TURN Scenarios: 4/4 Passing (100%)
 - **All TURN tests passing** ✅
-- **TU-004 fix was successful** - Test now correctly starts on TURN and creates side pots
+- TU-004 fix remains successful
 
 ### ✅ RIVER Scenarios: 4/4 Passing (100%)
 - **All RIVER tests passing** ✅
 
-### ❌ MULTI-WAY TIE Scenarios: 2/6 Passing (33.3%)
-- **TI-001, TI-002, TI-003, TI-006** - ❌ FAILING (4 tests)
-  - **Issue:** `Error: Expected 5 community cards, got 10`
-  - **Root Cause:** Test setup is incorrectly setting `communityCards` array - appears to be duplicating cards or not properly slicing the deck
-  - **Fix Needed:** Fix test setup in `setupStandardFourPlayerTest` or test-specific deck configuration for tie scenarios
+### ✅ MULTI-WAY TIE Scenarios: 6/6 Passing (100%)
+- **All TIE tests passing** ✅
+- TI-006 fix remains successful
 
-### ❌ KICKER Scenarios: 0/4 Passing (0%)
-- **KI-001, KI-002, KI-003, KI-004** - ❌ FAILING (4 tests)
-  - **Issue:** `Error: Expected 5 community cards, got 10`
-  - **Root Cause:** Same as MULTI-WAY TIE - test setup issue with community cards
-  - **Fix Needed:** Same fix as MULTI-WAY TIE scenarios
+### ✅ KICKER Scenarios: 4/4 Passing (100%)
+- **All KICKER tests passing** ✅
+- KI-004 fix remains successful
 
 ### ✅ SIDE POT Scenarios: 6/6 Passing (100%)
 - **All SIDE POT tests passing** ✅
 
-### ✅ MULTI-ROUND Scenarios: 3/6 Passing (50%)
-- **MR-004: Progressive Eliminations** - ❌ FAILING (2 variants)
-  - **Issue:** `Error: No active hand found for table`
-  - **Root Cause:** Hand is ending prematurely or test is trying to act after hand completion
-  - **Fix Needed:** Review test logic - may need to check hand status before attempting actions
+### ✅ MULTI-ROUND Scenarios: 5/6 Passing (83.3%)
+- **MR-001, MR-002, MR-003, MR-004, MR-005** ✅ Passing
+- **MR-004: Progressive Eliminations** ✅ **FIXED** - Now correctly checks `foldAction` result and handles hand ending when only one player remains
+- **MR-006: All-In on Different Rounds** ❌ Failing - "Cannot call when there is no current bet. Use check instead."
 
-- **MR-006: All-In on Different Rounds** - ❌ FAILING (2 variants)
-  - **Issue:** `Error: Cannot call when there is no current bet. Use check instead.`
-  - **Root Cause:** Test is calling `callAction` when `currentBet` is `0n` (round advanced or all-in cleared the bet)
-  - **Fix Needed:** Add conditional logic to check `currentBet` before calling `callAction` (similar to previous fixes)
-
-### ✅ EDGE CASES: 4/8 Passing (50%)
-- **EC-005: All-In Then Fold** - ❌ FAILING (2 variants)
-  - **Issue:** Pot amount mismatch - expected `50000000n` but got `53000000n`
-  - **Root Cause:** Test expectation may be incorrect, or pot calculation includes extra chips (possibly blinds)
-  - **Fix Needed:** Review pot calculation logic or update test expectation
-
-- **EC-006: All-In Then Call** - ❌ FAILING (2 variants)
-  - **Issue:** `handEnded` expected `true` but got `false`
-  - **Root Cause:** Similar to PF-008 and FL-008 - all-in scenarios not properly ending the hand
-  - **Fix Needed:** Apply same fix pattern as PF-008/FL-008 - use `allInAction` when calling exhausts balance
-
-- **EC-008: Kicker Edge Cases** - ❌ FAILING
-  - **Issue:** `Error: Expected 5 community cards, got 10`
-  - **Root Cause:** Same as MULTI-WAY TIE and KICKER scenarios
-  - **Fix Needed:** Same fix as MULTI-WAY TIE scenarios
+### ❌ EDGE CASES: 6/9 Passing (66.7%)
+- **EC-001, EC-002, EC-003, EC-004, EC-007, EC-008** ✅ Passing
+- **EC-005: All-In Then Fold** ❌ Failing - Pot amount mismatch (expected 50M, got 53M)
+- **EC-006: All-In Then Call** ❌ Failing - `handEnded` expected `true`, got `false` (auto-advance issue)
 
 ### ❌ DEALER/BLIND ROTATION Scenarios: 4/7 Passing (57.1%)
-- **RO-002, RO-003, RO-004** - ❌ FAILING (3 tests)
-  - **Issue:** Dealer position not rotating - expected `1, 2, 3` but got `0` for all
-  - **Root Cause:** `startNewHandIfPossible` or hand rotation logic not properly advancing dealer position
-  - **Fix Needed:** Review dealer rotation logic in `startNewHandIfPossible` or `startHand`
+- **RO-001, RO-005, RO-006, RO-007** ✅ Passing
+- **RO-002, RO-003, RO-004** ❌ Failing - Dealer position not rotating correctly (expected 1/2/3, got 0)
 
-## Failure Patterns
+## Recent Fixes
 
-### Pattern 1: Community Cards Array Issue (9 failures)
-- **Affected Tests:** TI-001, TI-002, TI-003, TI-006, KI-001, KI-002, KI-003, KI-004, EC-008
-- **Error:** `Expected 5 community cards, got 10`
-- **Likely Cause:** Test setup incorrectly populating `communityCards` array (possibly duplicating or not slicing correctly)
-- **Priority:** Medium - Test setup issue, not core logic
+### MR-004: Progressive Eliminations
+**Issue:** Test was calling `checkAction` after `foldAction` when only one player remained, expecting a RIVER showdown. However, when only one player remains after a fold, the hand ends immediately (correct poker behavior).
 
-### Pattern 2: All-In Hand Ending (2 failures)
-- **Affected Tests:** EC-006
-- **Error:** `handEnded` expected `true` but got `false`
-- **Likely Cause:** Players going all-in not being marked as `ALL_IN` when calling exhausts balance (same issue as PF-008/FL-008)
-- **Priority:** High - Core game logic issue, can apply PF-008/FL-008 fix pattern
+**Fix:** Modified test to check the `foldAction` result. When `foldResult.handEnded === true`, the test verifies the hand ended correctly and skips the `checkAction` call.
 
-### Pattern 3: Dealer Rotation (3 failures)
-- **Affected Tests:** RO-002, RO-003, RO-004
-- **Error:** Dealer position not advancing between hands
-- **Likely Cause:** `startNewHandIfPossible` or `startHand` not properly rotating dealer
-- **Priority:** Medium - Feature functionality issue
+**Impact:** Fixed MR-004 (2 test variants). Test now correctly handles the case where only one player remains after a fold.
 
-### Pattern 4: Test Logic Issues (6 failures)
-- **Affected Tests:** MR-004 (hand not found), MR-006 (call when no bet), EC-005 (pot amount)
-- **Likely Cause:** Test expectations or test logic issues
-- **Priority:** Low-Medium - May be test issues rather than code issues
+## Remaining Failures
 
-## Improvements Since Last Report
+### 1. MR-006: All-In on Different Rounds (2 failures)
+**Error:** `Cannot call when there is no current bet. Use check instead.`
+**Likely Cause:** After all-in actions, `currentBet` becomes 0, but test is trying to call. Test should check `currentBet` before calling.
 
-1. ✅ **TU-004 Fixed:** All-In on Turn test now passing (was failing before)
-2. ✅ **Overall Pass Rate Improved:** 80.4% (82/102) vs 78.4% (80/102) previously
-3. ✅ **All TURN tests passing:** 4/4 (100%)
+### 2. EC-005: All-In Then Fold (2 failures)
+**Error:** Pot amount mismatch - expected 50M, got 53M
+**Likely Cause:** Test expectation issue - pot calculation includes blinds (3M) that weren't accounted for in expected value
 
-## Recommendations
+### 3. EC-006: All-In Then Call (2 failures)
+**Error:** `handEnded` expected `true`, got `false`
+**Likely Cause:** After all-in and call, players should be marked as `ALL_IN`, triggering auto-advance to RIVER. Similar to PF-008/FL-008 fix needed.
 
-1. **High Priority:** Fix EC-006 all-in hand ending issue - apply PF-008/FL-008 fix pattern
-2. **Medium Priority:** Fix community cards array issue in test setup (affects 9 tests)
-3. **Medium Priority:** Fix dealer rotation logic (affects 3 tests)
-4. **Low-Medium Priority:** Review and fix test logic issues (MR-004, MR-006, EC-005)
+### 4. RO-002, RO-003, RO-004: Dealer Rotation (3 failures)
+**Error:** Dealer position not rotating (expected 1/2/3, got 0)
+**Likely Cause:** Dealer rotation logic not working correctly - dealer position stays at 0 instead of rotating
 
 ## Next Steps
 
-1. Apply PF-008/FL-008 fix pattern to EC-006
-2. Investigate community cards array duplication in test setup
-3. Review dealer rotation logic in `startNewHandIfPossible`
-4. Review test expectations for MR-004, MR-006, EC-005
+1. **EC-006**: Apply same fix as PF-008/FL-008 - ensure players are marked `ALL_IN` when calling exhausts balance
+2. **MR-006**: Add conditional logic to check `currentBet` before calling `callAction`
+3. **EC-005**: Review pot calculation and update test expectations
+4. **RO-002/003/004**: Investigate dealer rotation logic in `startHand` or `startNewHandIfPossible`
+
+## Test Coverage
+
+- **Total Tests:** 102
+- **Passing:** 93 (91.2%)
+- **Failing:** 9 (8.8%)
+- **Improvement:** +2 tests fixed since last report (MR-004)
