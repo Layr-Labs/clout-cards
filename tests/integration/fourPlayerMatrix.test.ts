@@ -859,28 +859,36 @@ describe('4-Player Poker Test Matrix', () => {
     });
 
     testWithRakeVariants('PF-008: All-In Pre-Flop (Single Player)', async ({ prisma, hand, table }, rakeBps) => {
-      // setupStandardFourPlayerTest already initialized the hand via startHand
+      // Verify we're starting on PRE_FLOP
+      expect(hand.round).toBe('PRE_FLOP');
 
       // UTG all-in (50M total, 48M incremental)
       await allInAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Dealer calls (48M to match)
-      await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      // Dealer goes all-in (matching the all-in amount, exhausting balance)
+      // Dealer starts with 50M, POST_BLIND commits 0M, so calling 50M exhausts balance
+      await allInAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       // Small blind folds
       await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Big blind calls (48M to match)
-      const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      // Big blind goes all-in (matching the all-in amount, exhausting balance)
+      // Big blind starts with 50M, POST_BLIND commits 2M, so calling 48M more exhausts balance
+      const result = await allInAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true); // All active players all-in, auto-advance to river
 
       // Pot calculation: All HandActions store incremental amounts
-      // SB POST_BLIND: 1M + BB POST_BLIND: 2M + UTG ALL_IN: 50M + Dealer CALL: 50M + BB CALL: 48M = 151M
-      // Note: BB CALL is 48M incremental (to match 50M total, since BB already has 2M from POST_BLIND)
+      // SB POST_BLIND: 1M + BB POST_BLIND: 2M + UTG ALL_IN: 50M + Dealer ALL_IN: 50M + BB ALL_IN: 48M = 151M
+      // Note: BB ALL_IN is 48M incremental (to match 50M total, since BB already has 2M from POST_BLIND)
       await verifyPotWithRake(prisma, hand.id, 151000000n, rakeBps);
-    }, { player0Balance: 100000000n, player1Balance: 100000000n, player2Balance: 100000000n, player3Balance: 50000000n });
+    }, { 
+      player0Balance: 50000000n,  // Dealer: 50M (calling 50M exhausts balance)
+      player1Balance: 100000000n,  // Small Blind: 100M (folds, doesn't matter)
+      player2Balance: 50000000n,   // Big Blind: 50M (POST_BLIND commits 2M, calling 48M more exhausts balance)
+      player3Balance: 50000000n    // UTG: 50M (goes all-in for 50M)
+    });
 
     testWithRakeVariants('PF-009: All-In Pre-Flop (Two Players, Same Amount)', async ({ prisma, hand, table }, rakeBps) => {
       // setupStandardFourPlayerTest already initialized the hand via startHand

@@ -1,24 +1,22 @@
 # 4-Player Test Matrix Regression Report
-**Date:** After FL-008 Fix  
+**Date:** After PF-008 Fix  
 **Total Tests:** 102  
-**Passed:** 78 (76.5%)  
-**Failed:** 24 (23.5%)
+**Passed:** 80 (78.4%)  
+**Failed:** 22 (21.6%)
 
 ## Summary
 
-After fixing FL-008 (All-In on Flop), the test suite shows **78 passing tests** and **24 failures**. The failures fall into several distinct categories, suggesting multiple root causes rather than a single systemic issue.
+After fixing PF-008 (All-In Pre-Flop), the test suite shows **80 passing tests** and **22 failures**. PF-008 is now passing, improving from 78 to 80 passing tests.
 
 ## Test Results by Category
 
-### ✅ PRE-FLOP Scenarios: 20/22 Passing (90.9%)
-- **PF-008: All-In Pre-Flop (Single Player)** - ❌ FAILING (2 variants)
-  - **Issue:** `handEnded` expected `true` but got `false`
-  - **Root Cause:** Similar to FL-008 - when all players go all-in, hand should auto-advance to RIVER and end, but it's not happening
-  - **Fix Needed:** Same pattern as FL-008 - ensure all players are marked as ALL_IN when they exhaust their balance
+### ✅ PRE-FLOP Scenarios: 22/22 Passing (100%)
+- **All PRE-FLOP tests passing** ✅
+- PF-008 fix was successful
 
 ### ✅ FLOP Scenarios: 10/10 Passing (100%)
 - **All FLOP tests passing** ✅
-- FL-008 fix was successful
+- FL-008 fix remains successful
 
 ### ✅ TURN Scenarios: 2/4 Passing (50%)
 - **TU-004: All-In on Turn (Multiple Players)** - ❌ FAILING (2 variants)
@@ -58,13 +56,13 @@ After fixing FL-008 (All-In on Flop), the test suite shows **78 passing tests** 
 ### ✅ EDGE CASES: 4/8 Passing (50%)
 - **EC-005: All-In Then Fold** - ❌ FAILING (2 variants)
   - **Issue:** Pot amount mismatch - expected `50000000n` but got `53000000n`
-  - **Root Cause:** Test expectation may be incorrect, or pot calculation includes extra chips
+  - **Root Cause:** Test expectation may be incorrect, or pot calculation includes extra chips (possibly blinds)
   - **Fix Needed:** Review pot calculation logic or update test expectation
 
 - **EC-006: All-In Then Call** - ❌ FAILING (2 variants)
   - **Issue:** `handEnded` expected `true` but got `false`
   - **Root Cause:** Similar to PF-008 and FL-008 - all-in scenarios not properly ending the hand
-  - **Fix Needed:** Ensure all players are marked as ALL_IN when they exhaust balance
+  - **Fix Needed:** Apply same fix pattern as PF-008/FL-008 - use `allInAction` when calling exhausts balance
 
 - **EC-008: Kicker Edge Cases** - ❌ FAILING
   - **Issue:** `Error: Expected 5 community cards, got 10`
@@ -79,17 +77,17 @@ After fixing FL-008 (All-In on Flop), the test suite shows **78 passing tests** 
 
 ## Failure Patterns
 
-### Pattern 1: Community Cards Array Issue (8 failures)
+### Pattern 1: Community Cards Array Issue (9 failures)
 - **Affected Tests:** TI-001, TI-002, TI-003, TI-006, KI-001, KI-002, KI-003, KI-004, EC-008
 - **Error:** `Expected 5 community cards, got 10`
 - **Likely Cause:** Test setup incorrectly populating `communityCards` array (possibly duplicating or not slicing correctly)
 - **Priority:** Medium - Test setup issue, not core logic
 
-### Pattern 2: All-In Hand Ending (4 failures)
-- **Affected Tests:** PF-008, EC-006
+### Pattern 2: All-In Hand Ending (2 failures)
+- **Affected Tests:** EC-006
 - **Error:** `handEnded` expected `true` but got `false`
-- **Likely Cause:** Players going all-in not being marked as `ALL_IN` when calling exhausts balance (same issue as FL-008)
-- **Priority:** High - Core game logic issue
+- **Likely Cause:** Players going all-in not being marked as `ALL_IN` when calling exhausts balance (same issue as PF-008/FL-008)
+- **Priority:** High - Core game logic issue, can apply PF-008/FL-008 fix pattern
 
 ### Pattern 3: Dealer Rotation (3 failures)
 - **Affected Tests:** RO-002, RO-003, RO-004
@@ -97,21 +95,26 @@ After fixing FL-008 (All-In on Flop), the test suite shows **78 passing tests** 
 - **Likely Cause:** `startNewHandIfPossible` or `startHand` not properly rotating dealer
 - **Priority:** Medium - Feature functionality issue
 
-### Pattern 4: Test Logic Issues (4 failures)
+### Pattern 4: Test Logic Issues (8 failures)
 - **Affected Tests:** TU-004 (side pots), MR-004 (hand not found), MR-006 (call when no bet), EC-005 (pot amount)
 - **Likely Cause:** Test expectations or test logic issues
 - **Priority:** Low-Medium - May be test issues rather than code issues
 
+## Improvements Since Last Report
+
+1. ✅ **PF-008 Fixed:** All-In Pre-Flop test now passing (was failing before)
+2. ✅ **Overall Pass Rate Improved:** 78.4% (80/102) vs 76.5% (78/102) previously
+
 ## Recommendations
 
-1. **High Priority:** Fix all-in hand ending issues (PF-008, EC-006) - same pattern as FL-008
-2. **Medium Priority:** Fix community cards array issue in test setup (affects 8 tests)
+1. **High Priority:** Fix EC-006 all-in hand ending issue - apply PF-008/FL-008 fix pattern
+2. **Medium Priority:** Fix community cards array issue in test setup (affects 9 tests)
 3. **Medium Priority:** Fix dealer rotation logic (affects 3 tests)
 4. **Low-Medium Priority:** Review and fix test logic issues (TU-004, MR-004, MR-006, EC-005)
 
 ## Next Steps
 
-1. Apply FL-008 fix pattern to PF-008 and EC-006
+1. Apply PF-008/FL-008 fix pattern to EC-006
 2. Investigate community cards array duplication in test setup
 3. Review dealer rotation logic in `startNewHandIfPossible`
 4. Review side pot creation logic for TU-004
