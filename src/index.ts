@@ -33,6 +33,7 @@ import { getCurrentHandResponse } from './services/currentHand';
 import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppError } from './utils/errorHandler';
 import { validateAndGetTableId, validateTableId } from './utils/validation';
 import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
+import { initializeEventNotifier, registerEventCallback, EventNotification } from './db/eventNotifier';
 
 /**
  * Express application instance
@@ -1142,6 +1143,144 @@ app.get('/playerEscrowBalance', requireWalletAuth({ addressSource: 'query' }), a
  *
  * @returns {void} Sends response directly via res.json()
  */
+/**
+ * GET /api/tables/:tableId/events
+ *
+ * Server-Sent Events (SSE) stream for table events.
+ * Streams events as they occur for a specific table in real-time using PostgreSQL LISTEN/NOTIFY.
+ *
+ * Auth:
+ * - No authentication required (public endpoint for watching table events)
+ *
+ * Request:
+ * - Path params:
+ *   - tableId: number (Table ID to subscribe to)
+ * - Query params:
+ *   - lastEventId: number (optional) - Resume from this event ID for reconnection
+ *
+ * Response:
+ * - Content-Type: text/event-stream
+ * - Streams events in SSE format:
+ *   - id: {eventId}\n
+ *   - data: {payloadJson}\n\n
+ * - Events are filtered by tableId
+ * - Automatically reconnects if connection drops (browser handles this)
+ *
+ * Error model:
+ * - 400: Invalid table ID
+ * - 500: Server error (connection issues, etc.)
+ *
+ * @param req - Express request object
+ * @param res - Express response object
+ */
+app.get('/api/tables/:tableId/events', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tableId = parseInt(req.params.tableId, 10);
+    const lastEventId = req.query.lastEventId
+      ? parseInt(req.query.lastEventId as string, 10)
+      : 0;
+
+    if (isNaN(tableId)) {
+      res.status(400).json({ error: 'Invalid table ID' });
+      return;
+    }
+
+    if (isNaN(lastEventId) || lastEventId < 0) {
+      res.status(400).json({ error: 'Invalid lastEventId' });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering if using nginx
+
+    // Send initial connection message
+    res.write(': connected\n\n');
+
+    // Send any missed events first (events with eventId > lastEventId for this table)
+    try {
+      const missedEvents = await prisma.event.findMany({
+        where: {
+          tableId: tableId,
+          eventId: { gt: lastEventId },
+        },
+        orderBy: { eventId: 'asc' },
+        take: 100, // Limit to prevent huge initial payload
+      });
+
+      for (const event of missedEvents) {
+        res.write(`id: ${event.eventId}\n`);
+        res.write(`data: ${event.payloadJson}\n\n`);
+      }
+    } catch (error) {
+      console.error(`[SSE] Error fetching missed events for table ${tableId}:`, error);
+      res.write(`event: error\n`);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to fetch missed events' })}\n\n`);
+    }
+
+    // Set up notification listener for new events
+    // Only send events that match this tableId
+    const notificationHandler = (notification: EventNotification) => {
+      // Only send if it's for this table and newer than lastEventId
+      if (notification.tableId === tableId && notification.eventId > lastEventId) {
+        // Fetch the full event to get payloadJson
+        prisma.event
+          .findUnique({
+            where: { eventId: notification.eventId },
+            select: { eventId: true, payloadJson: true },
+          })
+          .then((event) => {
+            if (event && !res.closed) {
+              try {
+                res.write(`id: ${event.eventId}\n`);
+                res.write(`data: ${event.payloadJson}\n\n`);
+              } catch (error) {
+                console.error(`[SSE] Error writing event ${event.eventId} to stream:`, error);
+              }
+            }
+          })
+          .catch((error) => {
+            console.error(`[SSE] Error fetching event ${notification.eventId}:`, error);
+          });
+      }
+    };
+
+    // Register callback for this connection
+    const unsubscribe = registerEventCallback(notificationHandler);
+
+    // Keep connection alive with periodic heartbeat
+    const heartbeatInterval = setInterval(() => {
+      if (!res.closed) {
+        try {
+          res.write(': heartbeat\n\n');
+        } catch (error) {
+          clearInterval(heartbeatInterval);
+          unsubscribe(); // Unregister callback on error
+        }
+      } else {
+        clearInterval(heartbeatInterval);
+        unsubscribe(); // Unregister callback when connection closed
+      }
+    }, 30000); // Send heartbeat every 30 seconds
+
+    // Handle client disconnect - cleanup
+    req.on('close', () => {
+      clearInterval(heartbeatInterval);
+      unsubscribe(); // Unregister callback
+      console.log(`[SSE] Client disconnected from table ${tableId} events stream`);
+    });
+  } catch (error) {
+    console.error('[SSE] Error setting up event stream:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to set up event stream' });
+    } else {
+      res.end();
+    }
+  }
+});
+
 app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
   try {
     const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
@@ -1223,8 +1362,17 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
  * - Logs to console (I/O operation)
  * - Keeps process alive indefinitely
  */
-app.listen(APP_PORT, (): void => {
+app.listen(APP_PORT, async (): Promise<void> => {
   console.log(`Server is running on port ${APP_PORT}`);
+  
+  // Initialize event notifier for SSE
+  try {
+    await initializeEventNotifier();
+    console.log('✅ Event notifier initialized for SSE');
+  } catch (error) {
+    console.error('⚠️  Failed to initialize event notifier:', error);
+    console.error('SSE endpoints will not receive real-time updates');
+  }
   
   // Start listening to contract events if contract address is configured
   const contractAddress = process.env.CLOUTCARDS_CONTRACT_ADDRESS;

@@ -327,6 +327,7 @@ export interface CurrentHand {
   currentActionSeat: number | null;
   currentBet: string | null;
   lastRaiseAmount: string | null;
+  lastEventId: number; // Latest event ID for this table (for SSE reconnection)
 }
 
 /**

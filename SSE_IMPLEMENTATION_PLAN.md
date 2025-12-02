@@ -105,9 +105,9 @@ await tx.event.create({
 
 ---
 
-### Phase 2: PostgreSQL LISTEN/NOTIFY Setup ⏳
+### Phase 2: PostgreSQL LISTEN/NOTIFY Setup ✅
 
-**Status:** Not Started
+**Status:** Completed
 
 **Tasks:**
 1. Create database trigger function to notify on new events
@@ -165,9 +165,9 @@ export function setupEventNotifier(callback: (data: {eventId: number, tableId: n
 
 ---
 
-### Phase 3: Backend SSE Endpoint ⏳
+### Phase 3: Backend SSE Endpoint ✅
 
-**Status:** Not Started
+**Status:** Completed
 
 **Tasks:**
 1. Create SSE endpoint `/api/tables/:tableId/events`

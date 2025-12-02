@@ -36,6 +36,7 @@ export interface CurrentHandResponse {
   currentActionSeat: number | null;
   currentBet: string | null;
   lastRaiseAmount: string | null;
+  lastEventId: number; // Latest event ID for this table (for SSE reconnection)
 }
 
 /**
@@ -120,6 +121,22 @@ export async function getCurrentHandResponse(
       : [],
   }));
 
+  // Get the latest event ID for this table (for SSE reconnection)
+  // This allows clients to connect to SSE starting from the correct event
+  const latestEvent = await prisma.event.findFirst({
+    where: {
+      tableId: tableId,
+    },
+    orderBy: {
+      eventId: 'desc',
+    },
+    select: {
+      eventId: true,
+    },
+  });
+
+  const lastEventId = latestEvent?.eventId || 0;
+
   return {
     handId: hand.id,
     status: hand.status,
@@ -133,6 +150,7 @@ export async function getCurrentHandResponse(
     currentActionSeat: hand.currentActionSeat,
     currentBet: hand.currentBet?.toString() || null,
     lastRaiseAmount: hand.lastRaiseAmount?.toString() || null,
+    lastEventId,
   };
 }
 
