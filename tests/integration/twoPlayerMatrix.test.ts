@@ -1228,9 +1228,53 @@ describe('2-Player Poker Test Matrix', () => {
         { seatNumber: 1, walletAddress: PLAYER_1_WALLET, tableBalanceGwei: 50000000n }, // 50M
       ]);
 
+      // Create deterministic deck: Player 0 wins with pair of Aces, Player 1 loses with high card
+      const eliminationDeck = createFabricatedDeck([
+        // Player 0 hole cards (pair of Aces - will win)
+        { rank: 'A', suit: 'spades' },
+        { rank: 'A', suit: 'hearts' },
+        // Player 1 hole cards (high card - will lose)
+        { rank: '2', suit: 'spades' },
+        { rank: '3', suit: 'hearts' },
+        // Flop
+        { rank: '7', suit: 'diamonds' },
+        { rank: '8', suit: 'clubs' },
+        { rank: '9', suit: 'spades' },
+        // Turn
+        { rank: 'K', suit: 'diamonds' },
+        // River
+        { rank: 'Q', suit: 'clubs' },
+        // Rest of deck
+        ...Array(43).fill({ rank: '10', suit: 'clubs' }),
+      ]);
+
       // Start Hand 1
       const hand1Result = await startHand(table.id, prisma);
       const hand1Id = hand1Result.id;
+
+      // Update deck and hole cards for deterministic testing
+      await prisma.hand.update({
+        where: { id: hand1Id },
+        data: {
+          deck: eliminationDeck as any,
+          communityCards: [] as any, // Will be populated as rounds advance
+        },
+      });
+
+      // Update hole cards for each player based on seat number
+      const handPlayers = await prisma.handPlayer.findMany({
+        where: { handId: hand1Id },
+        orderBy: { seatNumber: 'asc' },
+      });
+
+      for (const player of handPlayers) {
+        await prisma.handPlayer.update({
+          where: { id: player.id },
+          data: {
+            holeCards: eliminationDeck.slice(player.seatNumber * 2, player.seatNumber * 2 + 2) as any,
+          },
+        });
+      }
 
       // Get blind seats
       const hand1 = await prisma.hand.findUnique({ where: { id: hand1Id } });
@@ -1254,12 +1298,16 @@ describe('2-Player Poker Test Matrix', () => {
         orderBy: { seatNumber: 'asc' },
       });
 
-      const winnerSession = sessions.find(s => s.tableBalanceGwei >= BIG_BLIND);
-      const loserSession = sessions.find(s => s.tableBalanceGwei < BIG_BLIND);
+      // Player 0 should win (pair of Aces beats high card)
+      const player0Session = sessions.find(s => s.seatNumber === 0);
+      const player1Session = sessions.find(s => s.seatNumber === 1);
 
-      expect(winnerSession).toBeDefined();
-      expect(loserSession).toBeDefined();
-      expect(loserSession!.tableBalanceGwei).toBeLessThan(BIG_BLIND);
+      expect(player0Session).toBeDefined();
+      expect(player1Session).toBeDefined();
+
+      // Verify Player 0 won (has balance >= BIG_BLIND) and Player 1 lost (balance < BIG_BLIND)
+      expect(player0Session!.tableBalanceGwei).toBeGreaterThanOrEqual(BIG_BLIND);
+      expect(player1Session!.tableBalanceGwei).toBeLessThan(BIG_BLIND);
 
       // Verify no new hand was started (only 1 eligible player)
       const newHand = await prisma.hand.findFirst({
