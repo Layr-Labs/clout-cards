@@ -1,28 +1,26 @@
 # 4-Player Test Matrix Regression Report
-**Date:** After PF-008 Fix  
+**Date:** After TU-004 Fix  
 **Total Tests:** 102  
-**Passed:** 80 (78.4%)  
-**Failed:** 22 (21.6%)
+**Passed:** 82 (80.4%)  
+**Failed:** 20 (19.6%)
 
 ## Summary
 
-After fixing PF-008 (All-In Pre-Flop), the test suite shows **80 passing tests** and **22 failures**. PF-008 is now passing, improving from 78 to 80 passing tests.
+After fixing TU-004 (All-In on Turn), the test suite shows **82 passing tests** and **20 failures**. TU-004 is now passing, improving from 80 to 82 passing tests.
 
 ## Test Results by Category
 
 ### ✅ PRE-FLOP Scenarios: 22/22 Passing (100%)
 - **All PRE-FLOP tests passing** ✅
-- PF-008 fix was successful
+- PF-008 fix remains successful
 
 ### ✅ FLOP Scenarios: 10/10 Passing (100%)
 - **All FLOP tests passing** ✅
 - FL-008 fix remains successful
 
-### ✅ TURN Scenarios: 2/4 Passing (50%)
-- **TU-004: All-In on Turn (Multiple Players)** - ❌ FAILING (2 variants)
-  - **Issue:** `expect(pots.length).toBeGreaterThan(1)` - Expected side pots but only got 1 pot
-  - **Root Cause:** Side pot creation logic may not be working correctly when multiple players go all-in on TURN
-  - **Fix Needed:** Investigate side pot creation when all-ins occur on TURN
+### ✅ TURN Scenarios: 4/4 Passing (100%)
+- **All TURN tests passing** ✅
+- **TU-004 fix was successful** - Test now correctly starts on TURN and creates side pots
 
 ### ✅ RIVER Scenarios: 4/4 Passing (100%)
 - **All RIVER tests passing** ✅
@@ -95,28 +93,27 @@ After fixing PF-008 (All-In Pre-Flop), the test suite shows **80 passing tests**
 - **Likely Cause:** `startNewHandIfPossible` or `startHand` not properly rotating dealer
 - **Priority:** Medium - Feature functionality issue
 
-### Pattern 4: Test Logic Issues (8 failures)
-- **Affected Tests:** TU-004 (side pots), MR-004 (hand not found), MR-006 (call when no bet), EC-005 (pot amount)
+### Pattern 4: Test Logic Issues (6 failures)
+- **Affected Tests:** MR-004 (hand not found), MR-006 (call when no bet), EC-005 (pot amount)
 - **Likely Cause:** Test expectations or test logic issues
 - **Priority:** Low-Medium - May be test issues rather than code issues
 
 ## Improvements Since Last Report
 
-1. ✅ **PF-008 Fixed:** All-In Pre-Flop test now passing (was failing before)
-2. ✅ **Overall Pass Rate Improved:** 78.4% (80/102) vs 76.5% (78/102) previously
+1. ✅ **TU-004 Fixed:** All-In on Turn test now passing (was failing before)
+2. ✅ **Overall Pass Rate Improved:** 80.4% (82/102) vs 78.4% (80/102) previously
+3. ✅ **All TURN tests passing:** 4/4 (100%)
 
 ## Recommendations
 
 1. **High Priority:** Fix EC-006 all-in hand ending issue - apply PF-008/FL-008 fix pattern
 2. **Medium Priority:** Fix community cards array issue in test setup (affects 9 tests)
 3. **Medium Priority:** Fix dealer rotation logic (affects 3 tests)
-4. **Low-Medium Priority:** Review and fix test logic issues (TU-004, MR-004, MR-006, EC-005)
+4. **Low-Medium Priority:** Review and fix test logic issues (MR-004, MR-006, EC-005)
 
 ## Next Steps
 
 1. Apply PF-008/FL-008 fix pattern to EC-006
 2. Investigate community cards array duplication in test setup
 3. Review dealer rotation logic in `startNewHandIfPossible`
-4. Review side pot creation logic for TU-004
-5. Review test expectations for MR-004, MR-006, EC-005
-
+4. Review test expectations for MR-004, MR-006, EC-005

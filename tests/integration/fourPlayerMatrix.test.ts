@@ -1522,7 +1522,7 @@ describe('4-Player Poker Test Matrix', () => {
       });
 
       expect(pots.length).toBeGreaterThan(1); // Should have side pot
-    }, { player0Balance: 100000000n, player1Balance: 30000000n, player2Balance: 50000000n, player3Balance: 100000000n });
+    }, { round: 'TURN', player0Balance: 100000000n, player1Balance: 30000000n, player2Balance: 50000000n, player3Balance: 100000000n });
   });
 
   // ============================================================================
