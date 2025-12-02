@@ -241,26 +241,40 @@ async function countActivePlayers(handId: number, tx: any): Promise<number> {
  * @returns True if betting round is complete
  */
 async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean> {
-  const hand = await (tx as any).hand.findUnique({
-    where: { id: handId },
-  });
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Starting check`);
+  
+  const handQuery = { where: { id: handId } };
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Querying hand with:`, JSON.stringify(handQuery));
+  const hand = await (tx as any).hand.findUnique(handQuery);
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Query result - hand=${hand ? JSON.stringify({ id: hand.id, round: hand.round, currentBet: hand.currentBet?.toString(), currentActionSeat: hand.currentActionSeat, status: hand.status }) : 'null'}`);
 
   if (!hand || hand.currentBet === null || hand.currentBet === undefined || !hand.round) {
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: RETURNING false - Early exit: hand=${!!hand}, currentBet=${hand?.currentBet?.toString()}, round=${hand?.round}`);
     return false;
   }
 
   const currentBet = hand.currentBet;
   const currentRound = hand.round;
   
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: currentBet=${currentBet.toString()}, currentRound=${currentRound}`);
+  
   // Get all active players
-  const handPlayers = await (tx as any).handPlayer.findMany({
-    where: { handId },
-  });
+  const handPlayersQuery = { where: { handId } };
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Querying handPlayers with:`, JSON.stringify(handPlayersQuery));
+  const handPlayers = await (tx as any).handPlayer.findMany(handPlayersQuery);
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Query returned ${handPlayers.length} handPlayers:`, JSON.stringify(handPlayers.map((p: any) => ({
+    id: p.id,
+    seatNumber: p.seatNumber,
+    status: p.status,
+    chipsCommitted: p.chipsCommitted?.toString(),
+  }))));
 
   // Get all players who haven't folded (ACTIVE and ALL_IN)
   const nonFoldedPlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
   
   if (nonFoldedPlayers.length === 0) {
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: RETURNING false - No non-folded players`);
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Context - total handPlayers=${handPlayers.length}, nonFoldedPlayers=${nonFoldedPlayers.length}, currentRound=${currentRound}`);
     return false; // No active players
   }
 
@@ -268,10 +282,13 @@ async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean>
   const activePlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ACTIVE');
   const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
 
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: activePlayers=${activePlayers.length}, allInPlayers=${allInPlayers.length}`);
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Active player seats:`, activePlayers.map((p: any) => p.seatNumber));
+
   // Get all actions taken in the current round
   // Exclude POST_BLIND actions - those don't count as "acting" for round completion
   // The big blind still needs a chance to act (check/raise) when action comes back to them
-  const roundActions = await (tx as any).handAction.findMany({
+  const roundActionsQuery = {
     where: {
       handId,
       round: currentRound,
@@ -279,10 +296,23 @@ async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean>
         not: 'POST_BLIND',
       },
     },
-  });
+  };
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Querying roundActions with:`, JSON.stringify(roundActionsQuery, null, 2));
+  const roundActions = await (tx as any).handAction.findMany(roundActionsQuery);
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Query returned ${roundActions.length} roundActions for round ${currentRound}:`, JSON.stringify(roundActions.map((a: any) => ({
+    id: a.id,
+    seatNumber: a.seatNumber,
+    action: a.action,
+    amount: a.amount?.toString(),
+    round: a.round,
+    createdAt: a.createdAt,
+  }))));
 
   // Create a set of seat numbers that have acted in this round (excluding blind postings)
   const actedSeats = new Set(roundActions.map((a: any) => a.seatNumber));
+
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: actedSeats:`, Array.from(actedSeats));
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Checking ${activePlayers.length} active players against actedSeats and currentBet=${currentBet.toString()}`);
 
   // Check that all ACTIVE players (who can still act) have:
   // 1. Acted in this round (taken an action)
@@ -290,14 +320,20 @@ async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean>
   for (const player of activePlayers) {
     // For ACTIVE players (not all-in), they must have acted
     if (!actedSeats.has(player.seatNumber)) {
+      console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: RETURNING false - Player ${player.seatNumber} hasn't acted yet.`);
+      console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Context - actedSeats=${JSON.stringify(Array.from(actedSeats))}, playerSeat=${player.seatNumber}, currentRound=${currentRound}, roundActions found=${roundActions.length}`);
       return false; // Player hasn't acted yet
     }
 
     // Check if player has matched the current bet
     const chipsCommitted = (player.chipsCommitted as bigint) || 0n;
     if (chipsCommitted < currentBet) {
+      console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: RETURNING false - Player ${player.seatNumber} hasn't matched bet.`);
+      console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Context - chipsCommitted=${chipsCommitted.toString()}, currentBet=${currentBet.toString()}, playerSeat=${player.seatNumber}`);
       return false; // Player hasn't matched the bet
     }
+    
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Player ${player.seatNumber} - hasActed=true, hasMatched=true (chipsCommitted=${chipsCommitted.toString()}, currentBet=${currentBet.toString()})`);
   }
 
   // All-in players don't need to act - they've committed all they can
@@ -306,14 +342,30 @@ async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean>
 
   // If there are no active players left (all are all-in), round is complete
   if (activePlayers.length === 0 && allInPlayers.length > 0) {
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: RETURNING true - All players all-in`);
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Context - activePlayers=${activePlayers.length}, allInPlayers=${allInPlayers.length}, currentRound=${currentRound}`);
     return true; // All players are all-in, round is complete
   }
 
   // Round is complete if all ACTIVE players have acted and matched the bet
-  return activePlayers.length === 0 || activePlayers.every((p: any) => {
+  const result = activePlayers.length === 0 || activePlayers.every((p: any) => {
     const chipsCommitted = (p.chipsCommitted as bigint) || 0n;
-    return actedSeats.has(p.seatNumber) && chipsCommitted >= currentBet;
+    const hasActed = actedSeats.has(p.seatNumber);
+    const hasMatched = chipsCommitted >= currentBet;
+    console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Player ${p.seatNumber} - hasActed=${hasActed}, hasMatched=${hasMatched} (chipsCommitted=${chipsCommitted.toString()}, currentBet=${currentBet.toString()})`);
+    return hasActed && hasMatched;
   });
+
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: RETURNING ${result} - Final check complete`);
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Context - activePlayers=${activePlayers.length}, actedSeats=${JSON.stringify(Array.from(actedSeats))}, currentBet=${currentBet.toString()}, currentRound=${currentRound}, roundActions queried=${roundActions.length}, allActedAndMatched=${result}`);
+  console.log(`[DEBUG isBettingRoundComplete] Hand ${handId}: Active players detail:`, JSON.stringify(activePlayers.map((p: any) => ({
+    seatNumber: p.seatNumber,
+    chipsCommitted: p.chipsCommitted?.toString(),
+    status: p.status,
+    hasActed: actedSeats.has(p.seatNumber),
+    hasMatched: (p.chipsCommitted as bigint || 0n) >= currentBet,
+  }))));
+  return result;
 }
 
 /**
@@ -327,22 +379,29 @@ async function isBettingRoundComplete(handId: number, tx: any): Promise<boolean>
  * @returns True if hand should be settled (RIVER completed), false otherwise
  */
 async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Starting round advancement`);
   // Recalculate pots before advancing to next round
   // Only create side pots if commitments differ, otherwise update total pot
   const needsSidePots = await shouldCreateSidePots(handId, tx);
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: needsSidePots=${needsSidePots}`);
   
   if (needsSidePots) {
+    console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Creating side pots`);
     await createSidePots(handId, tx);
   } else {
+    console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Updating total pot`);
     await updatePotTotal(handId, tx);
   }
 
-  const hand = await (tx as any).hand.findUnique({
+  const handQuery = {
     where: { id: handId },
     include: {
       players: true,
     },
-  });
+  };
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Querying hand with:`, JSON.stringify(handQuery));
+  const hand = await (tx as any).hand.findUnique(handQuery);
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Query result - hand.round=${hand?.round}, players=${hand?.players?.length || 0}`);
 
   if (!hand) {
     throw new Error(`Hand ${handId} not found`);
@@ -352,6 +411,8 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   const deck = hand.deck as Card[];
   const deckPosition = hand.deckPosition;
   const communityCards = (hand.communityCards || []) as Card[];
+
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: currentRound=${currentRound}, deckPosition=${deckPosition}, communityCards.length=${communityCards.length}`);
 
   let nextRound: BettingRound | null = null;
   let nextStatus: HandStatus = hand.status;
@@ -375,11 +436,14 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
       cardsToDeal = 1;
       break;
     case 'RIVER':
+      console.log(`[DEBUG advanceBettingRound] Hand ${handId}: RETURNING true - Already at RIVER, hand should be settled`);
       // Hand should be settled
       return true;
     default:
       throw new Error(`Invalid betting round: ${currentRound}`);
   }
+
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Advancing from ${currentRound} to ${nextRound}, cardsToDeal=${cardsToDeal}`);
 
   // Deal community cards
   const newCommunityCards = [...communityCards];
@@ -394,6 +458,13 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   const dealerPosition = hand.dealerPosition!;
   const handPlayers = hand.players as any[];
 
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: dealerPosition=${dealerPosition}, totalPlayers=${handPlayers.length}`);
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Players:`, handPlayers.map((p: any) => ({
+    seatNumber: p.seatNumber,
+    status: p.status,
+    chipsCommitted: p.chipsCommitted?.toString(),
+  })));
+
   // Get all non-folded players
   const nonFoldedPlayers = handPlayers.filter((p: any) => p.status !== 'FOLDED');
   
@@ -402,12 +473,17 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
     .filter((p: any) => p.status === 'ACTIVE')
     .sort((a: any, b: any) => a.seatNumber - b.seatNumber);
 
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: nonFoldedPlayers=${nonFoldedPlayers.length}, activePlayers=${sortedPlayers.length}`);
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Active player seats:`, sortedPlayers.map((p: any) => p.seatNumber));
+
   // Check if all non-folded players are all-in
   const allInPlayers = nonFoldedPlayers.filter((p: any) => p.status === 'ALL_IN');
   const allPlayersAllIn = nonFoldedPlayers.length > 0 && allInPlayers.length === nonFoldedPlayers.length;
   
   // Check if there's only one active player and all others are all-in
   const onlyOneActivePlayer = sortedPlayers.length === 1 && allInPlayers.length > 0;
+
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: allInPlayers=${allInPlayers.length}, allPlayersAllIn=${allPlayersAllIn}, onlyOneActivePlayer=${onlyOneActivePlayer}`);
 
   let firstActionSeat: number | null = null;
 
@@ -438,19 +514,29 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
     // Post-flop: first to act is the small blind (or first active player after small blind if small blind folded/all-in)
     // Find small blind seat from hand
     const smallBlindSeat = hand.smallBlindSeat;
+    
+    console.log(`[DEBUG advanceBettingRound] Hand ${handId}: smallBlindSeat=${smallBlindSeat}`);
+    
+    if (smallBlindSeat === null || smallBlindSeat === undefined) {
+      throw new Error(`Hand ${handId} has no smallBlindSeat set`);
+    }
+    
     const smallBlindPlayer = sortedPlayers.find((p: any) => p.seatNumber === smallBlindSeat);
     
     if (smallBlindPlayer) {
       // Small blind is active, they act first
       firstActionSeat = smallBlindPlayer.seatNumber;
+      console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Small blind (seat ${smallBlindSeat}) is active, setting firstActionSeat=${firstActionSeat}`);
     } else {
       // Small blind is not active (folded/all-in), find first active player after small blind
       const smallBlindIndex = sortedPlayers.findIndex((p: any) => p.seatNumber > smallBlindSeat);
       if (smallBlindIndex >= 0) {
         firstActionSeat = sortedPlayers[smallBlindIndex].seatNumber;
+        console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Small blind not active, found next active player at index ${smallBlindIndex}, firstActionSeat=${firstActionSeat}`);
       } else {
         // Wrap around - first active player is first in sorted list
         firstActionSeat = sortedPlayers[0].seatNumber;
+        console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Small blind not active, wrapping around to first active player, firstActionSeat=${firstActionSeat}`);
       }
     }
 
@@ -485,7 +571,8 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   }
 
   // Update hand state
-  await (tx as any).hand.update({
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Updating hand state: round=${nextRound}, status=${nextStatus}, currentActionSeat=${firstActionSeat}, newCommunityCards.length=${newCommunityCards.length}`);
+  const updateQuery = {
     where: { id: handId },
     data: {
       round: nextRound,
@@ -496,7 +583,21 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
       lastRaiseAmount: null,
       currentActionSeat: firstActionSeat,
     },
-  });
+  };
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Updating hand with:`, JSON.stringify({
+    where: updateQuery.where,
+    data: {
+      round: updateQuery.data.round,
+      status: updateQuery.data.status,
+      communityCards: `[${newCommunityCards.length} cards]`,
+      deckPosition: updateQuery.data.deckPosition,
+      currentBet: updateQuery.data.currentBet.toString(),
+      lastRaiseAmount: updateQuery.data.lastRaiseAmount,
+      currentActionSeat: updateQuery.data.currentActionSeat,
+    },
+  }));
+  await (tx as any).hand.update(updateQuery);
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Hand state updated successfully`);
 
   // Emit community cards event
   const communityCardsPayload = {
@@ -518,6 +619,7 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   // If all players are all-in, the round is immediately complete
   // Return true if RIVER (settle hand), false otherwise (will advance again)
   if (allPlayersAllIn && nextRound === 'RIVER') {
+    console.log(`[DEBUG advanceBettingRound] Hand ${handId}: RETURNING true - All players all-in at RIVER, hand should be settled`);
     return true; // Hand should be settled
   }
   
@@ -525,9 +627,11 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   // complete after that player acts. Return true if RIVER, false otherwise.
   // The caller will handle auto-advancing through rounds.
   if (onlyOneActivePlayer && nextRound === 'RIVER') {
+    console.log(`[DEBUG advanceBettingRound] Hand ${handId}: RETURNING true - Only one active player at RIVER, hand should be settled`);
     return true; // Hand should be settled after active player acts
   }
-
+  
+  console.log(`[DEBUG advanceBettingRound] Hand ${handId}: RETURNING false - Round advanced successfully from ${currentRound} to ${nextRound} (not RIVER yet)`);
   return false; // Round advanced, hand not complete
 }
 
@@ -807,6 +911,7 @@ async function handleBettingRoundComplete(
   currentRound: BettingRound,
   tx: any
 ): Promise<RoundHandlingResult> {
+  console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Called with currentRound=${currentRound}`);
   const result: RoundHandlingResult = {
     handEnded: false,
     roundAdvanced: false,
@@ -816,35 +921,51 @@ async function handleBettingRoundComplete(
 
   // Check if this is the RIVER round (last round)
   if (currentRound === 'RIVER') {
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: RIVER round, settling hand via showdown`);
     // Hand should be settled via showdown
     result.handEnded = true;
     const settlement = await settleHandShowdown(handId, tx);
     result.settlementData = createSettlementData(handId, settlement);
     result.winnerSeatNumber = settlement.winnerSeatNumbers[0];
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Hand settled, winnerSeatNumber=${result.winnerSeatNumber}`);
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: RETURNING result with settlement: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}, winnerSeatNumber=${result.winnerSeatNumber}`);
     return result;
   }
 
   // Advance to next betting round
+  console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Advancing from ${currentRound} to next round`);
   result.roundAdvanced = true;
   const shouldSettle = await advanceBettingRound(handId, tx);
+  console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: advanceBettingRound returned shouldSettle=${shouldSettle}`);
   
   if (shouldSettle) {
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Reached RIVER during advance, settling hand`);
     // Reached RIVER during advance, settle the hand
     result.handEnded = true;
     const settlement = await settleHandShowdown(handId, tx);
     result.settlementData = createSettlementData(handId, settlement);
     result.winnerSeatNumber = settlement.winnerSeatNumbers[0];
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Hand settled, winnerSeatNumber=${result.winnerSeatNumber}`);
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: RETURNING result with settlement: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}, winnerSeatNumber=${result.winnerSeatNumber}`);
+    return result;
   } else {
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Checking auto-advance to RIVER`);
     // Check if we should auto-advance to RIVER (only one active player or all all-in)
     const shouldAutoSettle = await advanceToRiverIfOnlyOneActivePlayer(handId, tx);
+    console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: advanceToRiverIfOnlyOneActivePlayer returned shouldAutoSettle=${shouldAutoSettle}`);
     if (shouldAutoSettle) {
+      console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Auto-advancing to RIVER and settling`);
       result.handEnded = true;
       const settlement = await settleHandShowdown(handId, tx);
       result.settlementData = createSettlementData(handId, settlement);
       result.winnerSeatNumber = settlement.winnerSeatNumbers[0];
+      console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: Hand settled, winnerSeatNumber=${result.winnerSeatNumber}`);
+      console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: RETURNING result with settlement: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}, winnerSeatNumber=${result.winnerSeatNumber}`);
+      return result;
     }
   }
 
+  console.log(`[DEBUG handleBettingRoundComplete] Hand ${handId}: RETURNING result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
   return result;
 }
 
@@ -868,6 +989,7 @@ async function handleNextPlayerOrRoundComplete(
   currentRound: BettingRound,
   tx: any
 ): Promise<RoundHandlingResult> {
+  console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Called with currentSeatNumber=${currentSeatNumber}, currentRound=${currentRound}`);
   const result: RoundHandlingResult = {
     handEnded: false,
     roundAdvanced: false,
@@ -877,29 +999,46 @@ async function handleNextPlayerOrRoundComplete(
 
   // Advance to next active player
   const nextSeat = await getNextActivePlayer(handId, currentSeatNumber, tx);
+  console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: getNextActivePlayer returned nextSeat=${nextSeat}`);
 
   if (nextSeat === null) {
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: nextSeat is null, all players all-in`);
     // All remaining players are all-in, round should complete
     // Check if betting round is complete
     const bettingRoundComplete = await isBettingRoundComplete(handId, tx);
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: isBettingRoundComplete returned ${bettingRoundComplete}`);
     
     if (!bettingRoundComplete) {
+      console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: ERROR - No next active player and betting round not complete`);
       throw new Error('No next active player found and betting round is not complete');
     }
 
     // Handle round completion (same logic as when round completes normally)
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: RETURNING early - All players all-in, round complete`);
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - currentRound=${currentRound}, bettingRoundComplete=${bettingRoundComplete}`);
     const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
     result.handEnded = roundResult.handEnded;
     result.roundAdvanced = roundResult.roundAdvanced;
     result.settlementData = roundResult.settlementData;
     result.winnerSeatNumber = roundResult.winnerSeatNumber;
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: RETURNING result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
+    return result;
   } else {
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: nextSeat=${nextSeat}, checking wrap-around completion`);
     // Check if the next player has already matched the current bet
     // If so, the round is complete (e.g., big blind already matched, action comes back to them)
-    const hand = await (tx as any).hand.findUnique({
+    const handQuery = {
       where: { id: handId },
       include: { players: true },
-    });
+    };
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Querying hand with:`, JSON.stringify(handQuery));
+    const hand = await (tx as any).hand.findUnique(handQuery);
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Query result - hand.round=${hand?.round}, currentRound param=${currentRound}, players=${hand?.players?.length || 0}`);
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Hand players:`, JSON.stringify(hand?.players?.map((p: any) => ({
+      seatNumber: p.seatNumber,
+      status: p.status,
+      chipsCommitted: p.chipsCommitted?.toString(),
+    })) || []));
     
     if (hand) {
       const nextPlayer = hand.players.find((p: any) => p.seatNumber === nextSeat);
@@ -907,38 +1046,120 @@ async function handleNextPlayerOrRoundComplete(
         const currentBet = hand.currentBet || 0n;
         const chipsCommitted = (nextPlayer.chipsCommitted as bigint) || 0n;
         
+        console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: nextPlayer seat=${nextSeat}, chipsCommitted=${chipsCommitted.toString()}, currentBet=${currentBet.toString()}`);
+        
         // If next player has already matched the bet, round is complete
         // (e.g., big blind already matched by posting blind, action comes back to them)
         if (chipsCommitted >= currentBet && currentBet > 0n) {
-          // Check if all active players have matched the bet
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Next player has matched bet (currentBet > 0n), checking if all acted and matched`);
+          // Check if all active players have acted AND matched the bet
+          const roundActionsQuery = {
+            where: {
+              handId,
+              round: currentRound,
+              action: {
+                not: 'POST_BLIND',
+              },
+            },
+          };
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Querying roundActions with:`, JSON.stringify(roundActionsQuery, null, 2));
+          const roundActions = await (tx as any).handAction.findMany(roundActionsQuery);
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Query returned ${roundActions.length} roundActions for round ${currentRound}:`, JSON.stringify(roundActions.map((a: any) => ({
+            id: a.id,
+            seatNumber: a.seatNumber,
+            action: a.action,
+            amount: a.amount?.toString(),
+            round: a.round,
+            createdAt: a.createdAt,
+          }))));
+          const actedSeats = new Set(roundActions.map((a: any) => a.seatNumber));
           const allActivePlayers = hand.players.filter((p: any) => p.status === 'ACTIVE');
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: allActivePlayers (${allActivePlayers.length}):`, allActivePlayers.map((p: any) => ({
+            seatNumber: p.seatNumber,
+            chipsCommitted: p.chipsCommitted?.toString(),
+            status: p.status,
+          })));
+          
+          const allActed = allActivePlayers.every((p: any) => actedSeats.has(p.seatNumber));
           const allMatched = allActivePlayers.every((p: any) => {
             const pChipsCommitted = (p.chipsCommitted as bigint) || 0n;
             return pChipsCommitted >= currentBet;
           });
           
-          if (allMatched) {
-            // Round is complete - all players have matched the bet
+          // Check if only the next player hasn't acted yet
+          const playersWhoHaventActed = allActivePlayers.filter(
+            (p: any) => !actedSeats.has(p.seatNumber)
+          );
+          const onlyNextPlayerHaventActed = playersWhoHaventActed.length === 1 && 
+            playersWhoHaventActed[0].seatNumber === nextSeat;
+          
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Wrap-around check - allActed=${allActed}, allMatched=${allMatched}, actedSeats=${Array.from(actedSeats)}, playersWhoHaventActed=${playersWhoHaventActed.map((p: any) => p.seatNumber)}, onlyNextPlayerHaventActed=${onlyNextPlayerHaventActed}`);
+          
+          // Round is complete if:
+          // 1. All players have acted AND matched, OR
+          // 2. Only the next player hasn't acted, they've matched, and all others have acted and matched
+          //    (wrap-around scenario where next player can only check, so round completes)
+          if ((allActed && allMatched) || (onlyNextPlayerHaventActed && allMatched)) {
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Round complete detected - RETURNING early with round completion`);
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - allActed=${allActed}, onlyNextPlayerHaventActed=${onlyNextPlayerHaventActed}, allMatched=${allMatched}, currentRound=${currentRound}, nextSeat=${nextSeat}`);
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - allActivePlayers=${JSON.stringify(allActivePlayers.map((p: any) => ({ seat: p.seatNumber, chipsCommitted: p.chipsCommitted?.toString(), status: p.status })))}, actedSeats=${JSON.stringify(Array.from(actedSeats))}, roundActions found=${roundActions.length}`);
+            // Round is complete - all players have acted and matched the bet
             const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
             result.handEnded = roundResult.handEnded;
             result.roundAdvanced = roundResult.roundAdvanced;
             result.settlementData = roundResult.settlementData;
             result.winnerSeatNumber = roundResult.winnerSeatNumber;
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: RETURNING result from handleBettingRoundComplete: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
             return result;
+          } else {
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Round NOT complete - continuing to next player`);
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - allActed=${allActed}, onlyNextPlayerHaventActed=${onlyNextPlayerHaventActed}, allMatched=${allMatched}, currentRound=${currentRound}, nextSeat=${nextSeat}`);
+            console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - playersWhoHaventActed=${JSON.stringify(playersWhoHaventActed.map((p: any) => ({ seat: p.seatNumber, chipsCommitted: p.chipsCommitted?.toString() })))}, roundActions found=${roundActions.length}`);
           }
+        } else if (chipsCommitted >= currentBet && currentBet === 0n) {
+          // Zero-bet scenario: For zero-bet wrap-around, we don't complete the round immediately
+          // Instead, we advance to the next player and let them act (check).
+          // When they check, isBettingRoundComplete will return true because all players have acted.
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Zero-bet wrap-around, advancing to next player (will complete after they act)`);
+        } else {
+          console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Next player hasn't matched (chipsCommitted=${chipsCommitted.toString()}, currentBet=${currentBet.toString()})`);
         }
+      } else {
+        console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Next player not found for seat ${nextSeat}`);
       }
+    } else {
+      console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Hand not found`);
+    }
+    
+    // Check if round is complete via isBettingRoundComplete (for zero-bet scenarios)
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Checking isBettingRoundComplete for zero-bet wrap-around`);
+    const bettingRoundComplete = await isBettingRoundComplete(handId, tx);
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: isBettingRoundComplete returned ${bettingRoundComplete}`);
+    if (bettingRoundComplete) {
+      console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: RETURNING early - Round complete via isBettingRoundComplete`);
+      console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - currentRound=${currentRound}, nextSeat=${nextSeat}, bettingRoundComplete=${bettingRoundComplete}`);
+      const roundResult = await handleBettingRoundComplete(handId, currentRound, tx);
+      result.handEnded = roundResult.handEnded;
+      result.roundAdvanced = roundResult.roundAdvanced;
+      result.settlementData = roundResult.settlementData;
+      result.winnerSeatNumber = roundResult.winnerSeatNumber;
+      console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: RETURNING result from handleBettingRoundComplete: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
+      return result;
     }
     
     // Update hand to next active player's turn
-    await (tx as any).hand.update({
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Round not complete, advancing to next player ${nextSeat}`);
+    const updateQuery = {
       where: { id: handId },
-      data: {
-        currentActionSeat: nextSeat,
-      },
-    });
+      data: { currentActionSeat: nextSeat },
+    };
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Updating hand with:`, JSON.stringify(updateQuery));
+    await (tx as any).hand.update(updateQuery);
+    console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Hand updated successfully, currentActionSeat now=${nextSeat}`);
   }
 
+  console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: RETURNING result - Round not complete, advancing to next player`);
+  console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - currentRound=${currentRound}, nextSeat=${nextSeat}, result.handEnded=${result.handEnded}, result.roundAdvanced=${result.roundAdvanced}`);
   return result;
 }
 
@@ -1084,15 +1305,31 @@ async function createActionAndEvent(
   isAllIn?: boolean
 ): Promise<any> {
   // 1. Create HandAction record
+  const actionData = {
+    handId,
+    seatNumber,
+    round,
+    action: actionType,
+    amount,
+  };
+  console.log(`[DEBUG createActionAndEvent] Hand ${handId}: Creating action with:`, JSON.stringify({
+    ...actionData,
+    amount: amount?.toString() || null,
+    handRound: hand.round,
+    roundParam: round,
+    roundMatch: hand.round === round,
+  }));
   const handAction = await (tx as any).handAction.create({
-    data: {
-      handId,
-      seatNumber,
-      round,
-      action: actionType,
-      amount,
-    },
+    data: actionData,
   });
+  console.log(`[DEBUG createActionAndEvent] Hand ${handId}: Action created successfully:`, JSON.stringify({
+    id: handAction.id,
+    seatNumber: handAction.seatNumber,
+    action: handAction.action,
+    round: handAction.round,
+    amount: handAction.amount?.toString() || null,
+    createdAt: handAction.createdAt,
+  }));
 
   // 2. Update pots conditionally (for UI display) - checks if side pots needed, otherwise updates total
   // Note: This ensures side pots are preserved if they exist
@@ -2002,15 +2239,27 @@ export async function foldAction(
       });
 
       // 7. Create fold action record
+      console.log(`[DEBUG foldAction] Hand ${hand.id}: Player seat ${seatSession.seatNumber} folding in round ${hand.round}`);
+      const foldActionData = {
+        handId: hand.id,
+        seatNumber: seatSession.seatNumber,
+        round: hand.round!,
+        action: 'FOLD',
+        amount: null, // Fold has no amount
+      };
+      console.log(`[DEBUG foldAction] Hand ${hand.id}: Creating FOLD action with:`, JSON.stringify(foldActionData));
       const handAction = await (tx as any).handAction.create({
-        data: {
-          handId: hand.id,
-          seatNumber: seatSession.seatNumber,
-          round: hand.round!,
-          action: 'FOLD',
-          amount: null, // Fold has no amount
-        },
+        data: foldActionData,
       });
+      console.log(`[DEBUG foldAction] Hand ${hand.id}: FOLD action created successfully:`, JSON.stringify({
+        id: handAction.id,
+        seatNumber: handAction.seatNumber,
+        action: handAction.action,
+        round: handAction.round,
+        amount: handAction.amount,
+        createdAt: handAction.createdAt,
+      }));
+      console.log(`[DEBUG foldAction] Hand ${hand.id}: FOLD action created, checking if round complete or advancing to next player`);
 
       // 8. Create hand action event with full metadata
       const actionPayload = {
@@ -2231,6 +2480,8 @@ export async function callAction(
     });
 
     // 10. Create call action record and event (pot splitting deferred until round completes)
+    console.log(`[DEBUG callAction] Hand ${hand.id}: Player seat ${seatSession.seatNumber} calling ${callAmount.toString()} in round ${hand.round}, currentBet=${currentBet.toString()}, chipsCommitted before=${chipsCommitted.toString()}`);
+    console.log(`[DEBUG callAction] Hand ${hand.id}: Creating CALL action with: handId=${hand.id}, seatNumber=${seatSession.seatNumber}, round=${hand.round}, amount=${callAmount.toString()}`);
     const handAction = await createActionAndEvent(
       tx,
       hand.id,
@@ -2243,25 +2494,41 @@ export async function callAction(
       normalizedAddress,
       'CALL'
     );
+    console.log(`[DEBUG callAction] Hand ${hand.id}: CALL action created successfully:`, JSON.stringify({
+      id: handAction.id,
+      seatNumber: handAction.seatNumber,
+      action: handAction.action,
+      round: handAction.round,
+      amount: handAction.amount?.toString(),
+    }));
+    console.log(`[DEBUG callAction] Hand ${hand.id}: CALL action created, chipsCommitted now=${currentBet.toString()}`);
 
     // 11. Update pots conditionally (create side pots if commitments differ, otherwise update total)
     // This ensures pots are recalculated after the call, in case commitments have changed
     await updatePotsIfNeeded(hand.id, tx);
 
     // 12. Check if betting round is complete
+    console.log(`[DEBUG callAction] Hand ${hand.id}: After CALL by seat ${seatSession.seatNumber}, checking if round complete`);
     const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
+    console.log(`[DEBUG callAction] Hand ${hand.id}: isBettingRoundComplete returned ${bettingRoundComplete}`);
 
     let handEnded = false;
     let winnerSeatNumber: number | null = null;
 
     if (bettingRoundComplete) {
+      console.log(`[DEBUG callAction] Hand ${hand.id}: Round complete, calling handleBettingRoundComplete`);
       // Handle betting round completion
       const roundResult = await handleBettingRoundComplete(hand.id, hand.round!, tx);
       handEnded = roundResult.handEnded;
       roundAdvanced = roundResult.roundAdvanced;
       settlementData = roundResult.settlementData;
       winnerSeatNumber = roundResult.winnerSeatNumber;
+      console.log(`[DEBUG callAction] Hand ${hand.id}: handleBettingRoundComplete returned handEnded=${handEnded}, roundAdvanced=${roundAdvanced}`);
+      console.log(`[DEBUG callAction] Hand ${hand.id}: RETURNING from transaction - Round complete`);
+      console.log(`[DEBUG callAction] Hand ${hand.id}: Context - hand.round=${hand.round}, handEnded=${handEnded}, roundAdvanced=${roundAdvanced}, winnerSeatNumber=${winnerSeatNumber}`);
+      return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
     } else {
+      console.log(`[DEBUG callAction] Hand ${hand.id}: Round not complete, checking auto-advance or next player`);
       // Check if only one active player remains (others are all-in) - should auto-advance
       const autoAdvanceResult = await checkAndHandleOnlyOneActivePlayer(
         hand.id,
@@ -2271,12 +2538,14 @@ export async function callAction(
       );
 
       if (autoAdvanceResult) {
+        console.log(`[DEBUG callAction] Hand ${hand.id}: Auto-advancement occurred`);
         // Auto-advancement occurred
         handEnded = autoAdvanceResult.handEnded;
         roundAdvanced = autoAdvanceResult.roundAdvanced;
         settlementData = autoAdvanceResult.settlementData;
         winnerSeatNumber = autoAdvanceResult.winnerSeatNumber;
       } else {
+        console.log(`[DEBUG callAction] Hand ${hand.id}: No auto-advance, calling handleNextPlayerOrRoundComplete`);
         // Handle advancing to next player or completing round if all remaining are all-in
         const roundResult = await handleNextPlayerOrRoundComplete(
           hand.id,
@@ -2291,22 +2560,27 @@ export async function callAction(
           roundAdvanced = roundResult.roundAdvanced;
           settlementData = roundResult.settlementData;
           winnerSeatNumber = roundResult.winnerSeatNumber;
+          console.log(`[DEBUG callAction] Hand ${hand.id}: Round completed in handleNextPlayerOrRoundComplete: handEnded=${handEnded}, roundAdvanced=${roundAdvanced}`);
         } else {
           // Round not complete, just advancing to next player
           handEnded = roundResult.handEnded;
           roundAdvanced = roundResult.roundAdvanced;
           settlementData = roundResult.settlementData;
           winnerSeatNumber = roundResult.winnerSeatNumber;
+          console.log(`[DEBUG callAction] Hand ${hand.id}: Round not complete, just advancing to next player: handEnded=${handEnded}, roundAdvanced=${roundAdvanced}`);
         }
       }
     }
 
+    console.log(`[DEBUG callAction] Hand ${hand.id}: RETURNING from transaction - Final result`);
+    console.log(`[DEBUG callAction] Hand ${hand.id}: Context - hand.round=${hand.round}, handEnded=${handEnded}, roundAdvanced=${roundAdvanced}, winnerSeatNumber=${winnerSeatNumber}`);
     return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
   });
 
   // After transaction completes, handle post-settlement work
   await handlePostActionSettlement(result, settlementData, tableId);
 
+  console.log(`[DEBUG callAction] RETURNING final result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}, tableId=${result.tableId}`);
   return result;
 }
 
@@ -2364,15 +2638,26 @@ export async function checkAction(
     }
 
     // 7. Create check action record
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: Player seat ${seatSession.seatNumber} checking in round ${hand.round}`);
+    const checkActionData = {
+      handId: hand.id,
+      seatNumber: seatSession.seatNumber,
+      round: hand.round!,
+      action: 'CHECK',
+      amount: null, // Check has no amount
+    };
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: Creating CHECK action with:`, JSON.stringify(checkActionData));
     const handAction = await (tx as any).handAction.create({
-      data: {
-        handId: hand.id,
-        seatNumber: seatSession.seatNumber,
-        round: hand.round!,
-        action: 'CHECK',
-        amount: null, // Check has no amount
-      },
+      data: checkActionData,
     });
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: CHECK action created successfully:`, JSON.stringify({
+      id: handAction.id,
+      seatNumber: handAction.seatNumber,
+      action: handAction.action,
+      round: handAction.round,
+      amount: handAction.amount,
+    }));
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: CHECK action created, checking if round complete`);
 
     // 8. Create hand action event
     const actionPayload = {
@@ -2398,19 +2683,27 @@ export async function checkAction(
     await createEventInTransaction(tx, EventKind.BET, actionPayloadJson, normalizedAddress, null);
 
     // 9. Check if betting round is complete
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: After CHECK by seat ${seatSession.seatNumber}, checking if round complete`);
     const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: isBettingRoundComplete returned ${bettingRoundComplete}`);
 
     let handEnded = false;
     let winnerSeatNumber: number | null = null;
 
     if (bettingRoundComplete) {
+      console.log(`[DEBUG checkAction] Hand ${hand.id}: Round complete, calling handleBettingRoundComplete`);
       // Handle betting round completion
       const roundResult = await handleBettingRoundComplete(hand.id, hand.round!, tx);
       handEnded = roundResult.handEnded;
       roundAdvanced = roundResult.roundAdvanced;
       settlementData = roundResult.settlementData;
       winnerSeatNumber = roundResult.winnerSeatNumber;
+      console.log(`[DEBUG checkAction] Hand ${hand.id}: handleBettingRoundComplete returned handEnded=${handEnded}, roundAdvanced=${roundAdvanced}`);
+      console.log(`[DEBUG checkAction] Hand ${hand.id}: RETURNING from transaction - Round complete`);
+      console.log(`[DEBUG checkAction] Hand ${hand.id}: Context - hand.round=${hand.round}, handEnded=${handEnded}, roundAdvanced=${roundAdvanced}, winnerSeatNumber=${winnerSeatNumber}`);
+      return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
     } else {
+      console.log(`[DEBUG checkAction] Hand ${hand.id}: Round not complete, calling handleNextPlayerOrRoundComplete`);
       // Handle advancing to next player or completing round if all remaining are all-in
       const roundResult = await handleNextPlayerOrRoundComplete(
         hand.id,
@@ -2422,14 +2715,18 @@ export async function checkAction(
       roundAdvanced = roundResult.roundAdvanced;
       settlementData = roundResult.settlementData;
       winnerSeatNumber = roundResult.winnerSeatNumber;
+      console.log(`[DEBUG checkAction] Hand ${hand.id}: Round completed in handleNextPlayerOrRoundComplete: handEnded=${handEnded}, roundAdvanced=${roundAdvanced}`);
     }
 
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: RETURNING from transaction - Final result`);
+    console.log(`[DEBUG checkAction] Hand ${hand.id}: Context - hand.round=${hand.round}, handEnded=${handEnded}, roundAdvanced=${roundAdvanced}, winnerSeatNumber=${winnerSeatNumber}`);
     return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
   });
 
   // After transaction completes, handle post-settlement work
   await handlePostActionSettlement(result, settlementData, tableId);
 
+  console.log(`[DEBUG checkAction] RETURNING final result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}, tableId=${result.tableId}`);
   return result;
 }
 
@@ -2590,6 +2887,7 @@ async function handleBettingActionCompletion(
   isAllIn: boolean,
   tx: any
 ): Promise<RoundHandlingResult> {
+  console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: Called with currentSeatNumber=${currentSeatNumber}, currentRound=${currentRound}, bettingRoundComplete=${bettingRoundComplete}, isAllIn=${isAllIn}`);
   const result: RoundHandlingResult = {
     handEnded: false,
     roundAdvanced: false,
@@ -2598,6 +2896,7 @@ async function handleBettingActionCompletion(
   };
 
   if (bettingRoundComplete) {
+    console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: Betting round complete, calling handleBettingRoundComplete`);
     // Betting round is complete - update pots and handle round completion
     // Note: handleBettingRoundComplete calls advanceBettingRound which updates pots,
     // but we need to update pots here first for the current round
@@ -2607,7 +2906,11 @@ async function handleBettingActionCompletion(
     result.roundAdvanced = roundResult.roundAdvanced;
     result.settlementData = roundResult.settlementData;
     result.winnerSeatNumber = roundResult.winnerSeatNumber;
+    console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: Round completion handled: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
+    console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: RETURNING result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
+    return result;
   } else if (isAllIn) {
+    console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: Player all-in but round not complete, checking all players all-in`);
     // Player went all-in but round is not complete yet
     const allPlayersAllIn = await checkAndHandleAllPlayersAllIn(handId, tx);
     
@@ -2635,6 +2938,7 @@ async function handleBettingActionCompletion(
       }
     } else {
       // Not all players are all-in yet, update pots conditionally (preserves side pots if they exist)
+      console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: Player went all-in but round not complete`);
       await updatePotsIfNeeded(handId, tx);
       const roundResult = await handleNextPlayerOrRoundComplete(
         handId,
@@ -2649,6 +2953,7 @@ async function handleBettingActionCompletion(
     }
   } else {
     // Normal betting action - advance to next player
+    console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: No auto-advance, calling handleNextPlayerOrRoundComplete`);
     const roundResult = await handleNextPlayerOrRoundComplete(
       handId,
       currentSeatNumber,
@@ -2661,6 +2966,7 @@ async function handleBettingActionCompletion(
     result.winnerSeatNumber = roundResult.winnerSeatNumber;
   }
 
+  console.log(`[DEBUG handleBettingActionCompletion] Hand ${handId}: RETURNING result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}`);
   return result;
 }
 
@@ -2812,6 +3118,8 @@ export async function raiseAction(
     const actionType = isAllIn ? 'ALL_IN' : 'RAISE';
     // Event action type: if all-in, use 'ALL_IN', otherwise use 'BET' or 'RAISE' based on context
     const eventActionType = isAllIn ? 'ALL_IN' : (isBet ? 'BET' : 'RAISE');
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Player seat ${seatSession.seatNumber} ${isBet ? 'betting' : 'raising'} ${amountToDeduct.toString()} in round ${hand.round}, currentBet before=${currentBet.toString()}, chipsCommitted before=${chipsCommitted.toString()}, isAllIn=${isAllIn}`);
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Creating ${isBet ? 'BET' : 'RAISE'} action - hand.round=${hand.round}, actionType=${actionType}, eventActionType=${eventActionType}`);
     const handAction = await createActionAndEvent(
       tx,
       hand.id,
@@ -2825,9 +3133,13 @@ export async function raiseAction(
       eventActionType,
       isAllIn
     );
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: ${isBet ? 'BET' : 'RAISE'} action created successfully, checking if round complete`);
 
     // 15. Check if betting round is complete and handle round completion or next player
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Checking if betting round complete after ${isBet ? 'BET' : 'RAISE'}`);
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Context before isBettingRoundComplete - hand.round=${hand.round}, currentBet=${hand.currentBet?.toString()}, currentActionSeat=${hand.currentActionSeat}`);
     const bettingRoundComplete = await isBettingRoundComplete(hand.id, tx);
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: isBettingRoundComplete returned ${bettingRoundComplete}`);
     const roundResult = await handleBettingActionCompletion(
       hand.id,
       seatSession.seatNumber,
@@ -2836,18 +3148,23 @@ export async function raiseAction(
       isAllIn,
       tx
     );
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: handleBettingActionCompletion returned: handEnded=${roundResult.handEnded}, roundAdvanced=${roundResult.roundAdvanced}`);
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: RETURNING from transaction`);
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Context - hand.round=${hand.round}, handEnded=${roundResult.handEnded}, roundAdvanced=${roundResult.roundAdvanced}, winnerSeatNumber=${roundResult.winnerSeatNumber}`);
     
     let handEnded = roundResult.handEnded;
     let winnerSeatNumber: number | null = roundResult.winnerSeatNumber;
     roundAdvanced = roundResult.roundAdvanced;
     settlementData = roundResult.settlementData;
 
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: RETURNING from transaction - Final values: handEnded=${handEnded}, roundAdvanced=${roundAdvanced}, winnerSeatNumber=${winnerSeatNumber}`);
     return { success: true, handEnded, roundAdvanced, tableId, winnerSeatNumber };
   });
 
   // After transaction completes, handle post-settlement work
   await handlePostActionSettlement(result, settlementData, tableId);
 
+  console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] RETURNING final result: handEnded=${result.handEnded}, roundAdvanced=${result.roundAdvanced}, tableId=${result.tableId}`);
   return result;
 }
 

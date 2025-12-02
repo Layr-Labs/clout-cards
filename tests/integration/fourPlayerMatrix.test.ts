@@ -854,11 +854,10 @@ describe('4-Player Poker Test Matrix', () => {
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true); // All active players all-in, auto-advance to river
 
-      // Pot before rake: 1M + 2M + 48M + 48M + 48M = 50M (UTG's all-in amount) + 48M (dealer) + 48M (BB) = 146M
-      // Actually: 1M (SB) + 2M (BB) + 50M (UTG all-in) + 50M (dealer call) + 50M (BB call) = 153M
-      // But UTG only has 50M, so dealer and BB only need to call 50M each
-      // Total: 1M + 2M + 50M + 50M + 50M = 153M
-      await verifyPotWithRake(prisma, hand.id, 153000000n, rakeBps);
+      // Pot calculation: All HandActions store incremental amounts
+      // SB POST_BLIND: 1M + BB POST_BLIND: 2M + UTG ALL_IN: 50M + Dealer CALL: 50M + BB CALL: 48M = 151M
+      // Note: BB CALL is 48M incremental (to match 50M total, since BB already has 2M from POST_BLIND)
+      await verifyPotWithRake(prisma, hand.id, 151000000n, rakeBps);
     }, { player0Balance: 100000000n, player1Balance: 100000000n, player2Balance: 100000000n, player3Balance: 50000000n });
 
     testWithRakeVariants('PF-009: All-In Pre-Flop (Two Players, Same Amount)', async ({ prisma, hand, table }, rakeBps) => {
@@ -1019,21 +1018,26 @@ describe('4-Player Poker Test Matrix', () => {
       await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       // Big blind calls (8M to match 10M)
-      await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
-
-      // UTG can raise or call - let's call to complete the round
+      // After BB calls, all active players have acted and matched the bet
+      // Round should complete and advance to FLOP (UTG doesn't need to act again - no one raised after them)
       const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       expect(result.success).toBe(true);
-      expect(result.handEnded).toBe(false); // Round should advance if not all-in
+      expect(result.handEnded).toBe(false); // Hand should not end, should advance to FLOP
+      expect(result.roundAdvanced).toBe(true); // Round should advance to FLOP
 
-      // Side pot should be created
+      // Verify round advanced to FLOP
+      const updatedHand = await prisma.hand.findUnique({ where: { id: hand.id } });
+      expect(updatedHand?.round).toBe('FLOP');
+      expect(updatedHand?.status).toBe('FLOP');
+
+      // Side pot should be created (Dealer all-in for 5M, UTG and BB committed 10M each)
       const pots = await prisma.pot.findMany({
         where: { handId: hand.id },
         orderBy: { potNumber: 'asc' },
       });
 
-      expect(pots.length).toBeGreaterThan(0);
+      expect(pots.length).toBeGreaterThan(1); // Should have side pots
     }, { player0Balance: 5000000n, player1Balance: 100000000n, player2Balance: 100000000n, player3Balance: 100000000n });
   });
 
@@ -1133,7 +1137,7 @@ describe('4-Player Poker Test Matrix', () => {
 
       // Pot before rake: 8M + 5M + 5M + 5M = 23M
       await verifyPotWithRake(prisma, hand.id, 23000000n, rakeBps);
-    });
+    }, { round: 'FLOP' });
 
     it('FL-004: Bet-Raise-Call-Call on Flop', async () => {
       const { prisma, hand, table } = await setupStandardFourPlayerTest({ round: 'FLOP', rakeBps: 0 });
@@ -1166,8 +1170,9 @@ describe('4-Player Poker Test Matrix', () => {
 
       await assertHandRound(prisma, hand.id, 'TURN');
 
-      // Pot before rake: 8M + 5M + 13M + 15M + 15M + 10M = 66M
-      await verifyPotWithRake(prisma, hand.id, 66000000n, 0);
+      // Pot before rake: 8M + 5M + 15M + 15M + 15M + 10M = 68M
+      // Note: chipsCommitted resets to 0 at start of each round, so raise is 15M (not 13M)
+      await verifyPotWithRake(prisma, hand.id, 68000000n, 0);
     });
 
     it('FL-005: Bet-Raise-Fold-Call on Flop', async () => {
@@ -1178,8 +1183,8 @@ describe('4-Player Poker Test Matrix', () => {
       // Small blind bets 5M
       await betOrRaiseAction(prisma, table.id, hand.id, await getCurrentActionWallet(prisma, hand.id), 5000000n);
 
-      // Big blind raises to 15M total (has committed 2M, incremental = 13M, minimum is 7M)
-      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 13000000n, false);
+      // Big blind raises to 15M total (chipsCommitted resets to 0 at start of round, incremental = 15M, minimum is 7M)
+      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 15000000n, false);
 
       // UTG folds
       await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
@@ -1196,8 +1201,8 @@ describe('4-Player Poker Test Matrix', () => {
 
       await assertHandRound(prisma, hand.id, 'TURN');
 
-      // Pot before rake: 8M + 5M + 13M + 15M + 10M = 51M
-      await verifyPotWithRake(prisma, hand.id, 51000000n, 0);
+      // Pot before rake: 8M + 5M + 15M + 15M + 10M = 53M
+      await verifyPotWithRake(prisma, hand.id, 53000000n, 0);
     });
 
     it('FL-006: Check-Bet-Call-Call on Flop', async () => {
@@ -1247,8 +1252,8 @@ describe('4-Player Poker Test Matrix', () => {
       // UTG bets 5M
       await betOrRaiseAction(prisma, table.id, hand.id, await getCurrentActionWallet(prisma, hand.id), 5000000n);
 
-      // Dealer raises to 15M total (has committed 2M, incremental = 13M, minimum is 7M)
-      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 13000000n, false);
+      // Dealer raises to 15M total (chipsCommitted resets to 0 at start of round, incremental = 15M, minimum is 7M)
+      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 15000000n, false);
 
       // Small blind calls (15M)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
@@ -1265,8 +1270,8 @@ describe('4-Player Poker Test Matrix', () => {
 
       await assertHandRound(prisma, hand.id, 'TURN');
 
-      // Pot before rake: 8M + 5M + 13M + 15M + 15M + 10M = 66M
-      await verifyPotWithRake(prisma, hand.id, 66000000n, 0);
+      // Pot before rake: 8M + 5M + 15M + 15M + 15M + 10M = 68M
+      await verifyPotWithRake(prisma, hand.id, 68000000n, 0);
     });
 
     testWithRakeVariants('FL-008: All-In on Flop (Single Player)', async ({ prisma, hand, table }, rakeBps) => {
@@ -1407,8 +1412,8 @@ describe('4-Player Poker Test Matrix', () => {
       // Small blind bets 5M
       await betOrRaiseAction(prisma, table.id, hand.id, await getCurrentActionWallet(prisma, hand.id), 5000000n);
 
-      // Big blind raises to 15M total (has committed 2M, incremental = 13M, minimum is 7M)
-      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 13000000n, false);
+      // Big blind raises to 15M total (chipsCommitted resets to 0 at start of round, incremental = 15M, minimum is 7M)
+      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 15000000n, false);
 
       // UTG calls (15M)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
@@ -1425,8 +1430,8 @@ describe('4-Player Poker Test Matrix', () => {
 
       await assertHandRound(prisma, hand.id, 'RIVER');
 
-      // Pot before rake: 8M + 5M + 13M + 15M + 15M + 10M = 66M
-      await verifyPotWithRake(prisma, hand.id, 66000000n, 0);
+      // Pot before rake: 8M + 5M + 15M + 15M + 15M + 10M = 68M
+      await verifyPotWithRake(prisma, hand.id, 68000000n, 0);
     });
 
     testWithRakeVariants('TU-004: All-In on Turn (Multiple Players)', async ({ prisma, hand, table }, rakeBps) => {
@@ -1530,8 +1535,8 @@ describe('4-Player Poker Test Matrix', () => {
       // Small blind bets 5M
       await betOrRaiseAction(prisma, table.id, hand.id, await getCurrentActionWallet(prisma, hand.id), 5000000n);
 
-      // Big blind raises to 15M total (has committed 2M, incremental = 13M, minimum is 7M)
-      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 13000000n, false);
+      // Big blind raises to 15M total (chipsCommitted resets to 0 at start of round, incremental = 15M, minimum is 7M)
+      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 15000000n, false);
 
       // UTG calls (15M)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
@@ -1545,8 +1550,8 @@ describe('4-Player Poker Test Matrix', () => {
       expect(result.success).toBe(true);
       expect(result.handEnded).toBe(true);
 
-      // Pot before rake: 8M + 5M + 13M + 15M + 15M + 10M = 66M
-      await verifyPotWithRake(prisma, hand.id, 66000000n, rakeBps);
+      // Pot before rake: 8M + 5M + 15M + 15M + 15M + 10M = 68M
+      await verifyPotWithRake(prisma, hand.id, 68000000n, rakeBps);
     }, { round: 'RIVER' });
   });
 
@@ -2173,14 +2178,14 @@ describe('4-Player Poker Test Matrix', () => {
 
       // FLOP: Bet, raise, all call
       await betOrRaiseAction(prisma, table.id, hand.id, await getCurrentActionWallet(prisma, hand.id), 5000000n);
-      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 13000000n, false); // Raise to 15M total (has committed 2M, incremental = 13M)
+      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 15000000n, false); // Raise to 15M total (chipsCommitted resets to 0 at start of round, incremental = 15M)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       // TURN: Bet, raise, all call
       await betOrRaiseAction(prisma, table.id, hand.id, await getCurrentActionWallet(prisma, hand.id), 5000000n);
-      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 13000000n, false); // Raise to 15M total (has committed 2M, incremental = 13M)
+      await raiseAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id), 15000000n, false); // Raise to 15M total (chipsCommitted resets to 0 at start of round, incremental = 15M)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
