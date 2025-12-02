@@ -40,9 +40,9 @@ Replace polling-based table state updates with Server-Sent Events (SSE) for real
 
 ## Implementation Phases
 
-### Phase 1: Database Schema Changes ⏳
+### Phase 1: Database Schema Changes ✅
 
-**Status:** Not Started
+**Status:** Completed
 
 **Tasks:**
 1. Add `tableId` column to `Event` model (optional, nullable)

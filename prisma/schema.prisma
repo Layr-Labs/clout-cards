@@ -12,31 +12,34 @@ datasource db {
 
 /**
  * Event table - append-only log of all RPC calls processed by the TEE
- * 
  * This table maintains an immutable audit trail of all RPC calls that mutate
  * logical state. Each event represents a complete RPC call (not individual
  * table mutations), providing higher-level control and easier verification.
- * 
  * Events are signed by the TEE using EIP-712 signatures on the payload_json.
  * The digest is computed from the canonical JSON payload using typed data signing.
  */
 model Event {
-  eventId       Int      @id @default(autoincrement()) @map("event_id")
-  blockTs       DateTime @map("block_ts") // When the event was finalized at the TEE
-  player        String?  @db.VarChar(42) // Optional - whoever the event concerns
-  kind          String   // Event kind: deposit, withdraw, bet, hand_start, hand_end, join_table, etc.
-  payloadJson   String   @map("payload_json") @db.Text // Raw canonical JSON input used to mutate logical state (stored as TEXT, can be migrated to JSONB later)
-  digest        String   @db.Char(66) // EIP-712 digest of payload_json, typed
-  sigR          String   @map("sig_r") @db.VarChar(66) // Signature component R (32 bytes, stored as hex string with 0x prefix)
-  sigS          String   @map("sig_s") @db.VarChar(66) // Signature component S (32 bytes, stored as hex string with 0x prefix)
-  sigV          Int      @map("sig_v") // Signature component V
-  nonce         BigInt?  // Monotonic per-player replay-protection nonce for withdrawal events only
-  teeVersion    Int      @map("tee_version") // Version of the TEE binary that generated this event
-  teePubkey     String   @map("tee_pubkey") @db.VarChar(66) // TEE public key that signed this event
-  ingestedAt    DateTime @default(now()) @map("ingested_at") // When the backend inserted it (not part of digest)
+  eventId     Int      @id @default(autoincrement()) @map("event_id")
+  blockTs     DateTime @map("block_ts") // When the event was finalized at the TEE
+  player      String?  @db.VarChar(42) // Optional - whoever the event concerns
+  tableId     Int?     @map("table_id") // Optional - table ID for table-related events (for efficient SSE filtering)
+  kind        String // Event kind: deposit, withdraw, bet, hand_start, hand_end, join_table, etc.
+  payloadJson String   @map("payload_json") @db.Text // Raw canonical JSON input used to mutate logical state (stored as TEXT, can be migrated to JSONB later)
+  digest      String   @db.Char(66) // EIP-712 digest of payload_json, typed
+  sigR        String   @map("sig_r") @db.VarChar(66) // Signature component R (32 bytes, stored as hex string with 0x prefix)
+  sigS        String   @map("sig_s") @db.VarChar(66) // Signature component S (32 bytes, stored as hex string with 0x prefix)
+  sigV        Int      @map("sig_v") // Signature component V
+  nonce       BigInt? // Monotonic per-player replay-protection nonce for withdrawal events only
+  teeVersion  Int      @map("tee_version") // Version of the TEE binary that generated this event
+  teePubkey   String   @map("tee_pubkey") @db.VarChar(66) // TEE public key that signed this event
+  ingestedAt  DateTime @default(now()) @map("ingested_at") // When the backend inserted it (not part of digest)
+
+  // Relations
+  table PokerTable? @relation(fields: [tableId], references: [id])
 
   @@index([player])
   @@index([kind])
+  @@index([tableId]) // Index for efficient SSE filtering by table
   @@index([blockTs])
   @@index([digest])
   @@map("events")
@@ -44,59 +47,54 @@ model Event {
 
 /**
  * Poker table configuration
- * 
  * Represents a poker table with its game parameters (blinds, buy-ins, rake, seat count).
  * Tables can be created, activated/deactivated, and searched by buy-in ranges.
  */
 model PokerTable {
-  id            Int      @id @default(autoincrement()) @map("poker_table_id")
-  name          String   @unique @db.VarChar(255) // Unique table name/identifier
-  minimumBuyIn  BigInt   @map("minimum_buy_in") // Minimum buy-in in gwei
-  maximumBuyIn  BigInt   @map("maximum_buy_in") // Maximum buy-in in gwei
-  perHandRake   Int      @map("per_hand_rake") // Rake per hand in basis points (bps), e.g., 100 = 1% (must be >= 0)
-  maxSeatCount  Int      @map("max_seat_count") // Maximum number of seats (0-8)
-  smallBlind    BigInt   @map("small_blind") // Small blind amount in gwei
-  bigBlind      BigInt   @map("big_blind") // Big blind amount in gwei
-  isActive      Boolean  @default(true) @map("is_active") // Whether the table is currently active
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           Int      @id @default(autoincrement()) @map("poker_table_id")
+  name         String   @unique @db.VarChar(255) // Unique table name/identifier
+  minimumBuyIn BigInt   @map("minimum_buy_in") // Minimum buy-in in gwei
+  maximumBuyIn BigInt   @map("maximum_buy_in") // Maximum buy-in in gwei
+  perHandRake  Int      @map("per_hand_rake") // Rake per hand in basis points (bps), e.g., 100 = 1% (must be >= 0)
+  maxSeatCount Int      @map("max_seat_count") // Maximum number of seats (0-8)
+  smallBlind   BigInt   @map("small_blind") // Small blind amount in gwei
+  bigBlind     BigInt   @map("big_blind") // Big blind amount in gwei
+  isActive     Boolean  @default(true) @map("is_active") // Whether the table is currently active
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  seatSessions TableSeatSession[]
+  hands        Hand[]
+  events       Event[]
 
   @@index([minimumBuyIn, maximumBuyIn]) // Composite index for buy-in range searches
-  
-  // Relations
-  seatSessions    TableSeatSession[]
-  hands           Hand[]
-
   @@map("poker_tables")
 }
 
 /**
  * Player escrow balance
- * 
  * Tracks the on-chain escrow balance for each player wallet address.
  * This balance is updated when Deposited() events are detected from the CloutCards contract.
  * Balance is stored in gwei (wei / 10^9) for precision.
- * 
  * Also tracks pending withdrawal state to prevent race conditions:
  * - nextWithdrawalNonce: The nonce that will be used for the next withdrawal signature
  * - withdrawalSignatureExpiry: When the current withdrawal signature expires (if pending)
  */
 model PlayerEscrowBalance {
-  walletAddress            String    @id @db.VarChar(42) @map("wallet_address") // Ethereum address (primary key)
-  balanceGwei             BigInt    @map("balance_gwei") // Escrow balance in gwei
-  nextWithdrawalNonce     BigInt?   @map("next_withdrawal_nonce") // Next withdrawal nonce (nullable if never withdrawn)
+  walletAddress             String    @id @map("wallet_address") @db.VarChar(42) // Ethereum address (primary key)
+  balanceGwei               BigInt    @map("balance_gwei") // Escrow balance in gwei
+  nextWithdrawalNonce       BigInt?   @map("next_withdrawal_nonce") // Next withdrawal nonce (nullable if never withdrawn)
   withdrawalSignatureExpiry DateTime? @map("withdrawal_signature_expiry") // Expiry timestamp of pending withdrawal signature (nullable)
-  updatedAt                DateTime  @updatedAt @map("updated_at") // Last update timestamp
+  updatedAt                 DateTime  @updatedAt @map("updated_at") // Last update timestamp
 
   @@map("player_escrow_balances")
 }
 
 /**
  * Table seat session
- * 
  * Tracks when a player sits down at a specific seat at a poker table.
  * This model combines the table, seat, player's running table balance, and session state.
- * 
  * Constraints:
  * - A player can only be active at one table at a time (enforced by unique constraint on walletAddress where isActive=true)
  * - A seat can only be occupied by one active player at a time (enforced by unique constraint on tableId+seatNumber where isActive=true)
@@ -104,19 +102,19 @@ model PlayerEscrowBalance {
  * - When a player stands up, their table balance (winnings/losses) is moved back to escrow
  */
 model TableSeatSession {
-  id              Int      @id @default(autoincrement()) @map("table_seat_session_id")
-  tableId         Int      @map("table_id") // Foreign key to PokerTable
-  walletAddress   String   @db.VarChar(42) @map("wallet_address") // Player's wallet address
-  seatNumber      Int      @map("seat_number") // Seat number (0-7)
-  tableBalanceGwei BigInt  @map("table_balance_gwei") // Player's balance at this table (in gwei)
-  twitterHandle   String?  @db.VarChar(255) @map("twitter_handle") // Player's Twitter/X handle (optional, not unique)
-  twitterAvatarUrl String? @db.VarChar(500) @map("twitter_avatar_url") // Player's Twitter/X profile image URL (optional)
-  joinedAt        DateTime @default(now()) @map("joined_at") // When the player sat down
-  leftAt          DateTime? @map("left_at") // When the player stood up (nullable)
-  isActive        Boolean  @default(true) @map("is_active") // Whether the session is currently active
+  id               Int       @id @default(autoincrement()) @map("table_seat_session_id")
+  tableId          Int       @map("table_id") // Foreign key to PokerTable
+  walletAddress    String    @map("wallet_address") @db.VarChar(42) // Player's wallet address
+  seatNumber       Int       @map("seat_number") // Seat number (0-7)
+  tableBalanceGwei BigInt    @map("table_balance_gwei") // Player's balance at this table (in gwei)
+  twitterHandle    String?   @map("twitter_handle") @db.VarChar(255) // Player's Twitter/X handle (optional, not unique)
+  twitterAvatarUrl String?   @map("twitter_avatar_url") @db.VarChar(500) // Player's Twitter/X profile image URL (optional)
+  joinedAt         DateTime  @default(now()) @map("joined_at") // When the player sat down
+  leftAt           DateTime? @map("left_at") // When the player stood up (nullable)
+  isActive         Boolean   @default(true) @map("is_active") // Whether the session is currently active
 
   // Foreign key relationships
-  table           PokerTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  table PokerTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
 
   // Note: Partial unique indexes are enforced at the database level via migration
   // to allow multiple inactive sessions (history) while preventing duplicate active sessions
@@ -128,22 +126,20 @@ model TableSeatSession {
 
 /**
  * Hand status enum
- * 
  * Tracks the current state of a poker hand through its lifecycle.
  */
 enum HandStatus {
-  WAITING_FOR_PLAYERS  // Waiting for at least 2 players to start
-  SHUFFLING            // Deck is being shuffled, commitment created
-  PRE_FLOP             // Pre-flop betting round
-  FLOP                 // Flop betting round (3 community cards)
-  TURN                 // Turn betting round (4th community card)
-  RIVER                // River betting round (5th community card)
-  COMPLETED            // Hand is complete (showdown and settlement done atomically)
+  WAITING_FOR_PLAYERS // Waiting for at least 2 players to start
+  SHUFFLING // Deck is being shuffled, commitment created
+  PRE_FLOP // Pre-flop betting round
+  FLOP // Flop betting round (3 community cards)
+  TURN // Turn betting round (4th community card)
+  RIVER // River betting round (5th community card)
+  COMPLETED // Hand is complete (showdown and settlement done atomically)
 }
 
 /**
  * Betting round enum
- * 
  * Tracks which betting round an action occurred in.
  */
 enum BettingRound {
@@ -155,73 +151,67 @@ enum BettingRound {
 
 /**
  * Player action type enum
- * 
  * Types of actions a player can take during betting rounds.
  */
 enum PlayerActionType {
-  POST_BLIND  // Posting small or big blind
-  FOLD        // Fold (give up hand)
-  CHECK       // Check (no bet, only if no current bet)
-  CALL        // Call (match current bet)
-  RAISE       // Raise (increase the bet)
-  ALL_IN      // All-in (bet entire stack)
+  POST_BLIND // Posting small or big blind
+  FOLD // Fold (give up hand)
+  CHECK // Check (no bet, only if no current bet)
+  CALL // Call (match current bet)
+  RAISE // Raise (increase the bet)
+  ALL_IN // All-in (bet entire stack)
 }
 
 /**
  * Hand player status enum
- * 
  * Status of a player within a specific hand.
  */
 enum HandPlayerStatus {
-  ACTIVE      // Player is active in the hand
-  FOLDED      // Player has folded
-  ALL_IN      // Player is all-in (can't act further)
+  ACTIVE // Player is active in the hand
+  FOLDED // Player has folded
+  ALL_IN // Player is all-in (can't act further)
 }
 
 /**
  * Poker hand
- * 
  * Represents a single poker hand at a table. Tracks the deck state, community cards,
  * dealer position, blinds, current betting state, and cryptographic shuffle commitment.
- * 
  * The deck is stored as a JSON array of 52 cards in shuffled order. The deckPosition
  * tracks where we are in the deck as cards are dealt, enabling verification that
  * cards were dealt correctly.
- * 
  * Cryptographic verification:
  * - shuffleSeedHash: Commitment to the shuffle seed (created before dealing)
  * - shuffleSeed: The actual seed (revealed after hand completes for verification)
- * 
  * Pot tracking:
  * - Pots are stored separately in the Pot table
  * - Sum Pot.amount WHERE handId = id to get total pot
  */
 model Hand {
-  id                Int       @id @default(autoincrement()) @map("hand_id")
-  tableId           Int       @map("table_id") // Foreign key to PokerTable
-  status            HandStatus @default(WAITING_FOR_PLAYERS)
+  id                Int           @id @default(autoincrement()) @map("hand_id")
+  tableId           Int           @map("table_id") // Foreign key to PokerTable
+  status            HandStatus    @default(WAITING_FOR_PLAYERS)
   round             BettingRound? // Current betting round (null before first round)
-  dealerPosition    Int?     @map("dealer_position") // Seat number of dealer button
-  smallBlindSeat    Int?     @map("small_blind_seat") // Seat number posting small blind
-  bigBlindSeat      Int?     @map("big_blind_seat") // Seat number posting big blind
-  currentActionSeat Int?     @map("current_action_seat") // Seat number whose turn it is to act
-  currentBet        BigInt?  @map("current_bet") // Highest bet amount this round (in gwei). Total amount a player must call to stay in. Example: if BB=100 and someone raises to 300, currentBet=300.
-  lastRaiseAmount   BigInt?  @map("last_raise_amount") // Amount of the last raise (in gwei), used to enforce minimum raise rules in no-limit poker. Example: if BB=100 and someone raises to 300, lastRaiseAmount=200 (they raised by 200). Next raise must be at least 200 more. Null if no raises have occurred yet (only blinds posted).
-  deck              Json     // Full shuffled deck (52 cards) as JSON array
-  deckPosition      Int      @default(0) @map("deck_position") // Current position in deck (0-51)
-  communityCards    Json     @default("[]") @map("community_cards") // Community cards as JSON array (flop/turn/river)
-  shuffleSeedHash   String   @db.VarChar(66) @map("shuffle_seed_hash") // Cryptographic commitment to shuffle seed (keccak256 hash)
-  shuffleSeed       String?  @db.VarChar(66) @map("shuffle_seed") // Shuffle seed (revealed after hand completes, hex string)
-  startedAt         DateTime @default(now()) @map("started_at")
-  completedAt       DateTime? @map("completed_at")
+  dealerPosition    Int?          @map("dealer_position") // Seat number of dealer button
+  smallBlindSeat    Int?          @map("small_blind_seat") // Seat number posting small blind
+  bigBlindSeat      Int?          @map("big_blind_seat") // Seat number posting big blind
+  currentActionSeat Int?          @map("current_action_seat") // Seat number whose turn it is to act
+  currentBet        BigInt?       @map("current_bet") // Highest bet amount this round (in gwei). Total amount a player must call to stay in. Example: if BB=100 and someone raises to 300, currentBet=300.
+  lastRaiseAmount   BigInt?       @map("last_raise_amount") // Amount of the last raise (in gwei), used to enforce minimum raise rules in no-limit poker. Example: if BB=100 and someone raises to 300, lastRaiseAmount=200 (they raised by 200). Next raise must be at least 200 more. Null if no raises have occurred yet (only blinds posted).
+  deck              Json // Full shuffled deck (52 cards) as JSON array
+  deckPosition      Int           @default(0) @map("deck_position") // Current position in deck (0-51)
+  communityCards    Json          @default("[]") @map("community_cards") // Community cards as JSON array (flop/turn/river)
+  shuffleSeedHash   String        @map("shuffle_seed_hash") @db.VarChar(66) // Cryptographic commitment to shuffle seed (keccak256 hash)
+  shuffleSeed       String?       @map("shuffle_seed") @db.VarChar(66) // Shuffle seed (revealed after hand completes, hex string)
+  startedAt         DateTime      @default(now()) @map("started_at")
+  completedAt       DateTime?     @map("completed_at")
 
   // Foreign key relationships
-  table             PokerTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  
+  table PokerTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
   // Relations
-  players           HandPlayer[]
-  pots              Pot[]
-  actions           HandAction[]
+  players HandPlayer[]
+  pots    Pot[]
+  actions HandAction[]
 
   @@index([tableId])
   @@index([status])
@@ -231,23 +221,21 @@ model Hand {
 
 /**
  * Hand player
- * 
  * Tracks a player's participation in a specific hand. Records their hole cards,
  * status, and total chips committed to the hand.
- * 
  * Hole cards are stored even if the player folds, for audit/verification purposes.
  */
 model HandPlayer {
-  id              Int              @id @default(autoincrement()) @map("hand_player_id")
-  handId          Int               @map("hand_id") // Foreign key to Hand
-  seatNumber      Int               @map("seat_number") // Seat number at the table
-  walletAddress   String            @db.VarChar(42) @map("wallet_address") // Player's wallet address
-  status          HandPlayerStatus  @default(ACTIVE)
-  chipsCommitted  BigInt           @default(0) @map("chips_committed") // Total chips committed this hand (in gwei)
-  holeCards       Json              @map("hole_cards") // Player's hole cards as JSON array [card1, card2]
+  id             Int              @id @default(autoincrement()) @map("hand_player_id")
+  handId         Int              @map("hand_id") // Foreign key to Hand
+  seatNumber     Int              @map("seat_number") // Seat number at the table
+  walletAddress  String           @map("wallet_address") @db.VarChar(42) // Player's wallet address
+  status         HandPlayerStatus @default(ACTIVE)
+  chipsCommitted BigInt           @default(0) @map("chips_committed") // Total chips committed this hand (in gwei)
+  holeCards      Json             @map("hole_cards") // Player's hole cards as JSON array [card1, card2]
 
   // Foreign key relationships
-  hand            Hand              @relation(fields: [handId], references: [id], onDelete: Cascade)
+  hand Hand @relation(fields: [handId], references: [id], onDelete: Cascade)
 
   @@unique([handId, seatNumber]) // One player per seat per hand
   @@index([handId])
@@ -258,26 +246,23 @@ model HandPlayer {
 
 /**
  * Pot
- * 
  * Represents a pot (main pot or side pot) for a hand. Side pots are created
  * when players go all-in with different stack sizes.
- * 
  * - potNumber 0 = main pot
  * - potNumber 1+ = side pots (in order of creation)
- * 
  * eligibleSeatNumbers: Array of seat numbers eligible to win this pot
  * winnerSeatNumbers: Array of seat numbers that won this pot (set during settlement)
  */
 model Pot {
-  id                  Int      @id @default(autoincrement()) @map("pot_id")
-  handId              Int      @map("hand_id") // Foreign key to Hand
-  potNumber           Int      @map("pot_number") // 0 = main pot, 1+ = side pots
-  amount              BigInt   // Pot amount in gwei
-  eligibleSeatNumbers Json     @map("eligible_seat_numbers") // Array of seat numbers eligible for this pot
-  winnerSeatNumbers   Json?    @map("winner_seat_numbers") // Array of seat numbers that won (set during settlement)
+  id                  Int    @id @default(autoincrement()) @map("pot_id")
+  handId              Int    @map("hand_id") // Foreign key to Hand
+  potNumber           Int    @map("pot_number") // 0 = main pot, 1+ = side pots
+  amount              BigInt // Pot amount in gwei
+  eligibleSeatNumbers Json   @map("eligible_seat_numbers") // Array of seat numbers eligible for this pot
+  winnerSeatNumbers   Json?  @map("winner_seat_numbers") // Array of seat numbers that won (set during settlement)
 
   // Foreign key relationships
-  hand                Hand     @relation(fields: [handId], references: [id], onDelete: Cascade)
+  hand Hand @relation(fields: [handId], references: [id], onDelete: Cascade)
 
   @@unique([handId, potNumber]) // One pot per number per hand
   @@index([handId])
@@ -286,24 +271,22 @@ model Pot {
 
 /**
  * Hand action
- * 
  * Append-only log of all player actions during a hand. Records betting actions
  * (fold, check, call, raise, all-in) and blind postings for complete audit trail.
- * 
  * Actions are stored chronologically and can be used to replay the hand or
  * verify betting history.
  */
 model HandAction {
-  id            Int              @id @default(autoincrement()) @map("hand_action_id")
-  handId        Int              @map("hand_id") // Foreign key to Hand
-  seatNumber    Int              @map("seat_number") // Seat number of player taking action
-  round         BettingRound     // Betting round this action occurred in
-  action        PlayerActionType // Type of action
-  amount        BigInt?          // Amount for CALL/RAISE/ALL_IN/POST_BLIND (in gwei, null for FOLD/CHECK)
-  timestamp     DateTime         @default(now())
+  id         Int              @id @default(autoincrement()) @map("hand_action_id")
+  handId     Int              @map("hand_id") // Foreign key to Hand
+  seatNumber Int              @map("seat_number") // Seat number of player taking action
+  round      BettingRound // Betting round this action occurred in
+  action     PlayerActionType // Type of action
+  amount     BigInt? // Amount for CALL/RAISE/ALL_IN/POST_BLIND (in gwei, null for FOLD/CHECK)
+  timestamp  DateTime         @default(now())
 
   // Foreign key relationships
-  hand          Hand             @relation(fields: [handId], references: [id], onDelete: Cascade)
+  hand Hand @relation(fields: [handId], references: [id], onDelete: Cascade)
 
   @@index([handId])
   @@index([handId, round]) // Composite index for querying actions by hand and round

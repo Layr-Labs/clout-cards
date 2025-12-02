@@ -146,6 +146,16 @@ export async function createEventInTransaction(
   const timestamp = blockTs || new Date();
   const teePubkey = getTeePublicKey();
 
+  // Extract tableId from payload if present (for efficient SSE filtering)
+  let tableId: number | null = null;
+  try {
+    const payload = JSON.parse(payloadJson);
+    tableId = payload.table?.id || null;
+  } catch {
+    // If payload parsing fails, tableId stays null
+    // This is fine - not all events have table.id (e.g., DEPOSIT, WITHDRAWAL_*)
+  }
+
   // Compute digest first (same as what will be signed)
   const digest = computePayloadDigest(kind, payloadJson, nonce || undefined);
 
@@ -157,6 +167,7 @@ export async function createEventInTransaction(
     data: {
       blockTs: timestamp,
       player: player || null,
+      tableId: tableId, // Store extracted tableId for efficient filtering
       kind,
       payloadJson,
       digest,
