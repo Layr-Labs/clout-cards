@@ -92,12 +92,40 @@ export async function getCurrentHandResponse(
   // Normalize wallet address for comparison (if provided)
   const normalizedAddress = walletAddress?.toLowerCase();
 
+  console.log('[getCurrentHandResponse] processing request', {
+    tableId,
+    walletAddress,
+    normalizedAddress,
+    includeHoleCards,
+    handId: hand.id,
+    handStatus: hand.status,
+    playersCount: hand.players.length,
+  });
+
   // Build response
   const communityCards = Array.isArray(hand.communityCards) ? hand.communityCards : [];
 
   const players = hand.players.map((player: any) => {
     const session = seatSessionMap.get(player.seatNumber);
     const isAuthorizedPlayer = includeHoleCards && normalizedAddress && player.walletAddress.toLowerCase() === normalizedAddress;
+    const hasHoleCardsInDB = Array.isArray(player.holeCards) && player.holeCards.length > 0;
+    const shouldReturnHoleCards = isAuthorizedPlayer && (player.status === 'ACTIVE' || player.status === 'ALL_IN');
+    const holeCardsToReturn = shouldReturnHoleCards && hasHoleCardsInDB
+      ? player.holeCards
+      : null;
+
+    console.log('[getCurrentHandResponse] processing player', {
+      seatNumber: player.seatNumber,
+      walletAddress: player.walletAddress,
+      status: player.status,
+      isAuthorizedPlayer,
+      includeHoleCards,
+      normalizedAddress,
+      playerWalletLower: player.walletAddress.toLowerCase(),
+      hasHoleCardsInDB,
+      shouldReturnHoleCards,
+      holeCardsToReturn: holeCardsToReturn ? `${holeCardsToReturn.length} cards` : null,
+    });
 
     return {
       seatNumber: player.seatNumber,
@@ -107,9 +135,7 @@ export async function getCurrentHandResponse(
       status: player.status,
       chipsCommitted: player.chipsCommitted.toString(),
       // Only return hole cards for authorized player if they're active or all-in (and includeHoleCards is true)
-      holeCards: isAuthorizedPlayer && (player.status === 'ACTIVE' || player.status === 'ALL_IN')
-        ? (Array.isArray(player.holeCards) ? player.holeCards : [])
-        : null,
+      holeCards: holeCardsToReturn,
     };
   });
 

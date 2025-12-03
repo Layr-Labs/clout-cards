@@ -1358,6 +1358,18 @@ async function createActionAndEvent(
     eligibleSeatNumbers: Array.isArray(pot.eligibleSeatNumbers) ? pot.eligibleSeatNumbers : [],
   }));
 
+  // Query updated table balance for the acting player
+  const seatSession = await tx.tableSeatSession.findFirst({
+    where: {
+      tableId: table.id,
+      seatNumber: seatNumber,
+      isActive: true,
+    },
+    select: {
+      tableBalanceGwei: true,
+    },
+  });
+
   // 4. Create hand action event
   const actionPayload = {
     kind: 'hand_action',
@@ -1379,6 +1391,7 @@ async function createActionAndEvent(
       seatNumber,
       walletAddress,
       amount: amount?.toString() || null,
+      tableBalanceGwei: seatSession?.tableBalanceGwei?.toString() || null,
       ...(isAllIn !== undefined ? { isAllIn } : {}),
       timestamp: handAction.timestamp.toISOString(),
     },
@@ -1842,6 +1855,23 @@ async function createHandEndEvent(
   // Create a map of pot rake info for easy lookup
   const potRakeMap = new Map(potRakeInfo.map(info => [info.potNumber, info]));
 
+  // Get all active players at the table (not just those in the hand)
+  // This ensures we update balances for all players, including those who sat out
+  const allActiveSessions = await prisma.tableSeatSession.findMany({
+    where: {
+      tableId: hand.table.id,
+      isActive: true,
+    },
+    select: {
+      seatNumber: true,
+      walletAddress: true,
+      tableBalanceGwei: true,
+    },
+  });
+
+  // Create a map of hand players by seat number for easy lookup
+  const handPlayersMap = new Map(hand.players.map((p: any) => [p.seatNumber, p]));
+
   const payload = {
     kind: 'hand_end',
     table: {
@@ -1858,13 +1888,19 @@ async function createHandEndEvent(
     },
     rakeBps, // Rake in basis points
     communityCards: (hand.communityCards || []) as Card[],
-    players: hand.players.map((p: any) => ({
-      seatNumber: p.seatNumber,
-      walletAddress: p.walletAddress,
-      holeCards: p.holeCards as Card[],
-      status: p.status,
-      handRank: null,
-      handRankName: null,
+    players: await Promise.all(allActiveSessions.map(async (session) => {
+      // Check if this player was in the hand
+      const handPlayer = handPlayersMap.get(session.seatNumber) as any;
+      
+      return {
+        seatNumber: session.seatNumber,
+        walletAddress: session.walletAddress,
+        holeCards: handPlayer ? (handPlayer.holeCards as Card[]) : null,
+        status: handPlayer ? handPlayer.status : null,
+        handRank: null,
+        handRankName: null,
+        tableBalanceGwei: session.tableBalanceGwei?.toString() || null,
+      };
     })),
     pots: hand.pots.map((pot: any) => {
       // For single winner scenario, each pot's full amount goes to the winner (after rake)
@@ -2012,6 +2048,23 @@ async function createHandEndEventShowdown(
   // Create a map of pot rake info for easy lookup
   const potRakeMap = new Map(potRakeInfo.map(info => [info.potNumber, info]));
 
+  // Get all active players at the table (not just those in the hand)
+  // This ensures we update balances for all players, including those who sat out
+  const allActiveSessions = await prisma.tableSeatSession.findMany({
+    where: {
+      tableId: hand.table.id,
+      isActive: true,
+    },
+    select: {
+      seatNumber: true,
+      walletAddress: true,
+      tableBalanceGwei: true,
+    },
+  });
+
+  // Create a map of hand players by seat number for easy lookup
+  const handPlayersMap = new Map(hand.players.map((p: any) => [p.seatNumber, p]));
+
   const payload = {
     kind: 'hand_end',
     table: {
@@ -2028,19 +2081,23 @@ async function createHandEndEventShowdown(
     },
     rakeBps, // Rake in basis points
     communityCards,
-    players: hand.players.map((p: any) => {
-      const evaluation = playerEvaluations.find(e => e.seatNumber === p.seatNumber);
-      // Only show hand rank for non-folded players
-      const showHandRank = p.status !== 'FOLDED';
+    players: await Promise.all(allActiveSessions.map(async (session) => {
+      // Check if this player was in the hand
+      const handPlayer = handPlayersMap.get(session.seatNumber) as any;
+      const evaluation = handPlayer ? playerEvaluations.find(e => e.seatNumber === session.seatNumber) : null;
+      // Only show hand rank for non-folded players who were in the hand
+      const showHandRank = handPlayer && handPlayer.status !== 'FOLDED';
+      
       return {
-        seatNumber: p.seatNumber,
-        walletAddress: p.walletAddress,
-        holeCards: p.holeCards as Card[],
-        status: p.status,
+        seatNumber: session.seatNumber,
+        walletAddress: session.walletAddress,
+        holeCards: handPlayer ? (handPlayer.holeCards as Card[]) : null,
+        status: handPlayer ? handPlayer.status : null,
         handRank: showHandRank ? (evaluation?.handRank || null) : null,
         handRankName: showHandRank ? (evaluation?.handRankName || null) : null,
+        tableBalanceGwei: session.tableBalanceGwei?.toString() || null,
       };
-    }),
+    })),
     pots: hand.pots.map((pot: any) => {
       // Get winners for this specific pot
       const potWinnerSeatNumbers = Array.isArray(pot.winnerSeatNumbers) ? pot.winnerSeatNumbers : [];
@@ -2288,6 +2345,18 @@ export async function foldAction(
       }));
       console.log(`[DEBUG foldAction] Hand ${hand.id}: FOLD action created, checking if round complete or advancing to next player`);
 
+      // Query table balance for the acting player (fold doesn't change balance, but include for consistency)
+      const updatedSeatSession = await tx.tableSeatSession.findFirst({
+        where: {
+          tableId: table.id,
+          seatNumber: seatSession.seatNumber,
+          isActive: true,
+        },
+        select: {
+          tableBalanceGwei: true,
+        },
+      });
+
       // 8. Create hand action event with full metadata
       const actionPayload = {
         kind: 'hand_action',
@@ -2305,6 +2374,7 @@ export async function foldAction(
           seatNumber: seatSession.seatNumber,
           walletAddress: normalizedAddress,
           amount: null,
+          tableBalanceGwei: updatedSeatSession?.tableBalanceGwei?.toString() || null,
           timestamp: handAction.timestamp.toISOString(),
         },
       };
@@ -2699,6 +2769,18 @@ export async function checkAction(
     // This allows the frontend to update the active player glow and action buttons immediately
     const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
     
+    // Query updated table balance for the acting player
+    const updatedSeatSession = await tx.tableSeatSession.findFirst({
+      where: {
+        tableId: table.id,
+        seatNumber: seatSession.seatNumber,
+        isActive: true,
+      },
+      select: {
+        tableBalanceGwei: true,
+      },
+    });
+
     // 9. Create hand action event
     const actionPayload = {
       kind: 'hand_action',
@@ -2719,6 +2801,7 @@ export async function checkAction(
         seatNumber: seatSession.seatNumber,
         walletAddress: normalizedAddress,
         amount: null,
+        tableBalanceGwei: updatedSeatSession?.tableBalanceGwei?.toString() || null,
         timestamp: handAction.timestamp.toISOString(),
       },
     };

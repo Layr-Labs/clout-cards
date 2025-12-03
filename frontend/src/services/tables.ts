@@ -358,10 +358,37 @@ export async function getCurrentHand(
   walletAddress: string,
   signature: string
 ): Promise<CurrentHand> {
-  return apiClient<CurrentHand>(`/currentHand?tableId=${tableId}&walletAddress=${encodeURIComponent(walletAddress)}`, {
+  const url = `/currentHand?tableId=${tableId}&walletAddress=${encodeURIComponent(walletAddress)}`;
+  
+  console.log('[getCurrentHand] Frontend: calling API', {
+    tableId,
+    walletAddress,
+    signature: signature ? `${signature.substring(0, 10)}...` : null,
+    url,
+  });
+
+  const result = await apiClient<CurrentHand>(url, {
     requireAuth: true,
     signature,
   });
+
+  console.log('[getCurrentHand] Frontend: received response', {
+    handId: result.handId,
+    status: result.status,
+    currentActionSeat: result.currentActionSeat,
+    playersCount: result.players.length,
+    players: result.players.map(p => ({
+      seatNumber: p.seatNumber,
+      walletAddress: p.walletAddress,
+      status: p.status,
+      isAuthorizedPlayer: p.walletAddress.toLowerCase() === walletAddress.toLowerCase(),
+      hasHoleCards: !!p.holeCards,
+      holeCardsCount: p.holeCards ? p.holeCards.length : 0,
+      holeCards: p.holeCards,
+    })),
+  });
+
+  return result;
 }
 
 /**

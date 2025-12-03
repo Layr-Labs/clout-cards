@@ -307,6 +307,9 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
         dealerPosition,
         smallBlindSeat,
         bigBlindSeat,
+        currentActionSeat,
+        currentBet: hand.currentBet?.toString() || table.bigBlind.toString(),
+        lastRaiseAmount: hand.lastRaiseAmount?.toString() || (table.bigBlind - table.smallBlind).toString(),
         shuffleSeedHash: deckCommitmentHash,
       },
       players: eligiblePlayers.map((p) => ({

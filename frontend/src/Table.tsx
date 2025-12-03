@@ -29,31 +29,44 @@ import { AnimatePresence, motion } from 'framer-motion'
 function BalanceDisplay({ 
   balance, 
   isAnimating, 
-  targetAmount 
+  targetAmount,
+  animateFromZero = false
 }: { 
   balance: string
   isAnimating: boolean
-  targetAmount?: string 
+  targetAmount?: string
+  animateFromZero?: boolean
 }) {
-  // Always start at 0 if animating, otherwise use the balance
+  // Start at 0 if animating from zero (join), otherwise use current balance
   const [displayBalance, setDisplayBalance] = useState(
-    isAnimating && targetAmount ? '0 ETH' : balance
+    isAnimating && targetAmount && animateFromZero ? '0 ETH' : balance
   )
   const [hasStartedAnimating, setHasStartedAnimating] = useState(false)
 
   useEffect(() => {
     if (isAnimating && targetAmount && !hasStartedAnimating) {
-      // Ensure we start at 0
-      setDisplayBalance('0 ETH')
+      // Set initial display balance based on animateFromZero flag
+      if (animateFromZero) {
+        setDisplayBalance('0 ETH')
+      } else {
+        // Start from current balance
+        setDisplayBalance(balance)
+      }
       setHasStartedAnimating(true)
       
-      // Delay animation start until info box is visible (after ~800ms from join event)
+      // Delay animation start (only for join_table, not for balance updates)
+      const delay = animateFromZero ? 800 : 0
+      
       setTimeout(() => {
         const targetEth = formatEth(targetAmount)
-        const startValue = 0
-        // Extract numeric value from formatted string (e.g., "1.5 ETH" -> 1.5)
+        // Extract numeric values from formatted strings
+        const startValue = animateFromZero 
+          ? 0 
+          : (parseFloat(balance.replace(/[^0-9.]/g, '')) || 0)
         const endValue = parseFloat(targetEth.replace(/[^0-9.]/g, '')) || 0
-        const duration = 500
+        // Use longer duration for balance decreases (animating down) to make it more visible
+        const isDecreasing = endValue < startValue
+        const duration = isDecreasing ? 1000 : 500
         const startTime = Date.now()
 
         const animate = () => {
@@ -75,13 +88,13 @@ function BalanceDisplay({
         }
 
         requestAnimationFrame(animate)
-      }, 800) // Delay to match info box slide-out timing
+      }, delay)
     } else if (!isAnimating) {
       // Reset when not animating
       setHasStartedAnimating(false)
       setDisplayBalance(balance)
     }
-  }, [isAnimating, targetAmount, balance, hasStartedAnimating])
+  }, [isAnimating, targetAmount, balance, hasStartedAnimating, animateFromZero])
 
   return <div className="table-seat-stack">{displayBalance}</div>
 }
@@ -106,7 +119,7 @@ function Table() {
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isBetRaiseDialogOpen, setIsBetRaiseDialogOpen] = useState(false)
-  const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string } | null>(null)
+  const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string; animateFromZero?: boolean } | null>(null)
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
   const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
   const [actionAnimation, setActionAnimation] = useState<{
@@ -313,9 +326,17 @@ function Table() {
     try {
       switch (kind) {
         case 'hand_start': {
+          console.log('[Table] hand_start event received', {
+            eventId: event.eventId,
+            payload: payload,
+            handData: payload.hand,
+            players: payload.players,
+          })
+
           // Update hand state from event payload
-          // Event payload contains: table, hand (with id, dealerPosition, smallBlindSeat, etc.), players
+          // Event payload contains: table, hand (with id, dealerPosition, smallBlindSeat, currentActionSeat, etc.), players
           const handData = payload.hand as any
+          const playersData = (payload.players as any[]) || []
           
           // Create updated hand state
           const updatedHand: CurrentHand = {
@@ -323,7 +344,7 @@ function Table() {
             status: handData.status || 'ACTIVE',
             round: handData.round || null,
             communityCards: [],
-            players: (payload.players as any[] || []).map((p: any) => ({
+            players: playersData.map((p: any) => ({
               seatNumber: p.seatNumber,
               walletAddress: p.walletAddress,
               twitterHandle: null, // Will be updated from players list
@@ -342,9 +363,26 @@ function Table() {
             lastEventId: event.eventId,
           }
 
+          console.log('[Table] hand_start: created updatedHand', {
+            currentActionSeat: updatedHand.currentActionSeat,
+            players: updatedHand.players.map(p => ({
+              seatNumber: p.seatNumber,
+              status: p.status,
+              walletAddress: p.walletAddress,
+            })),
+          })
+
           // Merge with existing hand to preserve Twitter info and other fields
           setCurrentHand((prev) => {
-            if (!prev) return updatedHand
+            if (!prev) {
+              console.log('[Table] hand_start: no previous hand, setting new hand')
+              return updatedHand
+            }
+            
+            console.log('[Table] hand_start: merging with previous hand', {
+              prevCurrentActionSeat: prev.currentActionSeat,
+              newCurrentActionSeat: updatedHand.currentActionSeat,
+            })
             
             // Merge players with Twitter info from previous state
             const mergedPlayers = updatedHand.players.map((p) => {
@@ -363,19 +401,88 @@ function Table() {
           })
 
           // Fetch current hand to get hole cards for authorized player
-          if (isFullyLoggedIn && address && signature && tableId) {
+          // Only need wallet authentication (not Twitter) for hole cards
+          // Read directly from localStorage as fallback since WalletContext may not be initialized yet
+          const savedAddress = address || localStorage.getItem('walletAddress')
+          const savedSignature = signature || localStorage.getItem('walletSignature')
+          const hasWalletAuth = savedAddress && savedSignature
+          
+          console.log('[Table] hand_start: checking conditions for getCurrentHand', {
+            isLoggedIn,
+            isFullyLoggedIn,
+            addressFromHook: address ? `${address.substring(0, 10)}...` : null,
+            signatureFromHook: signature ? `${signature.substring(0, 10)}...` : null,
+            addressFromStorage: savedAddress ? `${savedAddress.substring(0, 10)}...` : null,
+            signatureFromStorage: savedSignature ? `${savedSignature.substring(0, 10)}...` : null,
+            tableId,
+            hasWalletAuth,
+            allConditionsMet: !!(hasWalletAuth && tableId),
+          })
+          
+          if (hasWalletAuth && tableId) {
             try {
-              const handWithHoleCards = await getCurrentHand(tableId, address, signature)
-              setCurrentHand(handWithHoleCards)
+              console.log('[Table] hand_start: fetching hole cards', { 
+                tableId, 
+                address: savedAddress,
+                signature: savedSignature ? `${savedSignature.substring(0, 10)}...` : null,
+                isFullyLoggedIn,
+              })
+              // TypeScript: hasWalletAuth check ensures both are non-null
+              if (!savedAddress || !savedSignature) {
+                throw new Error('Missing wallet authentication')
+              }
+              const handWithHoleCards = await getCurrentHand(tableId, savedAddress, savedSignature)
+              console.log('[Table] hand_start: received handWithHoleCards', {
+                handId: handWithHoleCards.handId,
+                status: handWithHoleCards.status,
+                currentActionSeat: handWithHoleCards.currentActionSeat,
+                players: handWithHoleCards.players.map(p => ({
+                  seatNumber: p.seatNumber,
+                  status: p.status,
+                  walletAddress: p.walletAddress,
+                  isAuthorizedPlayer: p.walletAddress.toLowerCase() === savedAddress?.toLowerCase(),
+                  hasHoleCards: !!p.holeCards,
+                  holeCardsCount: p.holeCards ? p.holeCards.length : 0,
+                  holeCards: p.holeCards,
+                })),
+              })
+              
+              // Merge hole cards into existing hand state (preserve Twitter info and other merged data)
+              setCurrentHand((prev) => {
+                if (!prev) return handWithHoleCards
+                
+                // Merge players: use hole cards from API response, but preserve Twitter info from prev state
+                const mergedPlayers = handWithHoleCards.players.map((apiPlayer) => {
+                  const prevPlayer = prev.players.find(pp => pp.seatNumber === apiPlayer.seatNumber)
+                  return {
+                    ...apiPlayer,
+                    twitterHandle: prevPlayer?.twitterHandle || apiPlayer.twitterHandle || null,
+                    twitterAvatarUrl: prevPlayer?.twitterAvatarUrl || apiPlayer.twitterAvatarUrl || null,
+                  }
+                })
+                
+                return {
+                  ...handWithHoleCards,
+                  players: mergedPlayers,
+                }
+              })
             } catch (err: any) {
               // If fetch fails, continue with state from event
-              console.error('Failed to fetch hole cards after hand_start:', err)
+              console.error('[Table] hand_start: Failed to fetch hole cards:', err)
             }
           }
           break
         }
 
         case 'hand_action': {
+          console.log('[Table] hand_action event received', {
+            eventId: event.eventId,
+            fullPayload: payload,
+            actionData: payload.action,
+            handData: payload.hand,
+            pots: payload.pots,
+          })
+
           // Update player action state
           // Event payload contains: table, hand, pots, action (with walletAddress, type: 'BET'|'RAISE'|'CALL'|'FOLD'|'ALL_IN', amount, etc.)
           const handData = payload.hand as any
@@ -383,6 +490,15 @@ function Table() {
           const potsData = (payload.pots as any[]) || []
           const actionType = actionData?.type as string
           const playerWalletAddress = actionData?.walletAddress?.toLowerCase() || ''
+          
+          console.log('[Table] hand_action: parsed data', {
+            actionType,
+            playerWalletAddress,
+            seatNumber: actionData?.seatNumber,
+            amount: actionData?.amount,
+            tableBalanceGwei: actionData?.tableBalanceGwei,
+            actionDataKeys: Object.keys(actionData || {}),
+          })
           
           // Trigger animation for BET, RAISE, CALL, ALL_IN, CHECK, and FOLD actions
           if (actionType === 'BET' || actionType === 'RAISE' || actionType === 'CALL' || actionType === 'ALL_IN' || actionType === 'CHECK' || actionType === 'FOLD') {
@@ -402,6 +518,38 @@ function Table() {
             }, 1500)
           }
           
+          // Update table balance for the acting player if provided
+          // Use functional setState to avoid stale closure issue
+          if (actionData?.tableBalanceGwei && actionData?.seatNumber !== undefined) {
+            setPlayers((prevPlayers) => {
+              const actingPlayer = prevPlayers.find(p => p.seatNumber === actionData.seatNumber)
+              
+              if (actingPlayer) {
+                const newBalance = actionData.tableBalanceGwei
+                const oldBalance = actingPlayer.tableBalanceGwei
+                
+                if (newBalance !== oldBalance) {
+                  // Trigger balance animation for this player (animate from current balance, not 0)
+                  setAnimatingBalance({
+                    seatNumber: actionData.seatNumber,
+                    targetAmount: newBalance,
+                    animateFromZero: false, // Animate from existing balance
+                  })
+                  
+                  // Update the player's balance in state
+                  return prevPlayers.map((p) =>
+                    p.seatNumber === actionData.seatNumber
+                      ? { ...p, tableBalanceGwei: newBalance }
+                      : p
+                  )
+                }
+              }
+              
+              // No change needed, return same array reference
+              return prevPlayers
+            })
+          }
+
           setCurrentHand((prev) => {
             if (!prev) return prev
 
@@ -462,14 +610,41 @@ function Table() {
 
         case 'hand_end': {
           // Update hand end state and reveal all hole cards
-          // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players (with holeCards)
+          // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players (with holeCards and tableBalanceGwei)
           const potsData = (payload.pots as any[]) || []
           const playersData = (payload.players as any[]) || []
+
+          // Update table balances for all players and trigger animations
+          // Use functional setState to avoid stale closure issue
+          setPlayers((prevPlayers) => {
+            const updatedPlayers = prevPlayers.map((p) => {
+              const payloadPlayer = playersData.find((pp: any) => pp.seatNumber === p.seatNumber)
+              if (payloadPlayer?.tableBalanceGwei) {
+                const newBalance = payloadPlayer.tableBalanceGwei
+                const oldBalance = p.tableBalanceGwei
+                
+                // Trigger animation if balance changed
+                if (newBalance !== oldBalance) {
+                  setAnimatingBalance({
+                    seatNumber: p.seatNumber,
+                    targetAmount: newBalance,
+                    animateFromZero: false, // Animate from existing balance
+                  })
+                }
+                
+                return { ...p, tableBalanceGwei: newBalance }
+              }
+              return p
+            })
+            
+            return updatedPlayers
+          })
 
           setCurrentHand((prev) => {
             if (!prev) return prev
 
             // Map players from payload to reveal all hole cards and update their statuses
+            // Only update players that exist in both prev state and payload (don't add new players from payload)
             const playersWithRevealedCards = prev.players.map((prevPlayer) => {
               const payloadPlayer = playersData.find((p: any) => p.seatNumber === prevPlayer.seatNumber)
               if (payloadPlayer) {
@@ -486,6 +661,7 @@ function Table() {
             })
 
             // Set status to COMPLETED and clear currentActionSeat immediately to trigger action button exit animation
+            // Note: We keep prev.players structure (don't replace with payload players) to avoid stale data issues
             return {
               ...prev,
               status: 'COMPLETED',
@@ -518,6 +694,7 @@ function Table() {
           setAnimatingBalance({
             seatNumber: seatNumber,
             targetAmount: joinPayload.buyInAmountGwei,
+            animateFromZero: true, // Animate from 0 for new players joining
           })
           
           // Update players list FIRST so avatar is rendered (but hidden initially)
@@ -594,7 +771,7 @@ function Table() {
     } catch (error) {
       console.error(`[Table] Error handling event ${kind}:`, error, payload)
     }
-  }, [isFullyLoggedIn, address, signature, tableId])
+  }, [isLoggedIn, isFullyLoggedIn, address, signature, tableId])
 
   /**
    * SSE connection for real-time table events
@@ -1198,6 +1375,7 @@ function Table() {
                                 balance={tableBalanceEth}
                                 isAnimating={animatingBalance?.seatNumber === seatIndex}
                                 targetAmount={animatingBalance?.seatNumber === seatIndex ? animatingBalance.targetAmount : undefined}
+                                animateFromZero={animatingBalance?.seatNumber === seatIndex ? (animatingBalance.animateFromZero ?? false) : false}
                               />
                             )}
                             {/* Stand Up Button - only show if this is the current user's seat and no hand active */}

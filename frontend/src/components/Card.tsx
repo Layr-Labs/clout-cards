@@ -17,6 +17,10 @@ export interface CardProps {
    * Whether to show the card back instead of front
    */
   isBack?: boolean
+  /**
+   * Additional CSS class name
+   */
+  className?: string
 }
 
 /**
