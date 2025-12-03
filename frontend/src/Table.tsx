@@ -109,6 +109,12 @@ function Table() {
   const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string } | null>(null)
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
   const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
+  const [actionAnimation, setActionAnimation] = useState<{
+    actionType: 'BET' | 'RAISE' | 'CALL'
+    playerAvatarUrl: string | null
+    playerHandle: string | null
+    amount: string | null
+  } | null>(null)
   const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   const { address, signature, isLoggedIn } = useWallet()
@@ -319,26 +325,41 @@ function Table() {
           break
         }
 
-        case 'bet':
-        case 'call':
-        case 'raise':
-        case 'all_in':
-        case 'fold': {
+        case 'hand_action': {
           // Update player action state
-          // Event payload contains: table, hand, player (walletAddress), action, amount
+          // Event payload contains: table, hand, action (with walletAddress, type: 'BET'|'RAISE'|'CALL'|'FOLD'|'ALL_IN', amount, etc.)
           const handData = payload.hand as any
           const actionData = payload.action as any
+          const actionType = actionData?.type as string
+          const playerWalletAddress = actionData?.walletAddress?.toLowerCase() || ''
+          
+          // Trigger animation for BET, RAISE, and CALL actions only
+          if (actionType === 'BET' || actionType === 'RAISE' || actionType === 'CALL') {
+            const amount = actionData?.amount || actionData?.chipsCommitted || null
+            
+            setActionAnimation({
+              actionType: actionType as 'BET' | 'RAISE' | 'CALL',
+              playerAvatarUrl: null,
+              playerHandle: null,
+              amount: amount ? formatEth(amount) : null,
+            })
+            
+            // Clear animation after it completes (swipe in ~0.5s + hold 2s + swipe out ~0.5s = ~3s total)
+            setTimeout(() => {
+              setActionAnimation(null)
+            }, 3000)
+          }
           
           setCurrentHand((prev) => {
             if (!prev) return prev
 
             // Update player status and chips committed
             const updatedPlayers = prev.players.map((p) => {
-              if (p.walletAddress.toLowerCase() === (payload.player as string)?.toLowerCase()) {
+              if (p.walletAddress.toLowerCase() === playerWalletAddress) {
                 return {
                   ...p,
-                  status: actionData.status || p.status,
-                  chipsCommitted: actionData.chipsCommitted?.toString() || p.chipsCommitted,
+                  status: actionData?.status || p.status,
+                  chipsCommitted: actionData?.chipsCommitted?.toString() || p.chipsCommitted,
                 }
               }
               return p
@@ -347,9 +368,9 @@ function Table() {
             return {
               ...prev,
               players: updatedPlayers,
-              currentActionSeat: handData.currentActionSeat ?? prev.currentActionSeat,
-              currentBet: handData.currentBet?.toString() || prev.currentBet,
-              lastRaiseAmount: handData.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
+              currentActionSeat: handData?.currentActionSeat ?? prev.currentActionSeat,
+              currentBet: handData?.currentBet?.toString() || prev.currentBet,
+              lastRaiseAmount: handData?.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
               lastEventId: event.eventId,
             }
           })
@@ -358,8 +379,8 @@ function Table() {
 
         case 'community_cards': {
           // Update community cards
-          // Event payload contains: table, hand, communityCards
-          const communityCards = (payload.communityCards as any[]) || []
+          // Event payload contains: table, hand, communityCards (new cards only), allCommunityCards (all cards)
+          const allCommunityCards = (payload.allCommunityCards as any[]) || []
           const handData = payload.hand as any
 
           setCurrentHand((prev) => {
@@ -367,7 +388,7 @@ function Table() {
 
             return {
               ...prev,
-              communityCards: communityCards.map((card: any) => ({
+              communityCards: allCommunityCards.map((card: any) => ({
                 suit: card.suit,
                 rank: card.rank,
               })),
@@ -941,6 +962,22 @@ function Table() {
                   rank={card.rank}
                 />
               ))}
+            </div>
+          )}
+          
+          {/* Action Animation Overlay - Centered over Community Cards */}
+          {actionAnimation && (
+            <div className="table-action-overlay">
+              <div className="table-action-overlay-content">
+                <div className="table-action-overlay-action">
+                  {actionAnimation.actionType}
+                </div>
+                {actionAnimation.amount && (
+                  <div className="table-action-overlay-amount">
+                    {actionAnimation.amount}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
