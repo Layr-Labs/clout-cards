@@ -47,10 +47,13 @@ export function BetRaiseDialog({
   // Calculate available balance (what player can bet/raise)
   const availableBalance = tableBalanceNum
 
+  // Ensure minimum raise is at least the big blind
+  const effectiveMinimumRaise = minimumRaiseNum > bigBlindNum ? minimumRaiseNum : bigBlindNum
+
   // Calculate minimum and maximum INCREMENTAL bet amounts (what player adds from balance)
   // For betting: minimum incremental is bigBlind (since chipsCommitted is 0 or just blinds)
-  // For raising: minimum incremental is minimumRaise (to raise by minimumRaise from currentBet)
-  const minIncrementalAmount = isBetting ? bigBlindNum : minimumRaiseNum
+  // For raising: minimum incremental is minimumRaise (to raise by minimumRaise from currentBet), but at least big blind
+  const minIncrementalAmount = isBetting ? bigBlindNum : effectiveMinimumRaise
   const maxIncrementalAmount = availableBalance // Can't bet more than available balance
 
   // Calculate quick bet amounts (as incremental amounts)
@@ -64,11 +67,11 @@ export function BetRaiseDialog({
         { label: 'All-in', amount: maxIncrementalAmount, isAllIn: true },
       ]
     } else {
-      // Raising: Min Raise, 2x Min, 3x Min, All-in
+      // Raising: Min Raise (at least big blind), 2x Min, 3x Min, All-in
       return [
-        { label: 'Min Raise', amount: minimumRaiseNum },
-        { label: '2x Min', amount: minimumRaiseNum * 2n },
-        { label: '3x Min', amount: minimumRaiseNum * 3n },
+        { label: 'Min Raise', amount: effectiveMinimumRaise },
+        { label: '2x Min', amount: effectiveMinimumRaise * 2n },
+        { label: '3x Min', amount: effectiveMinimumRaise * 3n },
         { label: 'All-in', amount: maxIncrementalAmount, isAllIn: true },
       ]
     }
@@ -183,29 +186,6 @@ export function BetRaiseDialog({
         <div className="bet-raise-dialog-content">
           {error && <div className="bet-raise-error">{error}</div>}
 
-          <div className="bet-raise-info">
-            <div className="bet-raise-info-row">
-              <span className="bet-raise-info-label">Current Bet:</span>
-              <span className="bet-raise-info-value">
-                {currentBet ? formatEth(BigInt(currentBet)) : 'No bet'}
-              </span>
-            </div>
-            <div className="bet-raise-info-row">
-              <span className="bet-raise-info-label">Your Commitment:</span>
-              <span className="bet-raise-info-value">{formatEth(chipsCommittedNum)}</span>
-            </div>
-            <div className="bet-raise-info-row">
-              <span className="bet-raise-info-label">Available Balance:</span>
-              <span className="bet-raise-info-value">{formatEth(tableBalanceNum)}</span>
-            </div>
-            {!isBetting && (
-              <div className="bet-raise-info-row">
-                <span className="bet-raise-info-label">Minimum Raise:</span>
-                <span className="bet-raise-info-value">{formatEth(minimumRaiseNum)}</span>
-              </div>
-            )}
-          </div>
-
           <div className="bet-raise-amount-section">
             <label htmlFor="bet-amount" className="bet-raise-amount-label">
               {isBetting ? 'Bet Amount' : 'Raise Amount'} (ETH)
@@ -250,17 +230,6 @@ export function BetRaiseDialog({
                   {quick.label}
                 </button>
               ))}
-            </div>
-          </div>
-
-          <div className="bet-raise-summary">
-            <div className="bet-raise-summary-row">
-              <span>Total bet after this {isBetting ? 'bet' : 'raise'}:</span>
-              <span className="bet-raise-summary-value">{formatEth(totalBetAmount)}</span>
-            </div>
-            <div className="bet-raise-summary-row">
-              <span>Remaining balance:</span>
-              <span className="bet-raise-summary-value">{formatEth(remainingBalance)}</span>
             </div>
           </div>
 
