@@ -312,55 +312,247 @@ export function useTableEvents(options: {
 
 **Tasks:**
 1. Integrate `useTableEvents` in `Table.tsx`
-2. Handle each event type:
-   - `hand_start` → Trigger dealing animation
-   - `bet`/`call`/`raise`/`all_in` → Animate bet action
-   - `community_cards` → Reveal cards one at a time
-   - `hand_end` → Show winner, delay next hand
-3. Keep polling as fallback (initial state only)
-4. Remove polling once SSE is stable
-5. Add loading states and error handling
+2. Replace polling with SSE for real-time updates
+3. Handle each event type to update state:
+   - `hand_start` → Update hand state, fetch `/currentHand` for hole cards
+   - `bet`/`call`/`raise`/`all_in` → Update player state, pot amounts
+   - `community_cards` → Update community cards in state
+   - `hand_end` → Update hand status, show winner state
+   - `join_table` → Update players list
+   - `leave_table` → Update players list
+4. Initial hydration: Single poll to `/currentHand` on mount
+5. Hole cards handling:
+   - On `hand_start` event: After state update, fetch `/currentHand` to get hole cards
+   - Update state with hole cards for authorized player
+6. Keep polling disabled (SSE handles all updates)
+7. Add loading states and error handling
 
 **Files to Modify:**
-- `frontend/src/Table.tsx` - Integrate SSE hook, handle events
+- `frontend/src/Table.tsx` - Integrate SSE hook, handle events, update state
 
-**Event Handlers:**
+**Event Handlers (State Updates Only - No Animations Yet):**
 ```typescript
 useTableEvents({
   tableId: tableId!,
   enabled: !!tableId,
+  lastEventId: currentHand?.lastEventId,
   onEvent: async (event) => {
-    switch (event.kind) {
+    switch (event.payload.kind) {
       case 'hand_start':
-        await animateDealing(event.payload);
+        // Update hand state from event
+        updateHandState(event.payload);
+        // Fetch current hand to get hole cards for authorized player
+        const handWithHoleCards = await getCurrentHand(tableId, address, signature);
+        setCurrentHand(handWithHoleCards);
         break;
       case 'bet':
       case 'call':
       case 'raise':
       case 'all_in':
-        await animateBet(event.payload);
+        // Update player state, pot amounts from event
+        updatePlayerAction(event.payload);
         break;
       case 'community_cards':
-        await revealCardsSequentially(event.payload);
+        // Update community cards in state
+        updateCommunityCards(event.payload);
         break;
       case 'hand_end':
-        await showWinner(event.payload);
-        await delay(3000); // 3 second delay
+        // Update hand status, winner info
+        updateHandEnd(event.payload);
+        break;
+      case 'join_table':
+        // Update players list
+        updatePlayersList(event.payload);
+        break;
+      case 'leave_table':
+        // Update players list
+        updatePlayersList(event.payload);
         break;
     }
   },
 });
 ```
 
-**Animation Functions to Create:**
-- `animateDealing()` - Deal cards with animation
-- `animateBet()` - Animate chips moving to pot
-- `revealCardsSequentially()` - Reveal community cards one at a time
-- `showWinner()` - Display winner modal/overlay
+**Note:** This phase focuses on state management only. Animations will be added in subsequent phases (7-11).
 
 ---
 
-### Phase 7: Testing & Validation ⏳
+### Phase 7: Player Join/Leave Animations ⏳
+
+**Status:** Not Started
+
+**Tasks:**
+1. Animate player joining table
+   - Player avatar slides into seat position
+   - Seat number appears
+   - Balance displays with animation
+2. Animate player leaving table
+   - Player avatar slides out
+   - Seat becomes empty
+   - Balance clears
+3. Handle multiple players joining/leaving
+4. Smooth transitions between states
+
+**Files to Create/Modify:**
+- `frontend/src/utils/animations.ts` - Animation utilities
+- `frontend/src/Table.tsx` - Add join/leave animations
+
+**Event Handlers:**
+```typescript
+case 'join_table':
+  await animatePlayerJoin(event.payload);
+  updatePlayersList(event.payload);
+  break;
+case 'leave_table':
+  await animatePlayerLeave(event.payload);
+  updatePlayersList(event.payload);
+  break;
+```
+
+---
+
+### Phase 8: Hand Start & Hole Card Reveal Animations ⏳
+
+**Status:** Not Started
+
+**Tasks:**
+1. Animate dealing cards face down
+   - Cards dealt to each player seat sequentially
+   - Cards appear face down at each position
+   - Smooth card movement animation
+2. After dealing completes, fetch `/currentHand` for hole cards
+3. Animate revealing hole cards (for authorized player only)
+   - Cards flip from face down to face up
+   - Reveal hole cards with animation
+   - Other players' cards remain face down
+4. Handle timing: ensure dealing completes before reveal
+
+**Files to Create/Modify:**
+- `frontend/src/utils/animations.ts` - Add dealing and reveal animations
+- `frontend/src/Table.tsx` - Integrate hand start animations
+
+**Event Handler:**
+```typescript
+case 'hand_start':
+  // 1. Animate dealing cards face down
+  await animateDealing(event.payload);
+  
+  // 2. Fetch current hand to get hole cards
+  const handWithHoleCards = await getCurrentHand(tableId, address, signature);
+  setCurrentHand(handWithHoleCards);
+  
+  // 3. If we have hole cards, animate turning them over
+  const myPlayer = handWithHoleCards.players.find(p => p.holeCards);
+  if (myPlayer?.holeCards) {
+    await animateRevealHoleCards(myPlayer.seatNumber, myPlayer.holeCards);
+  }
+  break;
+```
+
+---
+
+### Phase 9: Betting Action Animations ⏳
+
+**Status:** Not Started
+
+**Tasks:**
+1. Animate chips moving to pot
+   - Chips slide from player position to center pot
+   - Pot amount updates with animation
+   - Visual feedback for bet/call/raise/all_in
+2. Animate player status changes
+   - Fold animation (cards flip face down)
+   - All-in indicator animation
+   - Active player highlight
+3. Animate pot updates
+   - Pot amount increments smoothly
+   - Multiple pots handled correctly
+4. Handle rapid actions (multiple bets in quick succession)
+
+**Files to Create/Modify:**
+- `frontend/src/utils/animations.ts` - Add betting animations
+- `frontend/src/Table.tsx` - Integrate betting animations
+
+**Event Handlers:**
+```typescript
+case 'bet':
+case 'call':
+case 'raise':
+case 'all_in':
+  await animateBetAction(event.payload);
+  updatePlayerAction(event.payload);
+  break;
+```
+
+---
+
+### Phase 10: Community Cards & Round Progression Animations ⏳
+
+**Status:** Not Started
+
+**Tasks:**
+1. Animate community cards being revealed
+   - Cards appear one at a time (flop: 3, turn: 1, river: 1)
+   - Smooth card flip animation
+   - Sequential reveal with delays
+2. Animate round progression
+   - Visual transition between rounds (PREFLOP → FLOP → TURN → RIVER)
+   - Pot updates between rounds
+   - Player status updates
+3. Handle auto-advance scenarios
+   - Show community cards before advancing
+   - Ensure cards are visible before next round starts
+
+**Files to Create/Modify:**
+- `frontend/src/utils/animations.ts` - Add community card animations
+- `frontend/src/Table.tsx` - Integrate community card animations
+
+**Event Handler:**
+```typescript
+case 'community_cards':
+  await revealCommunityCardsSequentially(event.payload);
+  updateCommunityCards(event.payload);
+  break;
+```
+
+---
+
+### Phase 11: Hand Settlement & Winner Display Animations ⏳
+
+**Status:** Not Started
+
+**Tasks:**
+1. Animate hand end
+   - Showdown: reveal all players' hole cards
+   - Cards flip to show final hands
+   - Highlight winning hand(s)
+2. Animate winner display
+   - Winner announcement modal/overlay
+   - Pot distribution animation
+   - Chips move to winner(s)
+3. Delay before next hand
+   - Show winner for 3-5 seconds
+   - Clear hand state
+   - Prepare for next hand start
+4. Handle multiple winners (split pot)
+
+**Files to Create/Modify:**
+- `frontend/src/utils/animations.ts` - Add settlement animations
+- `frontend/src/components/WinnerModal.tsx` - Winner display component (if needed)
+- `frontend/src/Table.tsx` - Integrate settlement animations
+
+**Event Handler:**
+```typescript
+case 'hand_end':
+  await animateHandEnd(event.payload);
+  updateHandEnd(event.payload);
+  await delay(3000); // 3 second delay before next hand
+  break;
+```
+
+---
+
+### Phase 12: Testing & Validation ⏳
 
 **Status:** Not Started
 
@@ -371,8 +563,14 @@ useTableEvents({
 4. Test with multiple clients (same table)
 5. Test error handling (database errors, network errors)
 6. Test performance (many events, many clients)
-7. Validate animations work correctly
-8. Test hand end → winner display → next hand delay
+7. Validate all animations work correctly
+8. Test complete hand flow: join → start → actions → settlement
+9. Test edge cases:
+   - Rapid actions
+   - Connection drops during animations
+   - Multiple players joining/leaving
+   - Split pots
+10. Performance testing (animation smoothness, frame rates)
 
 **Test Scenarios:**
 - [ ] Single event arrives → processes correctly
@@ -380,30 +578,35 @@ useTableEvents({
 - [ ] Events arrive out of order → reorders correctly
 - [ ] Connection drops → reconnects automatically
 - [ ] Reconnection → receives missed events
-- [ ] Hand end → shows winner → delays next hand
-- [ ] Bet action → animates correctly
+- [ ] Player joins → animates correctly
+- [ ] Player leaves → animates correctly
+- [ ] Hand start → deals cards → reveals hole cards
+- [ ] Bet action → animates chips to pot
 - [ ] Community cards → reveals sequentially
-- [ ] Multiple clients → all receive events
+- [ ] Hand end → shows winner → delays next hand
+- [ ] Multiple clients → all receive events and see animations
+- [ ] Rapid actions → animations queue correctly
 
 ---
 
-### Phase 8: Migration & Cleanup ⏳
+### Phase 13: Migration & Cleanup ⏳
 
 **Status:** Not Started
 
 **Tasks:**
-1. Keep polling as fallback during migration
-2. Monitor SSE performance and errors
-3. Gradually migrate users to SSE
-4. Remove polling code once SSE is stable
+1. Monitor SSE performance and errors
+2. Monitor animation performance (frame rates, smoothness)
+3. Optimize animations if needed
+4. Remove any remaining polling code
 5. Update documentation
-6. Add monitoring/logging
+6. Add monitoring/logging for SSE and animations
 
 **Migration Strategy:**
-1. Deploy SSE endpoint (backward compatible)
-2. Deploy frontend with SSE + polling fallback
+1. SSE endpoint already deployed (backward compatible)
+2. Frontend with SSE deployed (no polling fallback needed)
 3. Monitor for issues
-4. Remove polling after 1-2 weeks of stable operation
+4. Optimize animations based on real-world usage
+5. Document animation system for future enhancements
 
 ---
 
@@ -472,9 +675,14 @@ We'll extract `table.id` and store in `tableId` column.
 - [x] Phase 3: Backend SSE Endpoint
 - [x] Phase 4: Frontend Event Queue
 - [x] Phase 5: Frontend SSE Hook
-- [ ] Phase 6: Frontend Integration
-- [ ] Phase 7: Testing & Validation
-- [ ] Phase 8: Migration & Cleanup
+- [ ] Phase 6: Frontend Integration (State Management)
+- [ ] Phase 7: Player Join/Leave Animations
+- [ ] Phase 8: Hand Start & Hole Card Reveal Animations
+- [ ] Phase 9: Betting Action Animations
+- [ ] Phase 10: Community Cards & Round Progression Animations
+- [ ] Phase 11: Hand Settlement & Winner Display Animations
+- [ ] Phase 12: Testing & Validation
+- [ ] Phase 13: Migration & Cleanup
 
 ---
 

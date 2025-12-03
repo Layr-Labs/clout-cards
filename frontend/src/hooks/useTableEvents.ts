@@ -14,7 +14,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { EventQueue, TableEvent, EventHandler } from '../utils/eventQueue';
+import { EventQueue } from '../utils/eventQueue';
+import type { TableEvent, EventHandler } from '../utils/eventQueue';
 import { getBackendUrl } from '../config/env';
 
 /**
