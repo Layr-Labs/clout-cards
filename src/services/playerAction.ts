@@ -1644,14 +1644,18 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
   });
 
   // Update hand status and reveal shuffle seed
+  const completedAt = new Date();
   await (tx as any).hand.update({
     where: { id: handId },
     data: {
       status: 'COMPLETED',
-      completedAt: new Date(),
+      completedAt: completedAt,
       shuffleSeed: shuffleSeed,
     },
   });
+
+  // Add completedAt to handForEvent since it was queried before the update
+  handForEvent.completedAt = completedAt;
 
   return {
     tableId: hand.tableId,
@@ -1928,14 +1932,18 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
   });
 
   // Update hand status
+  const completedAt = new Date();
   await (tx as any).hand.update({
     where: { id: handId },
     data: {
       status: 'COMPLETED',
-      completedAt: new Date(),
+      completedAt: completedAt,
       shuffleSeed: shuffleSeed,
     },
   });
+
+  // Add completedAt to handForEvent since it was queried before the update
+  handForEvent.completedAt = completedAt;
 
   // Build hand evaluations for event
   const handEvaluations = evaluations.map(evalResult => {
@@ -2027,6 +2035,7 @@ async function createHandEndEvent(
     table: {
       id: hand.table.id,
       name: hand.table.name,
+      handStartDelaySeconds: hand.table.handStartDelaySeconds,
     },
     hand: {
       id: hand.id,
@@ -2220,6 +2229,7 @@ async function createHandEndEventShowdown(
     table: {
       id: hand.table.id,
       name: hand.table.name,
+      handStartDelaySeconds: hand.table.handStartDelaySeconds,
     },
     hand: {
       id: hand.id,
@@ -2415,8 +2425,8 @@ async function handlePostActionSettlement(
     );
   }
 
-  // Start new hand if conditions are met (both players have enough balance for big blind)
-  await startNewHandIfPossible(tableId);
+  // Note: Hand start is now handled by handStartChecker service
+  // which will start a new hand after the configured delay
 }
 
 /**

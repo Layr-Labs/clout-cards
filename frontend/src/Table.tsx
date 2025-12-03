@@ -173,10 +173,15 @@ function Table() {
     amount: string | null
   } | null>(null)
   const [showNewHandMessage, setShowNewHandMessage] = useState(false)
+  const [handStartCountdown, setHandStartCountdown] = useState<number | null>(null)
+  const [showCountdown, setShowCountdown] = useState(false)
+  const [countdownExiting, setCountdownExiting] = useState(false)
   const [updatingPotNumbers, setUpdatingPotNumbers] = useState<Set<number>>(new Set())
   const previousPotAmountsRef = useRef<Map<number, string>>(new Map())
   const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const [winnerSeats, setWinnerSeats] = useState<Set<number>>(new Set())
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const countdownDisplayTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -383,6 +388,20 @@ function Table() {
     }
   }, [currentHand?.pots])
 
+  // Cleanup countdown interval and timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+      }
+      if (countdownDisplayTimeoutRef.current) {
+        clearTimeout(countdownDisplayTimeoutRef.current)
+        countdownDisplayTimeoutRef.current = null
+      }
+    }
+  }, [])
+
   /**
    * Event handler for SSE events
    * Updates state based on event type
@@ -396,6 +415,19 @@ function Table() {
         case 'hand_start': {
           // Clear winner seats when new hand starts
           setWinnerSeats(new Set())
+          
+          // Clear countdown timer and display delay
+          setHandStartCountdown(null)
+          setShowCountdown(false)
+          setCountdownExiting(false)
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current)
+            countdownIntervalRef.current = null
+          }
+          if (countdownDisplayTimeoutRef.current) {
+            clearTimeout(countdownDisplayTimeoutRef.current)
+            countdownDisplayTimeoutRef.current = null
+          }
           
           // Show "NEW HAND" message animation
           setShowNewHandMessage(true)
@@ -695,6 +727,8 @@ function Table() {
           // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players (with holeCards and tableBalanceGwei)
           const potsData = (payload.pots as any[]) || []
           const playersData = (payload.players as any[]) || []
+          const handData = payload.hand as any
+          const tableData = payload.table as any
 
           // Extract all winner seat numbers from all pots
           const allWinnerSeats = new Set<number>()
@@ -705,6 +739,58 @@ function Table() {
             })
           })
           setWinnerSeats(allWinnerSeats)
+
+          // Start countdown timer if completedAt is available
+          if (handData?.completedAt) {
+            const completedAt = new Date(handData.completedAt)
+            const delaySeconds = (tableData?.handStartDelaySeconds && tableData.handStartDelaySeconds > 0)
+              ? tableData.handStartDelaySeconds
+              : 30 // Default 30 seconds
+            const targetTime = completedAt.getTime() + (delaySeconds * 1000)
+            
+            // Clear any existing interval and timeout
+            if (countdownIntervalRef.current) {
+              clearInterval(countdownIntervalRef.current)
+            }
+            if (countdownDisplayTimeoutRef.current) {
+              clearTimeout(countdownDisplayTimeoutRef.current)
+            }
+            
+            // Hide countdown initially
+            setShowCountdown(false)
+            
+            // Update countdown immediately (but don't show yet)
+            const updateCountdown = () => {
+              const now = Date.now()
+              const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
+              setHandStartCountdown(remaining)
+              
+              if (remaining <= 0) {
+                if (countdownIntervalRef.current) {
+                  clearInterval(countdownIntervalRef.current)
+                  countdownIntervalRef.current = null
+                }
+                // Trigger exit animation
+                setCountdownExiting(true)
+                // Hide after animation completes (0.5s)
+                setTimeout(() => {
+                  setHandStartCountdown(null)
+                  setShowCountdown(false)
+                  setCountdownExiting(false)
+                }, 500)
+              }
+            }
+            
+            updateCountdown()
+            
+            // Update every second
+            countdownIntervalRef.current = setInterval(updateCountdown, 1000) as any
+            
+            // Delay showing the countdown overlay by 3 seconds
+            countdownDisplayTimeoutRef.current = setTimeout(() => {
+              setShowCountdown(true)
+            }, 3000) as any
+          }
 
           // Update table balances for all players and trigger animations
           // Use functional setState to avoid stale closure issue
@@ -779,10 +865,6 @@ function Table() {
               lastEventId: event.eventId,
             }
           })
-
-          // Wait 10 seconds before completing event processing
-          // This ensures hand_start events that arrive immediately will wait until cards are revealed
-          await new Promise(resolve => setTimeout(resolve, 10000))
           break
         }
 
@@ -1360,6 +1442,20 @@ function Table() {
               <div className="table-action-overlay-content">
                 <div className="table-action-overlay-action">
                   NEW HAND!
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Hand Start Countdown Overlay - Centered over Community Cards */}
+          {showCountdown && handStartCountdown !== null && (
+            <div className={`table-action-overlay countdown-overlay ${countdownExiting ? 'countdown-exiting' : ''}`}>
+              <div className="table-action-overlay-content">
+                <div className="table-action-overlay-action">
+                  NEW HAND IN
+                </div>
+                <div className="table-action-overlay-amount">
+                  {handStartCountdown > 0 ? `${handStartCountdown}s` : '0s'}
                 </div>
               </div>
             </div>

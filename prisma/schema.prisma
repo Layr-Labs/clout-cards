@@ -60,6 +60,7 @@ model PokerTable {
   smallBlind         BigInt    @map("small_blind") // Small blind amount in gwei
   bigBlind           BigInt    @map("big_blind") // Big blind amount in gwei
   actionTimeoutSeconds Int?    @map("action_timeout_seconds") // Action timeout in seconds (null or 0 = use default 30s)
+  handStartDelaySeconds Int?   @map("hand_start_delay_seconds") // Delay before starting new hand after previous hand ends (null or 0 = use default 30s)
   isActive           Boolean   @default(true) @map("is_active") // Whether the table is currently active
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")

@@ -35,6 +35,7 @@ import { validateAndGetTableId, validateTableId } from './utils/validation';
 import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
 import { initializeEventNotifier, registerEventCallback, EventNotification } from './db/eventNotifier';
 import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
+import { startHandStartChecker } from './services/handStartChecker';
 
 /**
  * Express application instance
@@ -1407,5 +1408,13 @@ app.listen(APP_PORT, async (): Promise<void> => {
     console.log('✅ Action timeout checker started');
   } catch (error) {
     console.error('⚠️  Failed to start action timeout checker:', error);
+  }
+
+  // Start hand start checker (checks every 1.5 seconds)
+  try {
+    startHandStartChecker(1500);
+    console.log('✅ Hand start checker started');
+  } catch (error) {
+    console.error('⚠️  Failed to start hand start checker:', error);
   }
 });
