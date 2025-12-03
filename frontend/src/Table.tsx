@@ -246,12 +246,22 @@ function Table() {
 
     async function loadInitialHand() {
       try {
-        // Use watchCurrentHand if not fully logged in, getCurrentHand if fully logged in
-        if (isFullyLoggedIn && address && signature) {
-          const hand = await getCurrentHand(tableId!, address, signature)
+        // Read wallet auth from localStorage as fallback (same as hand_start handler)
+        const savedAddress = address || localStorage.getItem('walletAddress')
+        const savedSignature = signature || localStorage.getItem('walletSignature')
+        const hasWalletAuth = savedAddress && savedSignature
+        
+        // Use getCurrentHand if we have wallet auth (to get hole cards), otherwise use public endpoint
+        if (hasWalletAuth) {
+          console.log('[Table] loadInitialHand: fetching with wallet auth', {
+            address: savedAddress ? `${savedAddress.substring(0, 10)}...` : null,
+            signature: savedSignature ? `${savedSignature.substring(0, 10)}...` : null,
+          })
+          const hand = await getCurrentHand(tableId!, savedAddress, savedSignature)
           setCurrentHand(hand)
         } else {
-          // Public endpoint - no authentication required
+          // Public endpoint - no authentication required (no hole cards)
+          console.log('[Table] loadInitialHand: fetching without auth (public endpoint)')
           const hand = await watchCurrentHand(tableId!)
           setCurrentHand(hand)
         }
@@ -1323,11 +1333,12 @@ function Table() {
                         {currentHand && (() => {
                           const handPlayer = getHandPlayerBySeat(seatIndex)
                           const isAuthorizedPlayer = address && player.walletAddress.toLowerCase() === address.toLowerCase()
+                          const isHandEnded = currentHand.status === 'COMPLETED'
                           
                           if (!handPlayer) return null
                           
-                          // Show hole cards for authorized player if active or all-in
-                          if (isAuthorizedPlayer && handPlayer.holeCards && (handPlayer.status === 'ACTIVE' || handPlayer.status === 'ALL_IN')) {
+                          // After hand ends, show hole cards for all non-folded players
+                          if (isHandEnded && handPlayer.holeCards && handPlayer.status !== 'FOLDED') {
                             return (
                               <div className="table-seat-cards">
                                 {handPlayer.holeCards.map((card, idx) => (
@@ -1341,8 +1352,23 @@ function Table() {
                             )
                           }
                           
-                          // Show card backs for other players in hand (active or all-in)
-                          if (!isAuthorizedPlayer && (handPlayer.status === 'ACTIVE' || handPlayer.status === 'ALL_IN')) {
+                          // During active hand: Show hole cards for authorized player if active or all-in
+                          if (!isHandEnded && isAuthorizedPlayer && handPlayer.holeCards && (handPlayer.status === 'ACTIVE' || handPlayer.status === 'ALL_IN')) {
+                            return (
+                              <div className="table-seat-cards">
+                                {handPlayer.holeCards.map((card, idx) => (
+                                  <Card
+                                    key={idx}
+                                    suit={card.suit}
+                                    rank={card.rank}
+                                  />
+                                ))}
+                              </div>
+                            )
+                          }
+                          
+                          // During active hand: Show card backs for other players in hand (active or all-in)
+                          if (!isHandEnded && !isAuthorizedPlayer && (handPlayer.status === 'ACTIVE' || handPlayer.status === 'ALL_IN')) {
                             return (
                               <div className="table-seat-cards">
                                 <Card isBack={true} />
