@@ -100,23 +100,39 @@ export class EventQueue {
    */
   async enqueue(event: TableEvent): Promise<void> {
     if (this.stopped) {
-      console.warn('[EventQueue] Ignoring event - queue has been stopped', event.eventId);
+      console.warn('[EventQueue] Ignoring event - queue has been stopped', {
+        eventId: event.eventId,
+        kind: event.payload.kind,
+      });
       return;
     }
 
     // Ignore duplicate events (events we've already processed)
     if (event.eventId <= this.lastProcessedEventId) {
-      console.warn(
-        `[EventQueue] Ignoring duplicate/old event ${event.eventId} (last processed: ${this.lastProcessedEventId})`
-      );
+      console.warn('[EventQueue] Ignoring duplicate/old event', {
+        eventId: event.eventId,
+        kind: event.payload.kind,
+        lastProcessedEventId: this.lastProcessedEventId,
+      });
       return;
     }
 
     // Insert event in correct position (sorted by eventId)
+    const queueSizeBefore = this.queue.length;
     this.insertInOrder(event);
+    const queueSizeAfter = this.queue.length;
+
+    console.log('[EventQueue] Event enqueued', {
+      eventId: event.eventId,
+      kind: event.payload.kind,
+      queueSizeBefore,
+      queueSizeAfter,
+      wasEmpty: queueSizeBefore === 0,
+    });
 
     // Start processing if not already processing
     if (!this.processing) {
+      console.log('[EventQueue] Starting queue processing');
       this.processQueue().catch((error) => {
         console.error('[EventQueue] Error in processQueue:', error);
       });
@@ -161,6 +177,11 @@ export class EventQueue {
     }
 
     this.processing = true;
+    const initialQueueSize = this.queue.length;
+    console.log('[EventQueue] Starting queue processing', {
+      queueSize: initialQueueSize,
+      lastProcessedEventId: this.lastProcessedEventId,
+    });
 
     try {
       while (this.queue.length > 0 && !this.stopped) {
@@ -172,25 +193,57 @@ export class EventQueue {
 
         // Skip if we've already processed this event (shouldn't happen, but safety check)
         if (event.eventId <= this.lastProcessedEventId) {
-          console.warn(
-            `[EventQueue] Skipping already processed event ${event.eventId} (last processed: ${this.lastProcessedEventId})`
-          );
+          console.warn('[EventQueue] Skipping already processed event', {
+            eventId: event.eventId,
+            kind: event.payload.kind,
+            lastProcessedEventId: this.lastProcessedEventId,
+          });
           continue;
         }
+
+        const startTime = performance.now();
+        console.log('[EventQueue] Processing event', {
+          eventId: event.eventId,
+          kind: event.payload.kind,
+          queueSizeRemaining: this.queue.length,
+        });
 
         try {
           // Process the event (wait for handler to complete)
           await this.handler(event);
 
+          const duration = performance.now() - startTime;
+          console.log('[EventQueue] Event processed successfully', {
+            eventId: event.eventId,
+            kind: event.payload.kind,
+            durationMs: duration.toFixed(2),
+            queueSizeRemaining: this.queue.length,
+          });
+
           // Update last processed event ID
           this.lastProcessedEventId = event.eventId;
         } catch (error) {
+          const duration = performance.now() - startTime;
           // Log error but continue processing
-          console.error(`[EventQueue] Error processing event ${event.eventId}:`, error);
+          console.error('[EventQueue] Error processing event', {
+            eventId: event.eventId,
+            kind: event.payload.kind,
+            durationMs: duration.toFixed(2),
+            error,
+            queueSizeRemaining: this.queue.length,
+          });
           // Still update lastProcessedEventId to prevent reprocessing
           this.lastProcessedEventId = event.eventId;
         }
       }
+
+      const finalQueueSize = this.queue.length;
+      const processedCount = initialQueueSize - finalQueueSize;
+      console.log('[EventQueue] Queue processing completed', {
+        processedCount,
+        queueSizeRemaining: finalQueueSize,
+        lastProcessedEventId: this.lastProcessedEventId,
+      });
     } finally {
       this.processing = false;
     }
@@ -203,6 +256,11 @@ export class EventQueue {
    * After calling this, the queue will ignore new events.
    */
   clear(): void {
+    const queueSize = this.queue.length;
+    console.log('[EventQueue] Clearing queue', {
+      queueSize,
+      lastProcessedEventId: this.lastProcessedEventId,
+    });
     this.stopped = true;
     this.queue = [];
     this.processing = false;

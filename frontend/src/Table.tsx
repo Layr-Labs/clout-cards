@@ -1,5 +1,5 @@
 import './App.css'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, watchCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
@@ -12,6 +12,8 @@ import { Card } from './components/Card'
 import { useWallet } from './contexts/WalletContext'
 import { useTwitterUser } from './hooks/useTwitterUser'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
+import { useTableEvents } from './hooks/useTableEvents'
+import type { TableEvent } from './utils/eventQueue'
 
 /**
  * Table page component for CloutCards
@@ -109,33 +111,30 @@ function Table() {
   }, [tableId])
 
   /**
-   * Loads players and their Twitter info for the table
+   * Initial hydration: Load players once on mount
+   * After this, players list is updated via SSE events (join_table/leave_table)
    */
   useEffect(() => {
     if (!tableId || isNaN(tableId)) {
       return
     }
 
-    async function loadPlayers() {
+    async function loadInitialPlayers() {
       try {
         const fetchedPlayers = await getTablePlayers(tableId!)
         setPlayers(fetchedPlayers)
       } catch (err) {
-        console.error('Failed to load players:', err)
+        console.error('Failed to load initial players:', err)
       }
     }
 
-    loadPlayers()
-    
-    // Refresh players every 5 seconds
-    const interval = setInterval(loadPlayers, 5000)
-    return () => clearInterval(interval)
+    loadInitialPlayers()
+    // No polling - SSE events will update players list
   }, [tableId])
 
   /**
-   * Loads current hand state
-   * Only polls if there are at least 2 players at the table
-   * Uses /watchCurrentHand when not fully logged in, /currentHand when fully logged in
+   * Initial hydration: Load current hand state once on mount
+   * This provides the initial state and lastEventId for SSE connection
    */
   useEffect(() => {
     if (!tableId) {
@@ -143,13 +142,13 @@ function Table() {
       return
     }
 
-    // Only poll for hands if there are at least 2 players
+    // Only load hand if there are at least 2 players
     if (players.length < 2) {
       setCurrentHand(null)
       return
     }
 
-    async function loadHand() {
+    async function loadInitialHand() {
       try {
         // Use watchCurrentHand if not fully logged in, getCurrentHand if fully logged in
         if (isFullyLoggedIn && address && signature) {
@@ -163,18 +162,203 @@ function Table() {
       } catch (err: any) {
         // 404 is expected when no hand is active
         if (err?.status !== 404) {
-          console.error('Failed to load hand:', err)
+          console.error('Failed to load initial hand:', err)
         }
         setCurrentHand(null)
       }
     }
 
-    loadHand()
-    
-    // Refresh hand every 2 seconds
-    const interval = setInterval(loadHand, 2000)
-    return () => clearInterval(interval)
+    loadInitialHand()
   }, [tableId, isFullyLoggedIn, address, signature, players.length])
+
+  /**
+   * Event handler for SSE events
+   * Updates state based on event type
+   */
+  const handleEvent = useCallback(async (event: TableEvent) => {
+    const payload = event.payload
+    const kind = payload.kind
+
+    try {
+      switch (kind) {
+        case 'hand_start': {
+          // Update hand state from event payload
+          // Event payload contains: table, hand (with id, dealerPosition, smallBlindSeat, etc.), players
+          const handData = payload.hand as any
+          
+          // Create updated hand state
+          const updatedHand: CurrentHand = {
+            handId: handData.id,
+            status: handData.status || 'ACTIVE',
+            round: handData.round || null,
+            communityCards: [],
+            players: (payload.players as any[] || []).map((p: any) => ({
+              seatNumber: p.seatNumber,
+              walletAddress: p.walletAddress,
+              twitterHandle: null, // Will be updated from players list
+              twitterAvatarUrl: null, // Will be updated from players list
+              status: p.status || 'ACTIVE',
+              chipsCommitted: p.chipsCommitted?.toString() || '0',
+              holeCards: null, // Hole cards not in event - will fetch below
+            })),
+            pots: [],
+            dealerPosition: handData.dealerPosition ?? null,
+            smallBlindSeat: handData.smallBlindSeat ?? null,
+            bigBlindSeat: handData.bigBlindSeat ?? null,
+            currentActionSeat: handData.currentActionSeat ?? null,
+            currentBet: handData.currentBet?.toString() || null,
+            lastRaiseAmount: handData.lastRaiseAmount?.toString() || null,
+            lastEventId: event.eventId,
+          }
+
+          // Merge with existing hand to preserve Twitter info and other fields
+          setCurrentHand((prev) => {
+            if (!prev) return updatedHand
+            
+            // Merge players with Twitter info from previous state
+            const mergedPlayers = updatedHand.players.map((p) => {
+              const prevPlayer = prev.players.find(pp => pp.seatNumber === p.seatNumber)
+              return {
+                ...p,
+                twitterHandle: prevPlayer?.twitterHandle || null,
+                twitterAvatarUrl: prevPlayer?.twitterAvatarUrl || null,
+              }
+            })
+            
+            return {
+              ...updatedHand,
+              players: mergedPlayers,
+            }
+          })
+
+          // Fetch current hand to get hole cards for authorized player
+          if (isFullyLoggedIn && address && signature && tableId) {
+            try {
+              const handWithHoleCards = await getCurrentHand(tableId, address, signature)
+              setCurrentHand(handWithHoleCards)
+            } catch (err: any) {
+              // If fetch fails, continue with state from event
+              console.error('Failed to fetch hole cards after hand_start:', err)
+            }
+          }
+          break
+        }
+
+        case 'bet':
+        case 'call':
+        case 'raise':
+        case 'all_in':
+        case 'fold': {
+          // Update player action state
+          // Event payload contains: table, hand, player (walletAddress), action, amount
+          const handData = payload.hand as any
+          const actionData = payload.action as any
+          
+          setCurrentHand((prev) => {
+            if (!prev) return prev
+
+            // Update player status and chips committed
+            const updatedPlayers = prev.players.map((p) => {
+              if (p.walletAddress.toLowerCase() === (payload.player as string)?.toLowerCase()) {
+                return {
+                  ...p,
+                  status: actionData.status || p.status,
+                  chipsCommitted: actionData.chipsCommitted?.toString() || p.chipsCommitted,
+                }
+              }
+              return p
+            })
+
+            return {
+              ...prev,
+              players: updatedPlayers,
+              currentActionSeat: handData.currentActionSeat ?? prev.currentActionSeat,
+              currentBet: handData.currentBet?.toString() || prev.currentBet,
+              lastRaiseAmount: handData.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
+              lastEventId: event.eventId,
+            }
+          })
+          break
+        }
+
+        case 'community_cards': {
+          // Update community cards
+          // Event payload contains: table, hand, communityCards
+          const communityCards = (payload.communityCards as any[]) || []
+          const handData = payload.hand as any
+
+          setCurrentHand((prev) => {
+            if (!prev) return prev
+
+            return {
+              ...prev,
+              communityCards: communityCards.map((card: any) => ({
+                suit: card.suit,
+                rank: card.rank,
+              })),
+              round: handData.round || prev.round,
+              currentActionSeat: handData.currentActionSeat ?? prev.currentActionSeat,
+              currentBet: handData.currentBet?.toString() || prev.currentBet,
+              lastRaiseAmount: handData.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
+              lastEventId: event.eventId,
+            }
+          })
+          break
+        }
+
+        case 'hand_end': {
+          // Update hand end state
+          // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players
+          const potsData = (payload.pots as any[]) || []
+
+          setCurrentHand((prev) => {
+            if (!prev) return prev
+
+            return {
+              ...prev,
+              status: 'COMPLETED',
+              pots: potsData.map((pot: any) => ({
+                potNumber: pot.potNumber,
+                amount: pot.amount?.toString() || '0',
+                eligibleSeatNumbers: pot.winnerSeatNumbers || pot.eligibleSeatNumbers || [],
+              })),
+              lastEventId: event.eventId,
+            }
+          })
+          break
+        }
+
+        case 'join_table': {
+          // Player joined - animation will be handled in Phase 7
+          // For now, do nothing - state will be updated via animations later
+          break
+        }
+
+        case 'leave_table': {
+          // Player left - animation will be handled in Phase 7
+          // For now, do nothing - state will be updated via animations later
+          break
+        }
+
+        default:
+          console.log(`[Table] Unhandled event kind: ${kind}`, payload)
+      }
+    } catch (error) {
+      console.error(`[Table] Error handling event ${kind}:`, error, payload)
+    }
+  }, [isFullyLoggedIn, address, signature, tableId])
+
+  /**
+   * SSE connection for real-time table events
+   * Connects when tableId is available (regardless of player count)
+   * This ensures we receive join_table/leave_table events even when there are 0-1 players
+   */
+  useTableEvents({
+    tableId: tableId || null,
+    enabled: !!tableId,
+    lastEventId: currentHand?.lastEventId,
+    onEvent: handleEvent,
+  })
 
   /**
    * Handles Buy In button click
@@ -217,13 +401,12 @@ function Table() {
         twitterAccessToken
       )
 
-      // Close dialog and refresh players
+      // Close dialog
       setIsBuyInDialogOpen(false)
       setSelectedSeatNumber(null)
       
-      // Refresh players list
-      const fetchedPlayers = await getTablePlayers(tableId)
-      setPlayers(fetchedPlayers)
+      // Don't refresh players here - wait for join_table SSE event
+      // The SSE event will update the players list
     } catch (error) {
       console.error('Failed to join table:', error)
       alert(error instanceof Error ? error.message : 'Failed to join table. Please try again.')

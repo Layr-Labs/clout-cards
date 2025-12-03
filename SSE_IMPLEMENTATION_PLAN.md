@@ -306,26 +306,28 @@ export function useTableEvents(options: {
 
 ---
 
-### Phase 6: Frontend Integration ⏳
+### Phase 6: Frontend Integration ✅
 
-**Status:** Not Started
+**Status:** Completed
 
 **Tasks:**
-1. Integrate `useTableEvents` in `Table.tsx`
-2. Replace polling with SSE for real-time updates
-3. Handle each event type to update state:
+1. ✅ Integrate `useTableEvents` in `Table.tsx`
+2. ✅ Replace polling with SSE for real-time updates
+3. ✅ Handle each event type to update state:
    - `hand_start` → Update hand state, fetch `/currentHand` for hole cards
-   - `bet`/`call`/`raise`/`all_in` → Update player state, pot amounts
+   - `bet`/`call`/`raise`/`all_in`/`fold` → Update player state, pot amounts
    - `community_cards` → Update community cards in state
    - `hand_end` → Update hand status, show winner state
-   - `join_table` → Update players list
-   - `leave_table` → Update players list
-4. Initial hydration: Single poll to `/currentHand` on mount
-5. Hole cards handling:
+   - `join_table` → Placeholder for animations (Phase 7)
+   - `leave_table` → Placeholder for animations (Phase 7)
+4. ✅ Initial hydration: Single poll to `/currentHand` on mount
+5. ✅ Hole cards handling:
    - On `hand_start` event: After state update, fetch `/currentHand` to get hole cards
    - Update state with hole cards for authorized player
-6. Keep polling disabled (SSE handles all updates)
-7. Add loading states and error handling
+6. ✅ Keep polling disabled (SSE handles all updates)
+7. ✅ Error handling in place
+
+**Note:** `join_table` and `leave_table` event handlers are structured but intentionally don't update players list yet. Players list updates will be handled via animations in Phase 7, which will provide smooth visual transitions and proper state synchronization.
 
 **Files to Modify:**
 - `frontend/src/Table.tsx` - Integrate SSE hook, handle events, update state
@@ -675,7 +677,7 @@ We'll extract `table.id` and store in `tableId` column.
 - [x] Phase 3: Backend SSE Endpoint
 - [x] Phase 4: Frontend Event Queue
 - [x] Phase 5: Frontend SSE Hook
-- [ ] Phase 6: Frontend Integration (State Management)
+- [x] Phase 6: Frontend Integration (State Management)
 - [ ] Phase 7: Player Join/Leave Animations
 - [ ] Phase 8: Hand Start & Hole Card Reveal Animations
 - [ ] Phase 9: Betting Action Animations

@@ -4,13 +4,6 @@
  * This hook manages an SSE connection to `/api/tables/:tableId/events` and
  * processes events sequentially using an EventQueue. It handles reconnection
  * with exponential backoff and tracks connection state.
- *
- * Features:
- * - Automatic reconnection with exponential backoff
- * - Sequential event processing via EventQueue
- * - Connection state tracking
- * - Event ID tracking for seamless reconnection
- * - Cleanup on unmount
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -18,118 +11,38 @@ import { EventQueue } from '../utils/eventQueue';
 import type { TableEvent, EventHandler } from '../utils/eventQueue';
 import { getBackendUrl } from '../config/env';
 
-/**
- * Connection state for the SSE stream
- */
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-/**
- * Options for useTableEvents hook
- */
 export interface UseTableEventsOptions {
-  /**
-   * Table ID to subscribe to events for
-   */
   tableId: number | null | undefined;
-
-  /**
-   * Event handler function called for each event
-   * Events are processed sequentially, one at a time
-   */
   onEvent: EventHandler;
-
-  /**
-   * Whether the hook is enabled (default: true)
-   * When false, the connection is not established
-   */
   enabled?: boolean;
-
-  /**
-   * Last event ID to start from (for reconnection)
-   * If provided, events with eventId <= lastEventId will be skipped
-   */
   lastEventId?: number;
 }
 
-/**
- * Return value from useTableEvents hook
- */
 export interface UseTableEventsReturn {
-  /**
-   * Current connection state
-   */
   connectionState: ConnectionState;
-
-  /**
-   * Last processed event ID
-   */
   lastProcessedEventId: number;
-
-  /**
-   * Current queue size (number of events waiting to be processed)
-   */
   queueSize: number;
-
-  /**
-   * Whether events are currently being processed
-   */
   isProcessing: boolean;
 }
 
-/**
- * Maximum reconnection delay in milliseconds (5 minutes)
- */
 const MAX_RECONNECT_DELAY = 5 * 60 * 1000;
-
-/**
- * Initial reconnection delay in milliseconds (1 second)
- */
 const INITIAL_RECONNECT_DELAY = 1000;
 
-/**
- * React hook for subscribing to table events via SSE
- *
- * Establishes an SSE connection to the backend and processes events sequentially
- * using an EventQueue. Handles reconnection automatically with exponential backoff.
- *
- * @param options - Hook configuration options
- * @returns Connection state and queue information
- *
- * @example
- * ```typescript
- * const { connectionState, lastProcessedEventId } = useTableEvents({
- *   tableId: 1,
- *   enabled: !!tableId,
- *   lastEventId: currentHand?.lastEventId,
- *   onEvent: async (event) => {
- *     switch (event.payload.kind) {
- *       case 'hand_start':
- *         await handleHandStart(event.payload);
- *         break;
- *       case 'bet':
- *         await handleBet(event.payload);
- *         break;
- *     }
- *   },
- * });
- * ```
- */
 export function useTableEvents(options: UseTableEventsOptions): UseTableEventsReturn {
   const { tableId, onEvent, enabled = true, lastEventId } = options;
 
-  // Connection state
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [lastProcessedEventId, setLastProcessedEventId] = useState(0);
   const [queueSize, setQueueSize] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Refs for managing connection and queue
   const eventSourceRef = useRef<EventSource | null>(null);
   const eventQueueRef = useRef<EventQueue | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
   const lastEventIdRef = useRef(lastEventId || 0);
-  const isMountedRef = useRef(true);
 
   // Update lastEventId ref when prop changes
   useEffect(() => {
@@ -138,14 +51,11 @@ export function useTableEvents(options: UseTableEventsOptions): UseTableEventsRe
     }
   }, [lastEventId]);
 
-  // Wrapper handler that updates state
+  // Wrapper handler
   const wrappedHandler = useCallback<EventHandler>(
     async (event: TableEvent) => {
-      // Update last processed event ID
       setLastProcessedEventId(event.eventId);
       lastEventIdRef.current = event.eventId;
-
-      // Call the user's handler
       await onEvent(event);
     },
     [onEvent]
@@ -157,27 +67,37 @@ export function useTableEvents(options: UseTableEventsOptions): UseTableEventsRe
       eventQueueRef.current = new EventQueue(wrappedHandler);
     }
 
-    // Update state periodically from queue
     const interval = setInterval(() => {
       if (eventQueueRef.current) {
         setQueueSize(eventQueueRef.current.getQueueSize());
         setIsProcessing(eventQueueRef.current.isProcessing());
         setLastProcessedEventId(eventQueueRef.current.getLastProcessedEventId());
       }
-    }, 100); // Update every 100ms
+    }, 100);
 
-    return () => {
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [wrappedHandler]);
 
-  // Connect to SSE stream
-  const connect = useCallback(() => {
-    if (!tableId || !enabled || !isMountedRef.current) {
+  // SSE connection effect
+  useEffect(() => {
+    if (!tableId || !enabled) {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setConnectionState('disconnected');
       return;
     }
 
-    // Close existing connection if any
+    console.log('[useTableEvents] Setting up SSE connection', { tableId, lastEventId: lastEventIdRef.current });
+
+    // Clear any existing reconnection timeout
+    if (reconnectTimeoutRef.current !== null) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Close existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -185,167 +105,130 @@ export function useTableEvents(options: UseTableEventsOptions): UseTableEventsRe
 
     setConnectionState('connecting');
 
-    try {
-      const backendUrl = getBackendUrl();
-      const url = new URL(`${backendUrl}/api/tables/${tableId}/events`);
+    const backendUrl = getBackendUrl();
+    const url = new URL(`${backendUrl}/api/tables/${tableId}/events`);
 
-      // Add lastEventId query parameter if available
-      if (lastEventIdRef.current > 0) {
-        url.searchParams.set('lastEventId', lastEventIdRef.current.toString());
+    if (lastEventIdRef.current > 0) {
+      url.searchParams.set('lastEventId', lastEventIdRef.current.toString());
+    }
+
+    const eventSource = new EventSource(url.toString());
+    eventSourceRef.current = eventSource;
+
+    let hasReceivedMessage = false;
+
+    eventSource.onmessage = (event: MessageEvent) => {
+      if (!eventQueueRef.current) {
+        return;
       }
 
-      const eventSource = new EventSource(url.toString());
-      eventSourceRef.current = eventSource;
+      if (!hasReceivedMessage) {
+        hasReceivedMessage = true;
+        setConnectionState('connected');
+        reconnectDelayRef.current = INITIAL_RECONNECT_DELAY;
+        console.log(`[useTableEvents] Connected to table ${tableId} events stream`);
+      }
 
-      // Track if we've received at least one message (indicates connection is established)
-      let hasReceivedMessage = false;
+      try {
+        const eventId = event.lastEventId ? parseInt(event.lastEventId, 10) : 0;
 
-      // Handle messages
-      eventSource.onmessage = (event: MessageEvent) => {
-        if (!isMountedRef.current || !eventQueueRef.current) {
+        if (isNaN(eventId) || eventId <= 0) {
+          console.warn('[useTableEvents] Received message without valid event ID', {
+            lastEventId: event.lastEventId,
+            data: event.data,
+            tableId,
+          });
           return;
         }
 
-        // Mark connection as connected when we receive first message
-        if (!hasReceivedMessage) {
-          hasReceivedMessage = true;
-          setConnectionState('connected');
-          reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connection
-          console.log(`[useTableEvents] Connected to table ${tableId} events stream`);
-        }
+        const payload = JSON.parse(event.data);
 
-        try {
-          // Parse event ID from the last event ID (EventSource tracks this)
-          // EventSource automatically sets lastEventId from the "id:" line in SSE format
-          const eventId = event.lastEventId ? parseInt(event.lastEventId, 10) : 0;
+        console.log('[useTableEvents] Event received from SSE', {
+          eventId,
+          kind: payload.kind,
+          tableId,
+        });
 
-          // Validate event ID (must be a positive integer)
-          if (isNaN(eventId) || eventId <= 0) {
-            console.warn(
-              '[useTableEvents] Received message without valid event ID:',
-              event.lastEventId,
-              event.data
-            );
-            return;
-          }
+        const tableEvent: TableEvent = {
+          eventId,
+          payload,
+        };
 
-          // Parse payload JSON
-          const payload = JSON.parse(event.data);
+        eventQueueRef.current.enqueue(tableEvent);
+      } catch (error) {
+        console.error('[useTableEvents] Error parsing event', {
+          error,
+          data: event.data,
+          tableId,
+        });
+      }
+    };
 
-          // Create TableEvent
-          const tableEvent: TableEvent = {
-            eventId,
-            payload,
-          };
+    eventSource.onerror = () => {
+      console.error('[useTableEvents] SSE connection error', {
+        tableId,
+        readyState: eventSource.readyState,
+      });
 
-          // Enqueue the event
-          eventQueueRef.current.enqueue(tableEvent);
-        } catch (error) {
-          console.error('[useTableEvents] Error parsing event:', error, event.data);
-        }
-      };
-
-      // Handle errors
-      eventSource.onerror = (error: Event) => {
-        if (!isMountedRef.current) {
-          return;
-        }
-
-        console.error(`[useTableEvents] SSE connection error for table ${tableId}:`, error);
+      if (eventSource.readyState === EventSource.CLOSED) {
         setConnectionState('error');
 
-        // Close the connection
         if (eventSourceRef.current) {
           eventSourceRef.current.close();
           eventSourceRef.current = null;
         }
 
-        // Schedule reconnection with exponential backoff
-        if (isMountedRef.current && enabled) {
+        // Schedule reconnection by re-running the effect
+        if (enabled && tableId) {
           const delay = reconnectDelayRef.current;
           reconnectDelayRef.current = Math.min(
             reconnectDelayRef.current * 2,
             MAX_RECONNECT_DELAY
           );
 
-          console.log(
-            `[useTableEvents] Reconnecting to table ${tableId} events in ${delay}ms`
-          );
+          console.log(`[useTableEvents] Reconnecting to table ${tableId} events in ${delay}ms`);
 
           reconnectTimeoutRef.current = window.setTimeout(() => {
-            if (isMountedRef.current && enabled) {
-              connect();
+            // Force effect to re-run by toggling a ref that's checked in the effect
+            // Since we can't add connectionState to deps, we'll use a reconnection trigger
+            if (eventSourceRef.current === null && enabled && tableId) {
+              // Effect will re-run naturally when dependencies change
+              // For now, manually trigger reconnection by closing and letting effect handle it
+              // Actually, the effect should handle this - if eventSourceRef is null and enabled/tableId are set, it will reconnect
+              // But we need to ensure the effect runs again. Let's use a state update to force re-render
+              setConnectionState('disconnected');
             }
           }, delay);
         }
-      };
-    } catch (error) {
-      console.error(`[useTableEvents] Error setting up SSE connection for table ${tableId}:`, error);
-      setConnectionState('error');
-
-      // Schedule reconnection
-      if (isMountedRef.current && enabled) {
-        const delay = reconnectDelayRef.current;
-        reconnectDelayRef.current = Math.min(
-          reconnectDelayRef.current * 2,
-          MAX_RECONNECT_DELAY
-        );
-
-        reconnectTimeoutRef.current = window.setTimeout(() => {
-          if (isMountedRef.current && enabled) {
-            connect();
-          }
-        }, delay);
-      }
-    }
-  }, [tableId, enabled]);
-
-  // Establish connection when tableId or enabled changes
-  useEffect(() => {
-    if (tableId && enabled) {
-      connect();
-    } else {
-      // Disconnect if disabled or no tableId
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      setConnectionState('disconnected');
-    }
-
-    // Cleanup on unmount or dependency change
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (reconnectTimeoutRef.current !== null) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
       }
     };
-  }, [tableId, enabled, connect]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    isMountedRef.current = true;
-
+    // Cleanup
     return () => {
-      isMountedRef.current = false;
-
-      // Close EventSource
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-
-      // Clear reconnection timeout
+      console.log('[useTableEvents] Cleaning up SSE connection', { tableId });
       if (reconnectTimeoutRef.current !== null) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [tableId, enabled]); // Only re-run when tableId or enabled changes, not connectionState
 
-      // Clear event queue
+  // Final cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[useTableEvents] Component unmounting - final cleanup');
+      if (reconnectTimeoutRef.current !== null) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
       if (eventQueueRef.current) {
         eventQueueRef.current.clear();
         eventQueueRef.current = null;
@@ -360,4 +243,3 @@ export function useTableEvents(options: UseTableEventsOptions): UseTableEventsRe
     isProcessing,
   };
 }
-

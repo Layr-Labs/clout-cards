@@ -1176,16 +1176,17 @@ app.get('/playerEscrowBalance', requireWalletAuth({ addressSource: 'query' }), a
 app.get('/api/tables/:tableId/events', async (req: Request, res: Response): Promise<void> => {
   try {
     const tableId = parseInt(req.params.tableId, 10);
-    const lastEventId = req.query.lastEventId
+    const lastEventIdParam = req.query.lastEventId
       ? parseInt(req.query.lastEventId as string, 10)
-      : 0;
+      : null;
 
     if (isNaN(tableId)) {
       res.status(400).json({ error: 'Invalid table ID' });
       return;
     }
 
-    if (isNaN(lastEventId) || lastEventId < 0) {
+    // Validate lastEventId if provided
+    if (lastEventIdParam !== null && (isNaN(lastEventIdParam) || lastEventIdParam < 0)) {
       res.status(400).json({ error: 'Invalid lastEventId' });
       return;
     }
@@ -1199,32 +1200,40 @@ app.get('/api/tables/:tableId/events', async (req: Request, res: Response): Prom
     // Send initial connection message
     res.write(': connected\n\n');
 
-    // Send any missed events first (events with eventId > lastEventId for this table)
-    try {
-      const missedEvents = await prisma.event.findMany({
-        where: {
-          tableId: tableId,
-          eventId: { gt: lastEventId },
-        },
-        orderBy: { eventId: 'asc' },
-        take: 100, // Limit to prevent huge initial payload
-      });
+    // Only send missed events if lastEventId is provided and > 0 (reconnection scenario)
+    // If lastEventId is 0 or not provided, skip missed events (fresh page load)
+    if (lastEventIdParam !== null && lastEventIdParam > 0) {
+      try {
+        const missedEvents = await prisma.event.findMany({
+          where: {
+            tableId: tableId,
+            eventId: { gt: lastEventIdParam },
+          },
+          orderBy: { eventId: 'asc' },
+          take: 100, // Limit to prevent huge initial payload
+        });
 
-      for (const event of missedEvents) {
-        res.write(`id: ${event.eventId}\n`);
-        res.write(`data: ${event.payloadJson}\n\n`);
+        console.log(`[SSE] Sending ${missedEvents.length} missed events for table ${tableId} (lastEventId: ${lastEventIdParam})`);
+
+        for (const event of missedEvents) {
+          res.write(`id: ${event.eventId}\n`);
+          res.write(`data: ${event.payloadJson}\n\n`);
+        }
+      } catch (error) {
+        console.error(`[SSE] Error fetching missed events for table ${tableId}:`, error);
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({ error: 'Failed to fetch missed events' })}\n\n`);
       }
-    } catch (error) {
-      console.error(`[SSE] Error fetching missed events for table ${tableId}:`, error);
-      res.write(`event: error\n`);
-      res.write(`data: ${JSON.stringify({ error: 'Failed to fetch missed events' })}\n\n`);
+    } else {
+      console.log(`[SSE] Skipping missed events for table ${tableId} (fresh page load, lastEventId: ${lastEventIdParam})`);
     }
 
     // Set up notification listener for new events
     // Only send events that match this tableId
     const notificationHandler = (notification: EventNotification) => {
-      // Only send if it's for this table and newer than lastEventId
-      if (notification.tableId === tableId && notification.eventId > lastEventId) {
+      // Only send if it's for this table and newer than lastEventId (if provided)
+      const minEventId = lastEventIdParam !== null && lastEventIdParam > 0 ? lastEventIdParam : 0;
+      if (notification.tableId === tableId && notification.eventId > minEventId) {
         // Fetch the full event to get payloadJson
         prisma.event
           .findUnique({
