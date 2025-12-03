@@ -1553,6 +1553,20 @@
   align-items: center;
   justify-content: center;
   line-height: 1.2;
+  opacity: 0;
+}
+
+.table-seat-stand-up-button.animate-in {
+  animation: standUpButtonFadeIn 1s ease-out forwards;
+}
+
+@keyframes standUpButtonFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .table-seat-stand-up-button::before {
@@ -1618,6 +1632,7 @@
 .table-seat-stand-up-button:disabled::before {
   display: none;
 }
+
 
 /* Community Cards - Center of Table */
 .table-community-cards {
@@ -1923,6 +1938,41 @@
 
   .table-seat-stack {
     font-size: 0.7rem;
+  }
+}
+
+/* Join/Leave Animation Styles */
+.table-seat-avatar[data-animating-join="true"] .table-seat-player-info {
+  animation: infoBoxSlide 0.4s ease-out 0.2s both;
+}
+
+@keyframes infoBoxSlide {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+    width: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    width: auto;
+  }
+}
+
+.table-seat-avatar[data-animating-join="true"].table-seat-player-info-right .table-seat-player-info {
+  animation: infoBoxSlideRight 0.4s ease-out 0.2s both;
+}
+
+@keyframes infoBoxSlideRight {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+    width: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    width: auto;
   }
 }
 

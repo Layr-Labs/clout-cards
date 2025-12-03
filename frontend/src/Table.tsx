@@ -1,5 +1,5 @@
 import './App.css'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, watchCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
@@ -14,6 +14,76 @@ import { useTwitterUser } from './hooks/useTwitterUser'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
 import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
+import { animatePlayerJoin, type JoinTableEventPayload } from './utils/animations'
+
+/**
+ * Balance display component with count-up animation
+ *
+ * Animates the balance from 0 to the target amount when a player joins.
+ *
+ * @param balance - Current formatted balance (e.g., "1.5 ETH")
+ * @param isAnimating - Whether the count-up animation should play
+ * @param targetAmount - Target balance in gwei (for count-up animation)
+ */
+function BalanceDisplay({ 
+  balance, 
+  isAnimating, 
+  targetAmount 
+}: { 
+  balance: string
+  isAnimating: boolean
+  targetAmount?: string 
+}) {
+  // Always start at 0 if animating, otherwise use the balance
+  const [displayBalance, setDisplayBalance] = useState(
+    isAnimating && targetAmount ? '0 ETH' : balance
+  )
+  const [hasStartedAnimating, setHasStartedAnimating] = useState(false)
+
+  useEffect(() => {
+    if (isAnimating && targetAmount && !hasStartedAnimating) {
+      // Ensure we start at 0
+      setDisplayBalance('0 ETH')
+      setHasStartedAnimating(true)
+      
+      // Delay animation start until info box is visible (after ~800ms from join event)
+      setTimeout(() => {
+        const targetEth = formatEth(targetAmount)
+        const startValue = 0
+        // Extract numeric value from formatted string (e.g., "1.5 ETH" -> 1.5)
+        const endValue = parseFloat(targetEth.replace(/[^0-9.]/g, '')) || 0
+        const duration = 500
+        const startTime = Date.now()
+
+        const animate = () => {
+          const elapsed = Date.now() - startTime
+          const progress = Math.min(elapsed / duration, 1)
+          // Ease-out cubic for smooth deceleration
+          const eased = 1 - Math.pow(1 - progress, 3)
+          const currentValue = startValue + (endValue - startValue) * eased
+          // Format the current value as ETH (simple formatting for animation)
+          const formatted = currentValue.toFixed(4).replace(/\.?0+$/, '') + ' ETH'
+          setDisplayBalance(formatted)
+          
+          if (progress < 1) {
+            requestAnimationFrame(animate)
+          } else {
+            // Ensure final value matches exactly
+            setDisplayBalance(targetEth)
+          }
+        }
+
+        requestAnimationFrame(animate)
+      }, 800) // Delay to match info box slide-out timing
+    } else if (!isAnimating) {
+      // Reset when not animating
+      setHasStartedAnimating(false)
+      setDisplayBalance(balance)
+    }
+  }, [isAnimating, targetAmount, balance, hasStartedAnimating])
+
+  return <div className="table-seat-stack">{displayBalance}</div>
+}
 
 /**
  * Table page component for CloutCards
@@ -35,6 +105,9 @@ function Table() {
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isBetRaiseDialogOpen, setIsBetRaiseDialogOpen] = useState(false)
+  const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string } | null>(null)
+  const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
+  const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -170,6 +243,30 @@ function Table() {
 
     loadInitialHand()
   }, [tableId, isFullyLoggedIn, address, signature, players.length])
+
+  /**
+   * Add animate-in class to stand up button if player is already seated on page load
+   * This ensures the button fades in when loading the page directly (not during join animation)
+   */
+  useEffect(() => {
+    if (!isFullyLoggedIn || !isUserSeated() || currentHand) {
+      return
+    }
+
+    const userPlayer = getUserPlayer()
+    if (!userPlayer) {
+      return
+    }
+
+    const seatNumber = userPlayer.seatNumber
+    const seatElement = seatRefs.current.get(seatNumber)
+    if (seatElement) {
+      const standUpButton = seatElement.querySelector('.table-seat-stand-up-button') as HTMLElement
+      if (standUpButton && !standUpButton.classList.contains('animate-in')) {
+        standUpButton.classList.add('animate-in')
+      }
+    }
+  }, [isFullyLoggedIn, players, currentHand])
 
   /**
    * Event handler for SSE events
@@ -329,8 +426,73 @@ function Table() {
         }
 
         case 'join_table': {
-          // Player joined - animation will be handled in Phase 7
-          // For now, do nothing - state will be updated via animations later
+          // Player joined - animate and update state
+          const joinPayload = payload as unknown as JoinTableEventPayload
+          const seatNumber = joinPayload.seatNumber
+          
+          // Mark seat as joining (so avatar starts hidden)
+          setJoiningSeats((prev) => new Set(prev).add(seatNumber))
+          
+          // Set animating balance immediately so balance starts at 0 when info box becomes visible
+          setAnimatingBalance({
+            seatNumber: seatNumber,
+            targetAmount: joinPayload.buyInAmountGwei,
+          })
+          
+          // Update players list FIRST so avatar is rendered (but hidden initially)
+          setPlayers((prevPlayers) => {
+            // Check if player already exists (avoid duplicates)
+            const existingIndex = prevPlayers.findIndex(
+              p => p.seatNumber === seatNumber
+            )
+            
+            const newPlayer: TablePlayer = {
+              id: Date.now(), // Temporary ID, will be replaced by API data
+              walletAddress: joinPayload.player,
+              twitterHandle: joinPayload.twitterHandle,
+              twitterAvatarUrl: joinPayload.twitterAvatarUrl,
+              seatNumber: seatNumber,
+              joinedAt: new Date().toISOString(),
+              tableBalanceGwei: joinPayload.buyInAmountGwei,
+            }
+            
+            if (existingIndex >= 0) {
+              // Replace existing player
+              const updated = [...prevPlayers]
+              updated[existingIndex] = newPlayer
+              return updated
+            } else {
+              // Add new player
+              return [...prevPlayers, newPlayer].sort((a, b) => a.seatNumber - b.seatNumber)
+            }
+          })
+          
+          // Small delay to ensure React has rendered the avatar, then start animation
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              // Get seat element for animation (now that avatar is rendered)
+              const seatElement = seatRefs.current.get(seatNumber)
+              
+              // Start animation - avatar fade-in happens in animation function
+              animatePlayerJoin(seatElement || null, joinPayload).then(() => {
+                // Remove from joining seats (animation complete)
+                setJoiningSeats((prev) => {
+                  const next = new Set(prev)
+                  next.delete(seatNumber)
+                  return next
+                })
+                
+                // Clear animating balance after count-up completes (balance animation already started)
+                setTimeout(() => {
+                  setAnimatingBalance(null)
+                }, 500)
+            }).catch((error) => {
+            console.error('[Table] Error animating player join:', error)
+            // Animation failed, but player is already in list
+            console.error('[Table] Animation error:', error)
+          })
+          })
+          })
           break
         }
 
@@ -815,6 +977,13 @@ function Table() {
                 return (
                   <div
                     key={seatIndex}
+                    ref={(el) => {
+                      if (el) {
+                        seatRefs.current.set(seatIndex, el)
+                      } else {
+                        seatRefs.current.delete(seatIndex)
+                      }
+                    }}
                     className="table-seat-avatar"
                     style={{
                       left: `${position.x}%`,
@@ -831,6 +1000,9 @@ function Table() {
                               src={player.twitterAvatarUrl}
                               alt={player.twitterHandle || 'Player'}
                               className="table-seat-avatar-image"
+                              style={{
+                                opacity: joiningSeats.has(seatIndex) ? 0 : undefined,
+                              }}
                               onError={(e) => {
                                 // Fallback to initial if image fails to load
                                 const target = e.target as HTMLImageElement;
@@ -839,13 +1011,19 @@ function Table() {
                                 if (parent && player.twitterHandle) {
                                   const initialDiv = document.createElement('div');
                                   initialDiv.className = 'table-seat-avatar-initial';
+                                  initialDiv.style.opacity = joiningSeats.has(seatIndex) ? '0' : '1';
                                   initialDiv.textContent = player.twitterHandle.charAt(1).toUpperCase();
                                   parent.appendChild(initialDiv);
                                 }
                               }}
                             />
                           ) : (
-                            <div className="table-seat-avatar-initial">
+                            <div 
+                              className="table-seat-avatar-initial"
+                              style={{
+                                opacity: joiningSeats.has(seatIndex) ? 0 : undefined,
+                              }}
+                            >
                               {player.twitterHandle ? player.twitterHandle.charAt(1).toUpperCase() : '?'}
                             </div>
                           )}
@@ -918,9 +1096,11 @@ function Table() {
                               {player.twitterHandle}
                             </a>
                             {tableBalanceEth && (
-                              <div className="table-seat-stack">
-                                {tableBalanceEth}
-                              </div>
+                              <BalanceDisplay
+                                balance={tableBalanceEth}
+                                isAnimating={animatingBalance?.seatNumber === seatIndex}
+                                targetAmount={animatingBalance?.seatNumber === seatIndex ? animatingBalance.targetAmount : undefined}
+                              />
                             )}
                             {/* Stand Up Button - only show if this is the current user's seat and no hand active */}
                             {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand && (
