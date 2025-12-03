@@ -600,6 +600,8 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
   console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Hand state updated successfully`);
 
   // Emit community cards event
+  // Include currentActionSeat since it's calculated based on dealer position and active players
+  // currentBet and lastRaiseAmount are always reset to 0/null for new rounds, so frontend can handle that
   const communityCardsPayload = {
     kind: 'community_cards',
     table: {
@@ -609,6 +611,7 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
     hand: {
       id: handId,
       round: nextRound,
+      currentActionSeat: firstActionSeat,
     },
     communityCards: newCommunityCards.slice(communityCards.length), // Only the newly dealt cards
     allCommunityCards: newCommunityCards, // All community cards so far
@@ -1302,7 +1305,8 @@ async function createActionAndEvent(
   hand: { id: number; round: BettingRound; status: HandStatus },
   walletAddress: string,
   eventActionType: 'CALL' | 'BET' | 'RAISE' | 'ALL_IN',
-  isAllIn?: boolean
+  isAllIn?: boolean,
+  currentActionSeat?: number | null
 ): Promise<any> {
   // 1. Create HandAction record
   const actionData = {
@@ -1335,7 +1339,15 @@ async function createActionAndEvent(
   // Note: This ensures side pots are preserved if they exist
   await updatePotsIfNeeded(handId, tx);
 
-  // 3. Create hand action event
+  // 3. Get updated hand state to include currentActionSeat, currentBet, and lastRaiseAmount in event payload
+  // Query the hand to get the latest values
+  const updatedHand = await (tx as any).hand.findUnique({
+    where: { id: handId },
+    select: { currentActionSeat: true, currentBet: true, lastRaiseAmount: true },
+  });
+  const updatedCurrentActionSeat = currentActionSeat !== undefined ? currentActionSeat : (updatedHand?.currentActionSeat ?? null);
+
+  // 4. Create hand action event
   const actionPayload = {
     kind: 'hand_action',
     table: {
@@ -1346,6 +1358,9 @@ async function createActionAndEvent(
       id: hand.id,
       round: hand.round,
       status: hand.status,
+      currentActionSeat: updatedCurrentActionSeat,
+      currentBet: updatedHand?.currentBet?.toString() || null,
+      lastRaiseAmount: updatedHand?.lastRaiseAmount?.toString() || null,
     },
     action: {
       type: eventActionType,
@@ -2482,9 +2497,13 @@ export async function callAction(
       },
     });
 
-    // 10. Create call action record and event (pot splitting deferred until round completes)
+    // 10. Calculate next action seat before creating event (for event payload)
+    // This allows the frontend to update the active player glow and action buttons immediately
+    const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
+    
+    // 11. Create call action record and event (pot splitting deferred until round completes)
     console.log(`[DEBUG callAction] Hand ${hand.id}: Player seat ${seatSession.seatNumber} calling ${callAmount.toString()} in round ${hand.round}, currentBet=${currentBet.toString()}, chipsCommitted before=${chipsCommitted.toString()}`);
-    console.log(`[DEBUG callAction] Hand ${hand.id}: Creating CALL action with: handId=${hand.id}, seatNumber=${seatSession.seatNumber}, round=${hand.round}, amount=${callAmount.toString()}`);
+    console.log(`[DEBUG callAction] Hand ${hand.id}: Creating CALL action with: handId=${hand.id}, seatNumber=${seatSession.seatNumber}, round=${hand.round}, amount=${callAmount.toString()}, nextSeat=${nextSeat}`);
     const handAction = await createActionAndEvent(
       tx,
       hand.id,
@@ -2495,7 +2514,9 @@ export async function callAction(
       table,
       hand,
       normalizedAddress,
-      'CALL'
+      'CALL',
+      false,
+      nextSeat
     );
     console.log(`[DEBUG callAction] Hand ${hand.id}: CALL action created successfully:`, JSON.stringify({
       id: handAction.id,
@@ -2662,7 +2683,11 @@ export async function checkAction(
     }));
     console.log(`[DEBUG checkAction] Hand ${hand.id}: CHECK action created, checking if round complete`);
 
-    // 8. Create hand action event
+    // 8. Calculate next action seat before creating event (for event payload)
+    // This allows the frontend to update the active player glow and action buttons immediately
+    const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
+    
+    // 9. Create hand action event
     const actionPayload = {
       kind: 'hand_action',
       table: {
@@ -2673,6 +2698,9 @@ export async function checkAction(
         id: hand.id,
         round: hand.round,
         status: hand.status,
+        currentActionSeat: nextSeat,
+        currentBet: hand.currentBet?.toString() || null,
+        lastRaiseAmount: hand.lastRaiseAmount?.toString() || null,
       },
       action: {
         type: 'CHECK',
@@ -3114,7 +3142,11 @@ export async function raiseAction(
       isAllIn
     );
 
-    // 10. Create bet/raise action record and event
+    // 10. Calculate next action seat before creating event (for event payload)
+    // This allows the frontend to update the active player glow and action buttons immediately
+    const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
+    
+    // 11. Create bet/raise action record and event
     // Store incremental amount (amountToDeduct) - this is what we received as input
     // Pot splitting deferred until round completes or player goes all-in
     // Use 'ALL_IN' action type if player went all-in, otherwise 'RAISE' or 'BET'
@@ -3122,7 +3154,7 @@ export async function raiseAction(
     // Event action type: if all-in, use 'ALL_IN', otherwise use 'BET' or 'RAISE' based on context
     const eventActionType = isAllIn ? 'ALL_IN' : (isBet ? 'BET' : 'RAISE');
     console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Player seat ${seatSession.seatNumber} ${isBet ? 'betting' : 'raising'} ${amountToDeduct.toString()} in round ${hand.round}, currentBet before=${currentBet.toString()}, chipsCommitted before=${chipsCommitted.toString()}, isAllIn=${isAllIn}`);
-    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Creating ${isBet ? 'BET' : 'RAISE'} action - hand.round=${hand.round}, actionType=${actionType}, eventActionType=${eventActionType}`);
+    console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: Creating ${isBet ? 'BET' : 'RAISE'} action - hand.round=${hand.round}, actionType=${actionType}, eventActionType=${eventActionType}, nextSeat=${nextSeat}`);
     const handAction = await createActionAndEvent(
       tx,
       hand.id,
@@ -3134,7 +3166,8 @@ export async function raiseAction(
       hand,
       normalizedAddress,
       eventActionType,
-      isAllIn
+      isAllIn,
+      nextSeat
     );
     console.log(`[DEBUG ${isBet ? 'betAction' : 'raiseAction'}] Hand ${hand.id}: ${isBet ? 'BET' : 'RAISE'} action created successfully, checking if round complete`);
 
@@ -3254,7 +3287,11 @@ export async function allInAction(
       });
     }
 
-    // 10. Create all-in action record and event
+    // 10. Calculate next action seat before creating event (for event payload)
+    // This allows the frontend to update the active player glow and action buttons immediately
+    const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
+    
+    // 11. Create all-in action record and event
     // Store incremental amount (incrementalAmount) instead of total (allInAmount)
     const handAction = await createActionAndEvent(
       tx,
@@ -3267,7 +3304,8 @@ export async function allInAction(
       hand,
       normalizedAddress,
       'ALL_IN',
-      true
+      true,
+      nextSeat
     );
 
     // 11. Update pots conditionally (create side pots if commitments differ, otherwise update total)

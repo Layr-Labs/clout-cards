@@ -1665,6 +1665,10 @@
 }
 
 /* Golden glow when it's player's turn */
+.table-seat-player-info {
+  transition: box-shadow 0.5s ease-in-out, border-color 0.5s ease-in-out;
+}
+
 .table-seat-player-info-turn {
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.5),
@@ -2127,6 +2131,18 @@
   flex-direction: column;
   gap: 12px;
   align-items: center;
+  animation: actionButtonsFadeIn 0.5s ease-in-out;
+}
+
+@keyframes actionButtonsFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .table-action-info {

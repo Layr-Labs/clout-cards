@@ -110,7 +110,7 @@ function Table() {
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
   const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
   const [actionAnimation, setActionAnimation] = useState<{
-    actionType: 'BET' | 'RAISE' | 'CALL'
+    actionType: 'BET' | 'RAISE' | 'CALL' | 'ALL_IN'
     playerAvatarUrl: string | null
     playerHandle: string | null
     amount: string | null
@@ -333,12 +333,12 @@ function Table() {
           const actionType = actionData?.type as string
           const playerWalletAddress = actionData?.walletAddress?.toLowerCase() || ''
           
-          // Trigger animation for BET, RAISE, and CALL actions only
-          if (actionType === 'BET' || actionType === 'RAISE' || actionType === 'CALL') {
+          // Trigger animation for BET, RAISE, CALL, and ALL_IN actions
+          if (actionType === 'BET' || actionType === 'RAISE' || actionType === 'CALL' || actionType === 'ALL_IN') {
             const amount = actionData?.amount || actionData?.chipsCommitted || null
             
             setActionAnimation({
-              actionType: actionType as 'BET' | 'RAISE' | 'CALL',
+              actionType: actionType === 'ALL_IN' ? 'ALL_IN' : (actionType as 'BET' | 'RAISE' | 'CALL'),
               playerAvatarUrl: null,
               playerHandle: null,
               amount: amount ? formatEth(amount) : null,
@@ -380,6 +380,7 @@ function Table() {
         case 'community_cards': {
           // Update community cards
           // Event payload contains: table, hand, communityCards (new cards only), allCommunityCards (all cards)
+          // When community cards are dealt, a new betting round starts, so reset currentBet and lastRaiseAmount
           const allCommunityCards = (payload.allCommunityCards as any[]) || []
           const handData = payload.hand as any
 
@@ -394,8 +395,8 @@ function Table() {
               })),
               round: handData.round || prev.round,
               currentActionSeat: handData.currentActionSeat ?? prev.currentActionSeat,
-              currentBet: handData.currentBet?.toString() || prev.currentBet,
-              lastRaiseAmount: handData.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
+              currentBet: '0', // Reset to 0 for new betting round
+              lastRaiseAmount: null, // Reset to null for new betting round
               lastEventId: event.eventId,
             }
           })
@@ -970,7 +971,7 @@ function Table() {
             <div className="table-action-overlay">
               <div className="table-action-overlay-content">
                 <div className="table-action-overlay-action">
-                  {actionAnimation.actionType}
+                  {actionAnimation.actionType === 'ALL_IN' ? 'ALL IN!' : actionAnimation.actionType}
                 </div>
                 {actionAnimation.amount && (
                   <div className="table-action-overlay-amount">
