@@ -110,7 +110,7 @@ function Table() {
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
   const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
   const [actionAnimation, setActionAnimation] = useState<{
-    actionType: 'BET' | 'RAISE' | 'CALL' | 'ALL_IN'
+    actionType: 'BET' | 'RAISE' | 'CALL' | 'ALL_IN' | 'CHECK' | 'FOLD'
     playerAvatarUrl: string | null
     playerHandle: string | null
     amount: string | null
@@ -384,21 +384,22 @@ function Table() {
           const actionType = actionData?.type as string
           const playerWalletAddress = actionData?.walletAddress?.toLowerCase() || ''
           
-          // Trigger animation for BET, RAISE, CALL, and ALL_IN actions
-          if (actionType === 'BET' || actionType === 'RAISE' || actionType === 'CALL' || actionType === 'ALL_IN') {
-            const amount = actionData?.amount || actionData?.chipsCommitted || null
+          // Trigger animation for BET, RAISE, CALL, ALL_IN, CHECK, and FOLD actions
+          if (actionType === 'BET' || actionType === 'RAISE' || actionType === 'CALL' || actionType === 'ALL_IN' || actionType === 'CHECK' || actionType === 'FOLD') {
+            // CHECK and FOLD have no amount, others use the amount from the action
+            const amount = (actionType === 'CHECK' || actionType === 'FOLD') ? null : (actionData?.amount || actionData?.chipsCommitted || null)
             
             setActionAnimation({
-              actionType: actionType === 'ALL_IN' ? 'ALL_IN' : (actionType as 'BET' | 'RAISE' | 'CALL'),
+              actionType: actionType === 'ALL_IN' ? 'ALL_IN' : (actionType === 'CHECK' ? 'CHECK' : (actionType === 'FOLD' ? 'FOLD' : (actionType as 'BET' | 'RAISE' | 'CALL'))),
               playerAvatarUrl: null,
               playerHandle: null,
               amount: amount ? formatEth(amount) : null,
             })
             
-            // Clear animation after it completes (swipe in ~0.5s + hold 2s + swipe out ~0.5s = ~3s total)
+            // Clear animation after it completes (swipe in ~0.5s + hold ~0.5s + swipe out ~0.5s = ~1.5s total)
             setTimeout(() => {
               setActionAnimation(null)
-            }, 3000)
+            }, 1500)
           }
           
           setCurrentHand((prev) => {
@@ -1027,7 +1028,10 @@ function Table() {
             <div className="table-action-overlay">
               <div className="table-action-overlay-content">
                 <div className="table-action-overlay-action">
-                  {actionAnimation.actionType === 'ALL_IN' ? 'ALL IN!' : actionAnimation.actionType}
+                  {actionAnimation.actionType === 'ALL_IN' ? 'ALL IN!' : 
+                   actionAnimation.actionType === 'CHECK' ? 'CHECK!' : 
+                   actionAnimation.actionType === 'FOLD' ? 'FOLD!' : 
+                   actionAnimation.actionType}
                 </div>
                 {actionAnimation.amount && (
                   <div className="table-action-overlay-amount">

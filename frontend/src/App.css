@@ -1920,7 +1920,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 10;
-  animation: actionOverlayAnimation 3s ease-in-out forwards;
+  animation: actionOverlayAnimation 1.5s ease-in-out forwards;
   pointer-events: none;
   backdrop-filter: blur(10px) saturate(180%);
   -webkit-backdrop-filter: blur(10px) saturate(180%);
@@ -1966,11 +1966,11 @@
     opacity: 0;
     transform: translate(-150%, -50%);
   }
-  16.67% {
+  33.33% {
     opacity: 1;
     transform: translate(-50%, -50%);
   }
-  83.33% {
+  66.67% {
     opacity: 1;
     transform: translate(-50%, -50%);
   }
