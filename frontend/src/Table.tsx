@@ -115,6 +115,8 @@ function Table() {
     playerHandle: string | null
     amount: string | null
   } | null>(null)
+  const [updatingPotNumbers, setUpdatingPotNumbers] = useState<Set<number>>(new Set())
+  const previousPotAmountsRef = useRef<Map<number, string>>(new Map())
   const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   const { address, signature, isLoggedIn } = useWallet()
@@ -252,6 +254,54 @@ function Table() {
     loadInitialHand()
   }, [tableId, isFullyLoggedIn, address, signature, players.length])
 
+  // Track pot amount changes and trigger update animations
+  useEffect(() => {
+    if (!currentHand || !currentHand.pots) return
+
+    const currentPotAmounts = new Map<number, string>()
+    const newlyUpdating = new Set<number>()
+
+    // Check each pot for amount changes
+    currentHand.pots.forEach((pot) => {
+      const currentAmount = pot.amount
+      const previousAmount = previousPotAmountsRef.current.get(pot.potNumber)
+      
+      currentPotAmounts.set(pot.potNumber, currentAmount)
+      
+      // If amount changed and pot already existed, trigger update animation
+      if (previousAmount !== undefined && previousAmount !== currentAmount) {
+        newlyUpdating.add(pot.potNumber)
+        // Remove the updating class after animation completes
+        setTimeout(() => {
+          setUpdatingPotNumbers((prev) => {
+            const next = new Set(prev)
+            next.delete(pot.potNumber)
+            return next
+          })
+        }, 600)
+      }
+    })
+
+    // Remove pots that no longer exist
+    previousPotAmountsRef.current.forEach((_, potNumber) => {
+      if (!currentPotAmounts.has(potNumber)) {
+        previousPotAmountsRef.current.delete(potNumber)
+      }
+    })
+
+    // Update ref with current amounts
+    previousPotAmountsRef.current = currentPotAmounts
+
+    // Trigger animations for changed pots
+    if (newlyUpdating.size > 0) {
+      setUpdatingPotNumbers((prev) => {
+        const next = new Set(prev)
+        newlyUpdating.forEach((potNumber) => next.add(potNumber))
+        return next
+      })
+    }
+  }, [currentHand?.pots])
+
   /**
    * Event handler for SSE events
    * Updates state based on event type
@@ -327,9 +377,10 @@ function Table() {
 
         case 'hand_action': {
           // Update player action state
-          // Event payload contains: table, hand, action (with walletAddress, type: 'BET'|'RAISE'|'CALL'|'FOLD'|'ALL_IN', amount, etc.)
+          // Event payload contains: table, hand, pots, action (with walletAddress, type: 'BET'|'RAISE'|'CALL'|'FOLD'|'ALL_IN', amount, etc.)
           const handData = payload.hand as any
           const actionData = payload.action as any
+          const potsData = (payload.pots as any[]) || []
           const actionType = actionData?.type as string
           const playerWalletAddress = actionData?.walletAddress?.toLowerCase() || ''
           
@@ -368,6 +419,11 @@ function Table() {
             return {
               ...prev,
               players: updatedPlayers,
+              pots: potsData.map((pot: any) => ({
+                potNumber: pot.potNumber,
+                amount: pot.amount?.toString() || '0',
+                eligibleSeatNumbers: pot.eligibleSeatNumbers || pot.winnerSeatNumbers || [],
+              })),
               currentActionSeat: handData?.currentActionSeat ?? prev.currentActionSeat,
               currentBet: handData?.currentBet?.toString() || prev.currentBet,
               lastRaiseAmount: handData?.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
@@ -945,7 +1001,7 @@ function Table() {
                       )
                     })}
                   </div>
-                  <div className="table-pot-amount">
+                  <div className={`table-pot-amount ${updatingPotNumbers.has(pot.potNumber) ? 'updating' : ''}`}>
                     {formatEth(pot.amount)}
                   </div>
                 </div>

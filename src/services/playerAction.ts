@@ -1339,13 +1339,24 @@ async function createActionAndEvent(
   // Note: This ensures side pots are preserved if they exist
   await updatePotsIfNeeded(handId, tx);
 
-  // 3. Get updated hand state to include currentActionSeat, currentBet, and lastRaiseAmount in event payload
+  // 3. Get updated hand state and pots to include in event payload
   // Query the hand to get the latest values
   const updatedHand = await (tx as any).hand.findUnique({
     where: { id: handId },
     select: { currentActionSeat: true, currentBet: true, lastRaiseAmount: true },
   });
   const updatedCurrentActionSeat = currentActionSeat !== undefined ? currentActionSeat : (updatedHand?.currentActionSeat ?? null);
+
+  // Query updated pots after updatePotsIfNeeded
+  const updatedPots = await (tx as any).pot.findMany({
+    where: { handId },
+    orderBy: { potNumber: 'asc' },
+  });
+  const pots = updatedPots.map((pot: any) => ({
+    potNumber: pot.potNumber,
+    amount: pot.amount?.toString() || '0',
+    eligibleSeatNumbers: Array.isArray(pot.eligibleSeatNumbers) ? pot.eligibleSeatNumbers : [],
+  }));
 
   // 4. Create hand action event
   const actionPayload = {
@@ -1362,6 +1373,7 @@ async function createActionAndEvent(
       currentBet: updatedHand?.currentBet?.toString() || null,
       lastRaiseAmount: updatedHand?.lastRaiseAmount?.toString() || null,
     },
+    pots,
     action: {
       type: eventActionType,
       seatNumber,
