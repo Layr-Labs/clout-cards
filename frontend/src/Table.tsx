@@ -461,16 +461,36 @@ function Table() {
         }
 
         case 'hand_end': {
-          // Update hand end state
-          // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players
+          // Update hand end state and reveal all hole cards
+          // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players (with holeCards)
           const potsData = (payload.pots as any[]) || []
+          const playersData = (payload.players as any[]) || []
 
           setCurrentHand((prev) => {
             if (!prev) return prev
 
+            // Map players from payload to reveal all hole cards and update their statuses
+            const playersWithRevealedCards = prev.players.map((prevPlayer) => {
+              const payloadPlayer = playersData.find((p: any) => p.seatNumber === prevPlayer.seatNumber)
+              if (payloadPlayer) {
+                return {
+                  ...prevPlayer,
+                  status: payloadPlayer.status || prevPlayer.status,
+                  holeCards: payloadPlayer.holeCards ? payloadPlayer.holeCards.map((card: any) => ({
+                    suit: card.suit,
+                    rank: card.rank,
+                  })) : prevPlayer.holeCards,
+                }
+              }
+              return prevPlayer
+            })
+
+            // Set status to COMPLETED and clear currentActionSeat immediately to trigger action button exit animation
             return {
               ...prev,
               status: 'COMPLETED',
+              currentActionSeat: null, // Clear action seat so isUserTurn() returns false immediately
+              players: playersWithRevealedCards,
               pots: potsData.map((pot: any) => ({
                 potNumber: pot.potNumber,
                 amount: pot.amount?.toString() || '0',
@@ -479,6 +499,10 @@ function Table() {
               lastEventId: event.eventId,
             }
           })
+
+          // Wait 10 seconds before completing event processing
+          // This ensures hand_start events that arrive immediately will wait until cards are revealed
+          await new Promise(resolve => setTimeout(resolve, 10000))
           break
         }
 
@@ -1229,8 +1253,15 @@ function Table() {
 
         {/* Action Buttons - Show when it's user's turn */}
         {/* Positioned above community cards to avoid covering player cards */}
-        {currentHand && isUserTurn() && (
-          <div className="table-action-buttons">
+        <AnimatePresence>
+          {currentHand && isUserTurn() && (
+            <motion.div
+              className="table-action-buttons"
+              initial={{ opacity: 0, y: 20, x: '-50%' }}
+              animate={{ opacity: 1, y: 0, x: '-50%' }}
+              exit={{ opacity: 0, y: 20, x: '-50%' }}
+              transition={{ duration: 0.5, ease: 'easeInOut' }}
+            >
             <div className="table-action-info">
               {actionError && (
                 <div className="table-action-error" style={{ color: '#ef4444', fontSize: '0.9rem', marginBottom: '8px' }}>
@@ -1298,8 +1329,9 @@ function Table() {
                 All-in
               </button>
             </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
       {/* Login Dialog */}
