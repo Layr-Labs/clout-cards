@@ -87,6 +87,7 @@ export async function joinTable(
     seatNumber: input.seatNumber,
     buyInAmountGwei: input.buyInAmountGwei.toString(),
     twitterHandle: twitterHandle,
+    twitterAvatarUrl: twitterAvatarUrl,
   };
   const payloadJson = JSON.stringify(payload);
 

@@ -726,12 +726,11 @@ function Table() {
         signature
       )
 
-      // Close dialog and refresh players
+      // Close dialog
       setIsStandUpConfirmOpen(false)
       
-      // Refresh players list
-      const fetchedPlayers = await getTablePlayers(tableId)
-      setPlayers(fetchedPlayers)
+      // Don't refresh players here - wait for leave_table SSE event
+      // The SSE event will trigger animations which will update the players list
 
       // Note: Escrow balance will be refreshed automatically by the useEscrowBalance hook
       // when the user navigates to a page that displays it (like Profile)

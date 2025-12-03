@@ -140,6 +140,7 @@ export async function standUp(
       seatNumber: session.seatNumber,
       finalBalanceGwei: tableBalanceGwei.toString(),
       twitterHandle: session.twitterHandle,
+      twitterAvatarUrl: session.twitterAvatarUrl,
     };
     const payloadJson = JSON.stringify(payload);
 
