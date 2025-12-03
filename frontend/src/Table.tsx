@@ -172,9 +172,11 @@ function Table() {
     playerHandle: string | null
     amount: string | null
   } | null>(null)
+  const [showNewHandMessage, setShowNewHandMessage] = useState(false)
   const [updatingPotNumbers, setUpdatingPotNumbers] = useState<Set<number>>(new Set())
   const previousPotAmountsRef = useRef<Map<number, string>>(new Map())
   const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const [winnerSeats, setWinnerSeats] = useState<Set<number>>(new Set())
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -392,6 +394,15 @@ function Table() {
     try {
       switch (kind) {
         case 'hand_start': {
+          // Clear winner seats when new hand starts
+          setWinnerSeats(new Set())
+          
+          // Show "NEW HAND" message animation
+          setShowNewHandMessage(true)
+          setTimeout(() => {
+            setShowNewHandMessage(false)
+          }, 1500) // Same duration as action animation
+          
           console.log('[Table] hand_start event received', {
             eventId: event.eventId,
             payload: payload,
@@ -684,6 +695,16 @@ function Table() {
           // Event payload contains: table, hand (with winnerSeatNumbers, totalPotAmount, etc.), pots, players (with holeCards and tableBalanceGwei)
           const potsData = (payload.pots as any[]) || []
           const playersData = (payload.players as any[]) || []
+
+          // Extract all winner seat numbers from all pots
+          const allWinnerSeats = new Set<number>()
+          potsData.forEach((pot: any) => {
+            const winnerSeatNumbers = pot.winnerSeatNumbers || pot.eligibleSeatNumbers || []
+            winnerSeatNumbers.forEach((seatNum: number) => {
+              allWinnerSeats.add(seatNum)
+            })
+          })
+          setWinnerSeats(allWinnerSeats)
 
           // Update table balances for all players and trigger animations
           // Use functional setState to avoid stale closure issue
@@ -1332,6 +1353,17 @@ function Table() {
               </div>
             </div>
           )}
+
+          {/* New Hand Message Overlay - Centered over Community Cards */}
+          {showNewHandMessage && (
+            <div className="table-action-overlay">
+              <div className="table-action-overlay-content">
+                <div className="table-action-overlay-action">
+                  NEW HAND!
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Seat Avatars */}
           {table && table.maxSeatCount > 0 && (
@@ -1366,7 +1398,7 @@ function Table() {
                     {hasPlayer && player.twitterHandle ? (
                       <>
                         {/* Player Avatar */}
-                        <div className="table-seat-avatar-circle table-seat-avatar-filled">
+                        <div className={`table-seat-avatar-circle table-seat-avatar-filled ${winnerSeats.has(seatIndex) ? 'table-seat-winner-bounce' : ''}`}>
                           {player.twitterAvatarUrl ? (
                             <img
                               src={player.twitterAvatarUrl}
@@ -1466,7 +1498,7 @@ function Table() {
                         })()}
                         
                         {/* Player Info Box */}
-                        <div className={`table-seat-player-info ${position.x > 50 ? 'table-seat-player-info-right' : ''} ${isSeatTurn(seatIndex) ? 'table-seat-player-info-turn' : ''}`}>
+                        <div className={`table-seat-player-info ${position.x > 50 ? 'table-seat-player-info-right' : ''} ${isSeatTurn(seatIndex) ? 'table-seat-player-info-turn' : ''} ${winnerSeats.has(seatIndex) ? 'table-seat-winner-bounce' : ''}`}>
                           <div 
                             className="table-seat-player-info-content"
                             style={{

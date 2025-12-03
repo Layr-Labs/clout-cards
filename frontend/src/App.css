@@ -1696,6 +1696,36 @@
   }
 }
 
+/* Winner bounce animation - scale bounce effect for avatar and info box */
+.table-seat-winner-bounce {
+  animation: winnerBounce 0.6s ease-in-out 3;
+}
+
+@keyframes winnerBounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.15);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+}
+
+/* Ensure avatar circle maintains transform origin for bounce */
+.table-seat-avatar-circle.table-seat-winner-bounce {
+  transform-origin: center center;
+}
+
+/* Ensure info box maintains transform origin for bounce */
+.table-seat-player-info.table-seat-winner-bounce {
+  transform-origin: center center;
+}
+
 .table-seat-twitter-handle {
   display: block;
   color: #1da1f2;
