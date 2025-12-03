@@ -309,6 +309,7 @@ export interface HandPot {
   potNumber: number;
   amount: string;
   eligibleSeatNumbers: number[];
+  winnerHandRankName?: string | null; // Hand rank name of the winner (e.g., "Full House", "Two Pair") - only set when hand ends
 }
 
 /**

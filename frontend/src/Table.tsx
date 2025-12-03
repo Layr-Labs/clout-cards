@@ -665,6 +665,8 @@ function Table() {
                     suit: card.suit,
                     rank: card.rank,
                   })) : prevPlayer.holeCards,
+                  // Store hand rank name for display (only for non-folded players)
+                  handRankName: payloadPlayer.handRankName || null,
                 }
               }
               return prevPlayer
@@ -677,11 +679,21 @@ function Table() {
               status: 'COMPLETED',
               currentActionSeat: null, // Clear action seat so isUserTurn() returns false immediately
               players: playersWithRevealedCards,
-              pots: potsData.map((pot: any) => ({
-                potNumber: pot.potNumber,
-                amount: pot.amount?.toString() || '0',
-                eligibleSeatNumbers: pot.winnerSeatNumbers || pot.eligibleSeatNumbers || [],
-              })),
+              pots: potsData.map((pot: any) => {
+                // Find the winner's hand rank name (use first winner if multiple)
+                const winnerSeatNumbers = pot.winnerSeatNumbers || pot.eligibleSeatNumbers || []
+                const winnerPlayer = playersData.find((p: any) => 
+                  winnerSeatNumbers.length > 0 && p.seatNumber === winnerSeatNumbers[0]
+                )
+                const winnerHandRankName = winnerPlayer?.handRankName || null
+                
+                return {
+                  potNumber: pot.potNumber,
+                  amount: pot.amount?.toString() || '0',
+                  eligibleSeatNumbers: winnerSeatNumbers,
+                  winnerHandRankName, // Store winner's hand rank name for display
+                }
+              }),
               lastEventId: event.eventId,
             }
           })
@@ -1199,23 +1211,30 @@ function Table() {
             <div className="table-pots">
               {currentHand.pots.map((pot) => (
                 <div key={pot.potNumber} className="table-pot">
-                  <div className="table-pot-avatars">
-                    {pot.eligibleSeatNumbers.map((seatNum) => {
-                      const handPlayer = getHandPlayerBySeat(seatNum)
-                      if (!handPlayer?.twitterAvatarUrl) return null
-                      return (
-                        <img
-                          key={seatNum}
-                          src={handPlayer.twitterAvatarUrl}
-                          alt={handPlayer.twitterHandle || 'Player'}
-                          className="table-pot-avatar"
-                        />
-                      )
-                    })}
+                  <div className="table-pot-top-row">
+                    <div className="table-pot-avatars">
+                      {pot.eligibleSeatNumbers.map((seatNum) => {
+                        const handPlayer = getHandPlayerBySeat(seatNum)
+                        if (!handPlayer?.twitterAvatarUrl) return null
+                        return (
+                          <img
+                            key={seatNum}
+                            src={handPlayer.twitterAvatarUrl}
+                            alt={handPlayer.twitterHandle || 'Player'}
+                            className="table-pot-avatar"
+                          />
+                        )
+                      })}
+                    </div>
+                    <div className={`table-pot-amount ${updatingPotNumbers.has(pot.potNumber) ? 'updating' : ''}`}>
+                      {formatEth(pot.amount)}
+                    </div>
                   </div>
-                  <div className={`table-pot-amount ${updatingPotNumbers.has(pot.potNumber) ? 'updating' : ''}`}>
-                    {formatEth(pot.amount)}
-                  </div>
+                  {currentHand.status === 'COMPLETED' && pot.winnerHandRankName && (
+                    <div className="table-pot-hand-rank">
+                      {pot.winnerHandRankName}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

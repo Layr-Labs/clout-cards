@@ -2004,13 +2004,20 @@
   border-radius: 8px;
   padding: 6px 10px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   animation: potFadeIn 0.5s ease-out forwards;
   opacity: 0;
   transform: translateY(-20px);
+}
+
+.table-pot-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 @keyframes potFadeIn {
@@ -2031,6 +2038,17 @@
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   white-space: nowrap;
   transition: transform 0.3s ease-out, color 0.3s ease-out;
+}
+
+.table-pot-hand-rank {
+  color: #f4d03f;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+  white-space: nowrap;
+  opacity: 0.9;
 }
 
 .table-pot-amount.updating {
