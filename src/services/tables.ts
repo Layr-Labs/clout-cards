@@ -18,6 +18,7 @@ export interface CreateTableInput {
   maxSeatCount: number;
   smallBlind: bigint;
   bigBlind: bigint;
+  actionTimeoutSeconds?: number | null; // Action timeout in seconds (null or 0 = use default 30s)
   isActive?: boolean;
 }
 
@@ -80,6 +81,7 @@ export async function createTable(
       maxSeatCount: input.maxSeatCount,
       smallBlind: input.smallBlind.toString(),
       bigBlind: input.bigBlind.toString(),
+      actionTimeoutSeconds: input.actionTimeoutSeconds ?? null,
       isActive: input.isActive ?? true,
     },
   };
@@ -97,6 +99,7 @@ export async function createTable(
         maxSeatCount: input.maxSeatCount,
         smallBlind: input.smallBlind,
         bigBlind: input.bigBlind,
+        actionTimeoutSeconds: input.actionTimeoutSeconds ?? null,
         isActive: input.isActive ?? true,
       },
     });

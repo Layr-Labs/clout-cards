@@ -326,6 +326,7 @@ export interface CurrentHand {
   smallBlindSeat: number | null;
   bigBlindSeat: number | null;
   currentActionSeat: number | null;
+  actionTimeoutAt: string | null; // ISO timestamp when current player's turn expires
   currentBet: string | null;
   lastRaiseAmount: string | null;
   lastEventId: number; // Latest event ID for this table (for SSE reconnection)
@@ -377,6 +378,7 @@ export async function getCurrentHand(
     handId: result.handId,
     status: result.status,
     currentActionSeat: result.currentActionSeat,
+    actionTimeoutAt: result.actionTimeoutAt,
     playersCount: result.players.length,
     players: result.players.map(p => ({
       seatNumber: p.seatNumber,

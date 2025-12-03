@@ -2161,6 +2161,26 @@
   color: #ffffff;
 }
 
+/* Action Timeout Countdown */
+.table-seat-action-timeout {
+  position: absolute;
+  top: -35px; /* Position above the avatar circle */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239, 68, 68, 0.9); /* Red background for urgency */
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  z-index: 10;
+  min-width: 32px;
+  text-align: center;
+}
+
 /* Action Buttons */
 .table-action-buttons {
   position: absolute;

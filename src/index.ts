@@ -34,6 +34,7 @@ import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppEr
 import { validateAndGetTableId, validateTableId } from './utils/validation';
 import { serializeTable, serializeTableSeatSession, parseTableInput } from './utils/serialization';
 import { initializeEventNotifier, registerEventCallback, EventNotification } from './db/eventNotifier';
+import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
 
 /**
  * Express application instance
@@ -1398,5 +1399,13 @@ app.listen(APP_PORT, async (): Promise<void> => {
     }
   } else {
     console.log('⚠️  CLOUTCARDS_CONTRACT_ADDRESS not set - contract event listener not started');
+  }
+  
+  // Start action timeout checker (checks every 1.5 seconds)
+  try {
+    startActionTimeoutChecker(1500);
+    console.log('✅ Action timeout checker started');
+  } catch (error) {
+    console.error('⚠️  Failed to start action timeout checker:', error);
   }
 });

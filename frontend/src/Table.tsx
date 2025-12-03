@@ -100,6 +100,50 @@ function BalanceDisplay({
 }
 
 /**
+ * Action timeout countdown component
+ *
+ * Displays a countdown timer above the player avatar when it's their turn.
+ *
+ * @param timeoutAt - ISO timestamp when the timeout expires
+ * @returns JSX element displaying the countdown in seconds, or null if timeout is invalid
+ */
+function ActionTimeoutCountdown({ timeoutAt }: { timeoutAt: string | null }) {
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!timeoutAt) {
+      setSecondsRemaining(null)
+      return
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now()
+      const timeout = new Date(timeoutAt).getTime()
+      const remaining = Math.max(0, Math.floor((timeout - now) / 1000))
+      setSecondsRemaining(remaining)
+    }
+
+    // Update immediately
+    updateCountdown()
+
+    // Update every second
+    const interval = setInterval(updateCountdown, 1000)
+
+    return () => clearInterval(interval)
+  }, [timeoutAt])
+
+  if (secondsRemaining === null || secondsRemaining <= 0) {
+    return null
+  }
+
+  return (
+    <div className="table-seat-action-timeout">
+      {secondsRemaining}s
+    </div>
+  )
+}
+
+/**
  * Table page component for CloutCards
  *
  * Displays a specific poker table with its active players.
@@ -258,11 +302,23 @@ function Table() {
             signature: savedSignature ? `${savedSignature.substring(0, 10)}...` : null,
           })
           const hand = await getCurrentHand(tableId!, savedAddress, savedSignature)
+          console.log('[Table] loadInitialHand: received hand from API', {
+            handId: hand.handId,
+            currentActionSeat: hand.currentActionSeat,
+            actionTimeoutAt: hand.actionTimeoutAt,
+            status: hand.status,
+          })
           setCurrentHand(hand)
         } else {
           // Public endpoint - no authentication required (no hole cards)
           console.log('[Table] loadInitialHand: fetching without auth (public endpoint)')
           const hand = await watchCurrentHand(tableId!)
+          console.log('[Table] loadInitialHand: received hand from public API', {
+            handId: hand.handId,
+            currentActionSeat: hand.currentActionSeat,
+            actionTimeoutAt: hand.actionTimeoutAt,
+            status: hand.status,
+          })
           setCurrentHand(hand)
         }
       } catch (err: any) {
@@ -368,6 +424,7 @@ function Table() {
             smallBlindSeat: handData.smallBlindSeat ?? null,
             bigBlindSeat: handData.bigBlindSeat ?? null,
             currentActionSeat: handData.currentActionSeat ?? null,
+            actionTimeoutAt: handData.actionTimeoutAt ?? null,
             currentBet: handData.currentBet?.toString() || null,
             lastRaiseAmount: handData.lastRaiseAmount?.toString() || null,
             lastEventId: event.eventId,
@@ -474,6 +531,8 @@ function Table() {
                 return {
                   ...handWithHoleCards,
                   players: mergedPlayers,
+                  // Preserve actionTimeoutAt from event (prev state) if it exists, otherwise use API response
+                  actionTimeoutAt: prev.actionTimeoutAt || handWithHoleCards.actionTimeoutAt,
                 }
               })
             } catch (err: any) {
@@ -584,6 +643,7 @@ function Table() {
                 eligibleSeatNumbers: pot.eligibleSeatNumbers || pot.winnerSeatNumbers || [],
               })),
               currentActionSeat: handData?.currentActionSeat ?? prev.currentActionSeat,
+              actionTimeoutAt: handData?.actionTimeoutAt ?? prev.actionTimeoutAt,
               currentBet: handData?.currentBet?.toString() || prev.currentBet,
               lastRaiseAmount: handData?.lastRaiseAmount?.toString() || prev.lastRaiseAmount,
               lastEventId: event.eventId,
@@ -596,8 +656,8 @@ function Table() {
           // Update community cards
           // Event payload contains: table, hand, communityCards (new cards only), allCommunityCards (all cards)
           // When community cards are dealt, a new betting round starts, so reset currentBet and lastRaiseAmount
-          const allCommunityCards = (payload.allCommunityCards as any[]) || []
           const handData = payload.hand as any
+          const allCommunityCards = (payload.allCommunityCards as any[]) || []
 
           setCurrentHand((prev) => {
             if (!prev) return prev
@@ -610,6 +670,7 @@ function Table() {
               })),
               round: handData.round || prev.round,
               currentActionSeat: handData.currentActionSeat ?? prev.currentActionSeat,
+              actionTimeoutAt: handData.actionTimeoutAt ?? prev.actionTimeoutAt,
               currentBet: '0', // Reset to 0 for new betting round
               lastRaiseAmount: null, // Reset to null for new betting round
               lastEventId: event.eventId,
@@ -1332,6 +1393,11 @@ function Table() {
                             </div>
                           )}
                         </div>
+                        
+                        {/* Action Timeout Countdown */}
+                        {currentHand && currentHand.currentActionSeat === seatIndex && currentHand.actionTimeoutAt && (
+                          <ActionTimeoutCountdown timeoutAt={currentHand.actionTimeoutAt} />
+                        )}
                         
                         {/* Badges for dealer/blinds - can show multiple - positioned outside circle to avoid clipping */}
                         {currentHand && (

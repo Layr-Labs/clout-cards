@@ -11,6 +11,7 @@ import { createEventInTransaction, EventKind } from '../db/events';
 import { keccak256, toUtf8Bytes } from 'ethers';
 import { Card, SUITS, RANKS } from '../types/cards';
 import { validateTableExistsAndActive, findActiveHand } from '../utils/tableValidation';
+import { calculateActionTimeout } from './playerAction';
 
 // HandStatus type from Prisma schema
 type HandStatus = 'WAITING_FOR_PLAYERS' | 'SHUFFLING' | 'PRE_FLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'COMPLETED';
@@ -285,17 +286,22 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
       },
     });
 
-    // 9. Update hand status to PRE_FLOP
+    // 9. Calculate action timeout based on table configuration
+    const actionTimeoutAt = calculateActionTimeout(table);
+
+    // 10. Update hand status to PRE_FLOP and set currentActionSeat with timeout
     const updatedHand = await (tx as any).hand.update({
       where: { id: hand.id },
       data: {
         status: 'PRE_FLOP',
         round: 'PRE_FLOP',
         deckPosition, // Update deck position after dealing
+        currentActionSeat,
+        actionTimeoutAt,
       },
     });
 
-    // 10. Create start_hand event with full payload
+    // 11. Create start_hand event with full payload
     const eventPayload = {
       kind: 'hand_start',
       table: {
@@ -311,6 +317,7 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
         currentBet: hand.currentBet?.toString() || table.bigBlind.toString(),
         lastRaiseAmount: hand.lastRaiseAmount?.toString() || (table.bigBlind - table.smallBlind).toString(),
         shuffleSeedHash: deckCommitmentHash,
+        actionTimeoutAt: actionTimeoutAt.toISOString(),
       },
       players: eligiblePlayers.map((p) => ({
         seatNumber: p.seatNumber,

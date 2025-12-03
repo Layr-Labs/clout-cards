@@ -34,6 +34,7 @@ export interface CurrentHandResponse {
   smallBlindSeat: number | null;
   bigBlindSeat: number | null;
   currentActionSeat: number | null;
+  actionTimeoutAt: string | null; // ISO timestamp when current player's turn expires
   currentBet: string | null;
   lastRaiseAmount: string | null;
   lastEventId: number; // Latest event ID for this table (for SSE reconnection)
@@ -163,6 +164,32 @@ export async function getCurrentHandResponse(
 
   const lastEventId = latestEvent?.eventId || 0;
 
+  // Defensive check: if currentActionSeat is set but actionTimeoutAt is null,
+  // recalculate it (handles edge cases like hands started before timeout feature)
+  let actionTimeoutAt: string | null = null;
+  if (hand.currentActionSeat !== null) {
+    if (hand.actionTimeoutAt) {
+      actionTimeoutAt = hand.actionTimeoutAt.toISOString();
+    } else {
+      // Recalculate timeout if missing (defensive fallback)
+      const table = await prisma.pokerTable.findUnique({
+        where: { id: tableId },
+        select: { actionTimeoutSeconds: true },
+      });
+      if (table) {
+        const { calculateActionTimeout } = await import('./playerAction');
+        const timeoutDate = calculateActionTimeout(table);
+        actionTimeoutAt = timeoutDate.toISOString();
+        
+        // Update the hand with the calculated timeout
+        await (prisma as any).hand.update({
+          where: { id: hand.id },
+          data: { actionTimeoutAt: timeoutDate },
+        });
+      }
+    }
+  }
+
   return {
     handId: hand.id,
     status: hand.status,
@@ -174,6 +201,7 @@ export async function getCurrentHandResponse(
     smallBlindSeat: hand.smallBlindSeat,
     bigBlindSeat: hand.bigBlindSeat,
     currentActionSeat: hand.currentActionSeat,
+    actionTimeoutAt,
     currentBet: hand.currentBet?.toString() || null,
     lastRaiseAmount: hand.lastRaiseAmount?.toString() || null,
     lastEventId,

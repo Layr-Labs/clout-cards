@@ -570,6 +570,9 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
     throw new Error(`Table ${hand.tableId} not found`);
   }
 
+  // Calculate action timeout based on table configuration
+  const actionTimeoutAt = calculateActionTimeout(table);
+
   // Update hand state
   console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Updating hand state: round=${nextRound}, status=${nextStatus}, currentActionSeat=${firstActionSeat}, newCommunityCards.length=${newCommunityCards.length}`);
   const updateQuery = {
@@ -582,6 +585,7 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
       currentBet: 0n,
       lastRaiseAmount: null,
       currentActionSeat: firstActionSeat,
+      actionTimeoutAt,
     },
   };
   console.log(`[DEBUG advanceBettingRound] Hand ${handId}: Updating hand with:`, JSON.stringify({
@@ -612,6 +616,7 @@ async function advanceBettingRound(handId: number, tx: any): Promise<boolean> {
       id: handId,
       round: nextRound,
       currentActionSeat: firstActionSeat,
+      actionTimeoutAt: actionTimeoutAt.toISOString(),
     },
     communityCards: newCommunityCards.slice(communityCards.length), // Only the newly dealt cards
     allCommunityCards: newCommunityCards, // All community cards so far
@@ -1150,11 +1155,25 @@ async function handleNextPlayerOrRoundComplete(
       return result;
     }
     
+    // Get table to calculate timeout
+    const table = await tx.pokerTable.findUnique({
+      where: { id: hand.tableId },
+    });
+    if (!table) {
+      throw new Error(`Table ${hand.tableId} not found`);
+    }
+
+    // Calculate action timeout based on table configuration
+    const actionTimeoutAt = calculateActionTimeout(table);
+
     // Update hand to next active player's turn
     console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Round not complete, advancing to next player ${nextSeat}`);
     const updateQuery = {
       where: { id: handId },
-      data: { currentActionSeat: nextSeat },
+      data: { 
+        currentActionSeat: nextSeat,
+        actionTimeoutAt,
+      },
     };
     console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Updating hand with:`, JSON.stringify(updateQuery));
     await (tx as any).hand.update(updateQuery);
@@ -1273,6 +1292,20 @@ function validatePlayerTurn(hand: any, seatNumber: number): void {
 }
 
 /**
+ * Calculates the action timeout timestamp based on table configuration
+ * 
+ * @param table - Table object with actionTimeoutSeconds
+ * @returns Date when the current action expires (30 seconds from now if not configured)
+ */
+export function calculateActionTimeout(table: { actionTimeoutSeconds: number | null }): Date {
+  const timeoutSeconds = (table.actionTimeoutSeconds && table.actionTimeoutSeconds > 0) 
+    ? table.actionTimeoutSeconds 
+    : 30; // Default 30 seconds
+  const timeoutMs = timeoutSeconds * 1000;
+  return new Date(Date.now() + timeoutMs);
+}
+
+/**
  * Creates a HandAction record and creates an event.
  *
  * This helper ensures the correct order of operations:
@@ -1343,9 +1376,37 @@ async function createActionAndEvent(
   // Query the hand to get the latest values
   const updatedHand = await (tx as any).hand.findUnique({
     where: { id: handId },
-    select: { currentActionSeat: true, currentBet: true, lastRaiseAmount: true },
+    select: { currentActionSeat: true, currentBet: true, lastRaiseAmount: true, actionTimeoutAt: true },
   });
   const updatedCurrentActionSeat = currentActionSeat !== undefined ? currentActionSeat : (updatedHand?.currentActionSeat ?? null);
+  
+  // Get table to calculate timeout if needed
+  const tableRecord = await tx.pokerTable.findUnique({
+    where: { id: table.id },
+    select: { actionTimeoutSeconds: true },
+  });
+  
+  // Calculate timeout if currentActionSeat was just set (for next player)
+  let actionTimeoutAt: string | null = null;
+  if (updatedCurrentActionSeat !== null) {
+    // Check if timeout was already set (from handleNextPlayerOrRoundComplete)
+    if (updatedHand?.actionTimeoutAt) {
+      actionTimeoutAt = updatedHand.actionTimeoutAt.toISOString();
+    } else {
+      // Calculate new timeout
+      if (!tableRecord) {
+        throw new Error(`Table ${table.id} not found`);
+      }
+      const timeoutDate = calculateActionTimeout(tableRecord);
+      actionTimeoutAt = timeoutDate.toISOString();
+      
+      // Update hand with timeout
+      await (tx as any).hand.update({
+        where: { id: handId },
+        data: { actionTimeoutAt: timeoutDate },
+      });
+    }
+  }
 
   // Query updated pots after updatePotsIfNeeded
   const updatedPots = await (tx as any).pot.findMany({
@@ -1384,6 +1445,7 @@ async function createActionAndEvent(
       currentActionSeat: updatedCurrentActionSeat,
       currentBet: updatedHand?.currentBet?.toString() || null,
       lastRaiseAmount: updatedHand?.lastRaiseAmount?.toString() || null,
+      actionTimeoutAt,
     },
     pots,
     action: {
@@ -2288,10 +2350,20 @@ async function handlePostActionSettlement(
  * @returns Success indicator
  * @throws {Error} If validation fails or transaction fails
  */
+/**
+ * Folds a player's hand (manual or auto-fold)
+ *
+ * @param prismaClient - Prisma client
+ * @param tableId - Table ID
+ * @param walletAddress - Player's wallet address
+ * @param reason - Reason for fold: 'manual' (player action) or 'timeout' (auto-fold)
+ * @returns Result object with success status and hand state
+ */
 export async function foldAction(
   prismaClient: PrismaClient,
   tableId: number,
-  walletAddress: string
+  walletAddress: string,
+  reason: 'manual' | 'timeout' = 'manual'
 ): Promise<{ success: boolean; handEnded: boolean; roundAdvanced: boolean; tableId: number; winnerSeatNumber: number | null }> {
   const normalizedAddress = walletAddress.toLowerCase();
 
@@ -2357,6 +2429,33 @@ export async function foldAction(
         },
       });
 
+      // Calculate timeout for next player if hand continues
+      const nextSeat = await getNextActivePlayer(hand.id, seatSession.seatNumber, tx);
+      let actionTimeoutAt: string | null = null;
+      
+      if (nextSeat !== null) {
+        const timeoutDate = calculateActionTimeout(table);
+        actionTimeoutAt = timeoutDate.toISOString();
+        
+        // Update hand with next action seat and timeout
+        await (tx as any).hand.update({
+          where: { id: hand.id },
+          data: {
+            currentActionSeat: nextSeat,
+            actionTimeoutAt: timeoutDate,
+          },
+        });
+      } else {
+        // No next player, clear timeout
+        await (tx as any).hand.update({
+          where: { id: hand.id },
+          data: {
+            currentActionSeat: null,
+            actionTimeoutAt: null,
+          },
+        });
+      }
+
       // 8. Create hand action event with full metadata
       const actionPayload = {
         kind: 'hand_action',
@@ -2368,6 +2467,8 @@ export async function foldAction(
           id: hand.id,
           round: hand.round,
           status: hand.status,
+          currentActionSeat: nextSeat,
+          actionTimeoutAt,
         },
         action: {
           type: 'FOLD',
@@ -2376,6 +2477,7 @@ export async function foldAction(
           amount: null,
           tableBalanceGwei: updatedSeatSession?.tableBalanceGwei?.toString() || null,
           timestamp: handAction.timestamp.toISOString(),
+          reason, // Include reason: 'manual' or 'timeout'
         },
       };
       const actionPayloadJson = JSON.stringify(actionPayload);
@@ -2781,6 +2883,31 @@ export async function checkAction(
       },
     });
 
+    // Calculate timeout for next player if hand continues
+    let actionTimeoutAt: string | null = null;
+    if (nextSeat !== null) {
+      const timeoutDate = calculateActionTimeout(table);
+      actionTimeoutAt = timeoutDate.toISOString();
+      
+      // Update hand with next action seat and timeout
+      await (tx as any).hand.update({
+        where: { id: hand.id },
+        data: {
+          currentActionSeat: nextSeat,
+          actionTimeoutAt: timeoutDate,
+        },
+      });
+    } else {
+      // No next player, clear timeout
+      await (tx as any).hand.update({
+        where: { id: hand.id },
+        data: {
+          currentActionSeat: null,
+          actionTimeoutAt: null,
+        },
+      });
+    }
+
     // 9. Create hand action event
     const actionPayload = {
       kind: 'hand_action',
@@ -2795,6 +2922,7 @@ export async function checkAction(
         currentActionSeat: nextSeat,
         currentBet: hand.currentBet?.toString() || null,
         lastRaiseAmount: hand.lastRaiseAmount?.toString() || null,
+        actionTimeoutAt,
       },
       action: {
         type: 'CHECK',

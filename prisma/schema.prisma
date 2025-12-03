@@ -51,17 +51,18 @@ model Event {
  * Tables can be created, activated/deactivated, and searched by buy-in ranges.
  */
 model PokerTable {
-  id           Int      @id @default(autoincrement()) @map("poker_table_id")
-  name         String   @unique @db.VarChar(255) // Unique table name/identifier
-  minimumBuyIn BigInt   @map("minimum_buy_in") // Minimum buy-in in gwei
-  maximumBuyIn BigInt   @map("maximum_buy_in") // Maximum buy-in in gwei
-  perHandRake  Int      @map("per_hand_rake") // Rake per hand in basis points (bps), e.g., 100 = 1% (must be >= 0)
-  maxSeatCount Int      @map("max_seat_count") // Maximum number of seats (0-8)
-  smallBlind   BigInt   @map("small_blind") // Small blind amount in gwei
-  bigBlind     BigInt   @map("big_blind") // Big blind amount in gwei
-  isActive     Boolean  @default(true) @map("is_active") // Whether the table is currently active
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                 Int       @id @default(autoincrement()) @map("poker_table_id")
+  name               String    @unique @db.VarChar(255) // Unique table name/identifier
+  minimumBuyIn       BigInt    @map("minimum_buy_in") // Minimum buy-in in gwei
+  maximumBuyIn       BigInt    @map("maximum_buy_in") // Maximum buy-in in gwei
+  perHandRake        Int       @map("per_hand_rake") // Rake per hand in basis points (bps), e.g., 100 = 1% (must be >= 0)
+  maxSeatCount       Int       @map("max_seat_count") // Maximum number of seats (0-8)
+  smallBlind         BigInt    @map("small_blind") // Small blind amount in gwei
+  bigBlind           BigInt    @map("big_blind") // Big blind amount in gwei
+  actionTimeoutSeconds Int?    @map("action_timeout_seconds") // Action timeout in seconds (null or 0 = use default 30s)
+  isActive           Boolean   @default(true) @map("is_active") // Whether the table is currently active
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   // Relations
   seatSessions TableSeatSession[]
@@ -195,6 +196,7 @@ model Hand {
   smallBlindSeat    Int?          @map("small_blind_seat") // Seat number posting small blind
   bigBlindSeat      Int?          @map("big_blind_seat") // Seat number posting big blind
   currentActionSeat Int?          @map("current_action_seat") // Seat number whose turn it is to act
+  actionTimeoutAt   DateTime?     @map("action_timeout_at") // When the current player's turn expires (null if no active turn)
   currentBet        BigInt?       @map("current_bet") // Highest bet amount this round (in gwei). Total amount a player must call to stay in. Example: if BB=100 and someone raises to 300, currentBet=300.
   lastRaiseAmount   BigInt?       @map("last_raise_amount") // Amount of the last raise (in gwei), used to enforce minimum raise rules in no-limit poker. Example: if BB=100 and someone raises to 300, lastRaiseAmount=200 (they raised by 200). Next raise must be at least 200 more. Null if no raises have occurred yet (only blinds posted).
   deck              Json // Full shuffled deck (52 cards) as JSON array
