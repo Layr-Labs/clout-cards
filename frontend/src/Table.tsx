@@ -14,7 +14,7 @@ import { useTwitterUser } from './hooks/useTwitterUser'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
 import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
-import type { JoinTableEventPayload } from './utils/animations'
+import type { JoinTableEventPayload, LeaveTableEventPayload } from './utils/animations'
 import { AnimatePresence, motion } from 'framer-motion'
 
 /**
@@ -108,6 +108,7 @@ function Table() {
   const [isBetRaiseDialogOpen, setIsBetRaiseDialogOpen] = useState(false)
   const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string } | null>(null)
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
+  const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
   const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   const { address, signature, isLoggedIn } = useWallet()
@@ -463,8 +464,24 @@ function Table() {
         }
 
         case 'leave_table': {
-          // Player left - animation will be handled in Phase 7
-          // For now, do nothing - state will be updated via animations later
+          // Player left - animate out, then remove from players list
+          const leavePayload = payload as unknown as LeaveTableEventPayload
+          const seatNumber = leavePayload.seatNumber
+          
+          // Mark seat as leaving (triggers CSS animations)
+          setLeavingSeats((prev) => new Set(prev).add(seatNumber))
+          
+          // Remove from players list after animation completes (0.6s)
+          setTimeout(() => {
+            setPlayers((prevPlayers) => prevPlayers.filter(p => p.seatNumber !== seatNumber))
+            
+            // Remove from leaving seats
+            setLeavingSeats((prev) => {
+              const next = new Set(prev)
+              next.delete(seatNumber)
+              return next
+            })
+          }, 600)
           break
         }
 
@@ -950,7 +967,7 @@ function Table() {
                         seatRefs.current.delete(seatIndex)
                       }
                     }}
-                    className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''}`}
+                    className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''}`}
                     style={{
                       left: `${position.x}%`,
                       top: `${position.y}%`,
