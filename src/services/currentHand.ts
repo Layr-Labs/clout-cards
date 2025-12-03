@@ -115,19 +115,6 @@ export async function getCurrentHandResponse(
       ? player.holeCards
       : null;
 
-    console.log('[getCurrentHandResponse] processing player', {
-      seatNumber: player.seatNumber,
-      walletAddress: player.walletAddress,
-      status: player.status,
-      isAuthorizedPlayer,
-      includeHoleCards,
-      normalizedAddress,
-      playerWalletLower: player.walletAddress.toLowerCase(),
-      hasHoleCardsInDB,
-      shouldReturnHoleCards,
-      holeCardsToReturn: holeCardsToReturn ? `${holeCardsToReturn.length} cards` : null,
-    });
-
     return {
       seatNumber: player.seatNumber,
       walletAddress: player.walletAddress,
