@@ -1306,6 +1306,116 @@ export function calculateActionTimeout(table: { actionTimeoutSeconds: number | n
 }
 
 /**
+ * Builds a consistent hand_action event payload
+ *
+ * Ensures all action events include pots and have consistent structure.
+ * This prevents bugs where pot data is missing from events.
+ *
+ * @param tx - Prisma transaction client
+ * @param handId - Hand ID
+ * @param table - Table object with id and name
+ * @param hand - Hand object with id, round, and status
+ * @param currentActionSeat - Current action seat (for next player)
+ * @param actionTimeoutAt - Action timeout timestamp (ISO string or null)
+ * @param actionType - Action type ('CHECK', 'FOLD', 'CALL', 'BET', 'RAISE', 'ALL_IN')
+ * @param seatNumber - Player's seat number
+ * @param walletAddress - Player's wallet address
+ * @param amount - Action amount (bigint or null)
+ * @param tableBalanceGwei - Player's table balance (bigint or null)
+ * @param timestamp - Action timestamp (Date or ISO string)
+ * @param extraActionFields - Optional extra fields to include in action object (e.g., reason, isAllIn)
+ * @returns Event payload object ready for JSON.stringify
+ */
+async function buildHandActionEventPayload(
+  tx: any,
+  handId: number,
+  table: { id: number; name: string },
+  hand: { id: number; round: BettingRound; status: HandStatus },
+  currentActionSeat: number | null,
+  actionTimeoutAt: string | null,
+  actionType: 'CHECK' | 'FOLD' | 'CALL' | 'BET' | 'RAISE' | 'ALL_IN',
+  seatNumber: number,
+  walletAddress: string,
+  amount: bigint | null,
+  tableBalanceGwei: bigint | null,
+  timestamp: Date | string,
+  extraActionFields?: Record<string, any>
+): Promise<{
+  kind: string;
+  table: { id: number; name: string };
+  hand: {
+    id: number;
+    round: BettingRound;
+    status: HandStatus;
+    currentActionSeat: number | null;
+    currentBet: string | null;
+    lastRaiseAmount: string | null;
+    actionTimeoutAt: string | null;
+  };
+  pots: Array<{
+    potNumber: number;
+    amount: string;
+    eligibleSeatNumbers: number[];
+  }>;
+  action: {
+    type: string;
+    seatNumber: number;
+    walletAddress: string;
+    amount: string | null;
+    tableBalanceGwei: string | null;
+    timestamp: string;
+    [key: string]: any;
+  };
+}> {
+  // Query updated hand state to get currentBet and lastRaiseAmount
+  const updatedHand = await (tx as any).hand.findUnique({
+    where: { id: handId },
+    select: { currentBet: true, lastRaiseAmount: true },
+  });
+
+  // Query pots - always include pots in event payload
+  const updatedPots = await (tx as any).pot.findMany({
+    where: { handId },
+    orderBy: { potNumber: 'asc' },
+  });
+  const pots = updatedPots.map((pot: any) => ({
+    potNumber: pot.potNumber,
+    amount: pot.amount?.toString() || '0',
+    eligibleSeatNumbers: Array.isArray(pot.eligibleSeatNumbers) ? pot.eligibleSeatNumbers : [],
+  }));
+
+  // Format timestamp
+  const timestampISO = timestamp instanceof Date ? timestamp.toISOString() : timestamp;
+
+  return {
+    kind: 'hand_action',
+    table: {
+      id: table.id,
+      name: table.name,
+    },
+    hand: {
+      id: hand.id,
+      round: hand.round,
+      status: hand.status,
+      currentActionSeat,
+      currentBet: updatedHand?.currentBet?.toString() || null,
+      lastRaiseAmount: updatedHand?.lastRaiseAmount?.toString() || null,
+      actionTimeoutAt,
+    },
+    pots,
+    action: {
+      type: actionType,
+      seatNumber,
+      walletAddress,
+      amount: amount?.toString() || null,
+      tableBalanceGwei: tableBalanceGwei?.toString() || null,
+      timestamp: timestampISO,
+      ...(extraActionFields || {}),
+    },
+  };
+}
+
+/**
  * Creates a HandAction record and creates an event.
  *
  * This helper ensures the correct order of operations:
@@ -1408,17 +1518,6 @@ async function createActionAndEvent(
     }
   }
 
-  // Query updated pots after updatePotsIfNeeded
-  const updatedPots = await (tx as any).pot.findMany({
-    where: { handId },
-    orderBy: { potNumber: 'asc' },
-  });
-  const pots = updatedPots.map((pot: any) => ({
-    potNumber: pot.potNumber,
-    amount: pot.amount?.toString() || '0',
-    eligibleSeatNumbers: Array.isArray(pot.eligibleSeatNumbers) ? pot.eligibleSeatNumbers : [],
-  }));
-
   // Query updated table balance for the acting player
   const seatSession = await tx.tableSeatSession.findFirst({
     where: {
@@ -1431,33 +1530,22 @@ async function createActionAndEvent(
     },
   });
 
-  // 4. Create hand action event
-  const actionPayload = {
-    kind: 'hand_action',
-    table: {
-      id: table.id,
-      name: table.name,
-    },
-    hand: {
-      id: hand.id,
-      round: hand.round,
-      status: hand.status,
-      currentActionSeat: updatedCurrentActionSeat,
-      currentBet: updatedHand?.currentBet?.toString() || null,
-      lastRaiseAmount: updatedHand?.lastRaiseAmount?.toString() || null,
-      actionTimeoutAt,
-    },
-    pots,
-    action: {
-      type: eventActionType,
-      seatNumber,
-      walletAddress,
-      amount: amount?.toString() || null,
-      tableBalanceGwei: seatSession?.tableBalanceGwei?.toString() || null,
-      ...(isAllIn !== undefined ? { isAllIn } : {}),
-      timestamp: handAction.timestamp.toISOString(),
-    },
-  };
+  // 4. Create hand action event using shared helper
+  const actionPayload = await buildHandActionEventPayload(
+    tx,
+    handId,
+    table,
+    hand,
+    updatedCurrentActionSeat,
+    actionTimeoutAt,
+    eventActionType,
+    seatNumber,
+    walletAddress,
+    amount,
+    seatSession?.tableBalanceGwei || null,
+    handAction.timestamp,
+    isAllIn !== undefined ? { isAllIn } : undefined
+  );
   const actionPayloadJson = JSON.stringify(actionPayload);
   await createEventInTransaction(tx, EventKind.BET, actionPayloadJson, walletAddress, null);
 
@@ -2456,30 +2544,22 @@ export async function foldAction(
         });
       }
 
-      // 8. Create hand action event with full metadata
-      const actionPayload = {
-        kind: 'hand_action',
-        table: {
-          id: table.id,
-          name: table.name,
-        },
-        hand: {
-          id: hand.id,
-          round: hand.round,
-          status: hand.status,
-          currentActionSeat: nextSeat,
-          actionTimeoutAt,
-        },
-        action: {
-          type: 'FOLD',
-          seatNumber: seatSession.seatNumber,
-          walletAddress: normalizedAddress,
-          amount: null,
-          tableBalanceGwei: updatedSeatSession?.tableBalanceGwei?.toString() || null,
-          timestamp: handAction.timestamp.toISOString(),
-          reason, // Include reason: 'manual' or 'timeout'
-        },
-      };
+      // 8. Create hand action event using shared helper
+      const actionPayload = await buildHandActionEventPayload(
+        tx,
+        hand.id,
+        table,
+        hand,
+        nextSeat,
+        actionTimeoutAt,
+        'FOLD',
+        seatSession.seatNumber,
+        normalizedAddress,
+        null, // Fold has no amount
+        updatedSeatSession?.tableBalanceGwei || null,
+        handAction.timestamp,
+        { reason } // Include reason: 'manual' or 'timeout'
+      );
       const actionPayloadJson = JSON.stringify(actionPayload);
       await createEventInTransaction(tx, EventKind.BET, actionPayloadJson, normalizedAddress, null);
 
@@ -2908,31 +2988,21 @@ export async function checkAction(
       });
     }
 
-    // 9. Create hand action event
-    const actionPayload = {
-      kind: 'hand_action',
-      table: {
-        id: table.id,
-        name: table.name,
-      },
-      hand: {
-        id: hand.id,
-        round: hand.round,
-        status: hand.status,
-        currentActionSeat: nextSeat,
-        currentBet: hand.currentBet?.toString() || null,
-        lastRaiseAmount: hand.lastRaiseAmount?.toString() || null,
-        actionTimeoutAt,
-      },
-      action: {
-        type: 'CHECK',
-        seatNumber: seatSession.seatNumber,
-        walletAddress: normalizedAddress,
-        amount: null,
-        tableBalanceGwei: updatedSeatSession?.tableBalanceGwei?.toString() || null,
-        timestamp: handAction.timestamp.toISOString(),
-      },
-    };
+    // 9. Create hand action event using shared helper
+    const actionPayload = await buildHandActionEventPayload(
+      tx,
+      hand.id,
+      table,
+      hand,
+      nextSeat,
+      actionTimeoutAt,
+      'CHECK',
+      seatSession.seatNumber,
+      normalizedAddress,
+      null, // Check has no amount
+      updatedSeatSession?.tableBalanceGwei || null,
+      handAction.timestamp
+    );
     const actionPayloadJson = JSON.stringify(actionPayload);
     await createEventInTransaction(tx, EventKind.BET, actionPayloadJson, normalizedAddress, null);
 
