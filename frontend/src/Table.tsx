@@ -14,7 +14,8 @@ import { useTwitterUser } from './hooks/useTwitterUser'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
 import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
-import { animatePlayerJoin, type JoinTableEventPayload } from './utils/animations'
+import type { JoinTableEventPayload } from './utils/animations'
+import { AnimatePresence, motion } from 'framer-motion'
 
 /**
  * Balance display component with count-up animation
@@ -245,30 +246,6 @@ function Table() {
   }, [tableId, isFullyLoggedIn, address, signature, players.length])
 
   /**
-   * Add animate-in class to stand up button if player is already seated on page load
-   * This ensures the button fades in when loading the page directly (not during join animation)
-   */
-  useEffect(() => {
-    if (!isFullyLoggedIn || !isUserSeated() || currentHand) {
-      return
-    }
-
-    const userPlayer = getUserPlayer()
-    if (!userPlayer) {
-      return
-    }
-
-    const seatNumber = userPlayer.seatNumber
-    const seatElement = seatRefs.current.get(seatNumber)
-    if (seatElement) {
-      const standUpButton = seatElement.querySelector('.table-seat-stand-up-button') as HTMLElement
-      if (standUpButton && !standUpButton.classList.contains('animate-in')) {
-        standUpButton.classList.add('animate-in')
-      }
-    }
-  }, [isFullyLoggedIn, players, currentHand])
-
-  /**
    * Event handler for SSE events
    * Updates state based on event type
    */
@@ -467,32 +444,21 @@ function Table() {
             }
           })
           
-          // Small delay to ensure React has rendered the avatar, then start animation
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              // Get seat element for animation (now that avatar is rendered)
-              const seatElement = seatRefs.current.get(seatNumber)
-              
-              // Start animation - avatar fade-in happens in animation function
-              animatePlayerJoin(seatElement || null, joinPayload).then(() => {
-                // Remove from joining seats (animation complete)
-                setJoiningSeats((prev) => {
-                  const next = new Set(prev)
-                  next.delete(seatNumber)
-                  return next
-                })
-                
-                // Clear animating balance after count-up completes (balance animation already started)
-                setTimeout(() => {
-                  setAnimatingBalance(null)
-                }, 500)
-            }).catch((error) => {
-            console.error('[Table] Error animating player join:', error)
-            // Animation failed, but player is already in list
-            console.error('[Table] Animation error:', error)
-          })
-          })
-          })
+          // CSS animations will handle all visual effects (flourish, avatar, info box, spotlight)
+          
+          // Remove from joining seats after animation completes (1.8s total: 0.6s flourish/avatar + 0.8s delay + 0.4s info box)
+          setTimeout(() => {
+            setJoiningSeats((prev) => {
+              const next = new Set(prev)
+              next.delete(seatNumber)
+              return next
+            })
+            
+            // Clear animating balance after count-up completes
+            setTimeout(() => {
+              setAnimatingBalance(null)
+            }, 500)
+          }, 1800)
           break
         }
 
@@ -984,7 +950,7 @@ function Table() {
                         seatRefs.current.delete(seatIndex)
                       }
                     }}
-                    className="table-seat-avatar"
+                    className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''}`}
                     style={{
                       left: `${position.x}%`,
                       top: `${position.y}%`,
@@ -1000,9 +966,6 @@ function Table() {
                               src={player.twitterAvatarUrl}
                               alt={player.twitterHandle || 'Player'}
                               className="table-seat-avatar-image"
-                              style={{
-                                opacity: joiningSeats.has(seatIndex) ? 0 : undefined,
-                              }}
                               onError={(e) => {
                                 // Fallback to initial if image fails to load
                                 const target = e.target as HTMLImageElement;
@@ -1011,7 +974,6 @@ function Table() {
                                 if (parent && player.twitterHandle) {
                                   const initialDiv = document.createElement('div');
                                   initialDiv.className = 'table-seat-avatar-initial';
-                                  initialDiv.style.opacity = joiningSeats.has(seatIndex) ? '0' : '1';
                                   initialDiv.textContent = player.twitterHandle.charAt(1).toUpperCase();
                                   parent.appendChild(initialDiv);
                                 }
@@ -1020,9 +982,6 @@ function Table() {
                           ) : (
                             <div 
                               className="table-seat-avatar-initial"
-                              style={{
-                                opacity: joiningSeats.has(seatIndex) ? 0 : undefined,
-                              }}
                             >
                               {player.twitterHandle ? player.twitterHandle.charAt(1).toUpperCase() : '?'}
                             </div>
@@ -1120,20 +1079,27 @@ function Table() {
                     ) : (
                       <>
                         <div className="table-seat-avatar-circle" />
-                        {isFullyLoggedIn && !isUserSeated() && (
-                          <button
-                            className="table-seat-buy-in-button"
-                            onClick={() => handleBuyInClick(seatIndex)}
-                            disabled={!canAffordSeat()}
-                            title={
-                              !canAffordSeat()
-                                ? `Insufficient balance. Minimum buy-in: ${formatEth(table.minimumBuyIn)}`
-                                : `Buy in to seat ${seatIndex}`
-                            }
-                          >
-                            Buy In
-                          </button>
-                        )}
+                        <AnimatePresence initial={false}>
+                          {isFullyLoggedIn && !isUserSeated() && (
+                            <motion.button
+                              key={`buy-in-${seatIndex}`}
+                              className="table-seat-buy-in-button"
+                              onClick={() => handleBuyInClick(seatIndex)}
+                              disabled={!canAffordSeat()}
+                              title={
+                                !canAffordSeat()
+                                  ? `Insufficient balance. Minimum buy-in: ${formatEth(table.minimumBuyIn)}`
+                                  : `Buy in to seat ${seatIndex}`
+                              }
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.3, ease: 'easeOut' }}
+                            >
+                              Buy In
+                            </motion.button>
+                          )}
+                        </AnimatePresence>
                       </>
                     )}
                   </div>

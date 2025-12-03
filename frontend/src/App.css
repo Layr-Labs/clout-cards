@@ -1354,6 +1354,61 @@
   pointer-events: auto;
 }
 
+/* Join animation - flourish on seat element */
+.table-seat-avatar.joining {
+  animation: joinFlourish 0.6s ease-out;
+}
+
+@keyframes joinFlourish {
+  0% { 
+    filter: drop-shadow(0 0 0px rgba(212, 175, 55, 0));
+    transform: translate(-50%, -50%) scale(1);
+  }
+  30% {
+    filter: drop-shadow(0 0 20px rgba(212, 175, 55, 0.8));
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  100% {
+    filter: drop-shadow(0 0 0px rgba(212, 175, 55, 0));
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Join animation - spotlight via pseudo-element */
+.table-seat-avatar.joining::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.4) 0%, rgba(212, 175, 55, 0.1) 50%, transparent 70%);
+  pointer-events: none;
+  z-index: 1000;
+  transform: translate(-50%, -50%);
+  animation: spotlightAnimation 1.8s ease-out forwards;
+}
+
+@keyframes spotlightAnimation {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 .table-seat-avatar-circle {
   width: 60px;
   height: 60px;
@@ -1384,6 +1439,21 @@
   border-radius: 50%;
 }
 
+/* Join animation - avatar image fade in */
+.table-seat-avatar.joining .table-seat-avatar-image {
+  opacity: 0;
+  animation: avatarImageFadeIn 0.6s ease-out forwards;
+}
+
+@keyframes avatarImageFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 .table-seat-avatar-initial {
   width: 100%;
   height: 100%;
@@ -1394,6 +1464,12 @@
   font-weight: 700;
   color: #d4af37;
   background: rgba(10, 10, 10, 0.8);
+}
+
+/* Join animation - avatar initial fade in */
+.table-seat-avatar.joining .table-seat-avatar-initial {
+  opacity: 0;
+  animation: avatarImageFadeIn 0.6s ease-out forwards;
 }
 
 .table-seat-player-info {
@@ -1420,6 +1496,53 @@
   justify-content: center; /* Center content vertically within 60px height */
   gap: 4px;
   z-index: 1; /* Behind the circle */
+}
+
+/* Join animation - info box slide out */
+.table-seat-avatar.joining .table-seat-player-info {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transform: translateX(-20px);
+  animation: infoBoxSlideOut 0.4s ease-out forwards;
+}
+
+.table-seat-avatar.joining .table-seat-player-info-right {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transform: translateX(20px);
+  animation: infoBoxSlideOutRight 0.4s ease-out forwards;
+}
+
+@keyframes infoBoxSlideOut {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(-20px);
+    overflow: hidden;
+  }
+  100% {
+    opacity: 1;
+    width: auto;
+    transform: translateX(0);
+    overflow: visible;
+  }
+}
+
+@keyframes infoBoxSlideOutRight {
+  0% {
+    opacity: 0;
+    width: 0;
+    transform: translateX(20px);
+    overflow: hidden;
+  }
+  100% {
+    opacity: 1;
+    width: auto;
+    transform: translateX(0);
+    overflow: visible;
+  }
 }
 
 /* Right-side seats: extend to the left */
@@ -1543,7 +1666,6 @@
     0 0 10px rgba(239, 68, 68, 0.5),
     0 2px 8px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  transition: all 0.3s ease;
   margin-top: 2px;
   width: 100%;
   position: relative;
@@ -1554,10 +1676,7 @@
   justify-content: center;
   line-height: 1.2;
   opacity: 0;
-}
-
-.table-seat-stand-up-button.animate-in {
-  animation: standUpButtonFadeIn 1s ease-out forwards;
+  animation: standUpButtonFadeIn 1s ease-in forwards;
 }
 
 @keyframes standUpButtonFadeIn {
@@ -1941,38 +2060,4 @@
   }
 }
 
-/* Join/Leave Animation Styles */
-.table-seat-avatar[data-animating-join="true"] .table-seat-player-info {
-  animation: infoBoxSlide 0.4s ease-out 0.2s both;
-}
-
-@keyframes infoBoxSlide {
-  0% {
-    opacity: 0;
-    transform: translateX(-20px);
-    width: 0;
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-    width: auto;
-  }
-}
-
-.table-seat-avatar[data-animating-join="true"].table-seat-player-info-right .table-seat-player-info {
-  animation: infoBoxSlideRight 0.4s ease-out 0.2s both;
-}
-
-@keyframes infoBoxSlideRight {
-  0% {
-    opacity: 0;
-    transform: translateX(20px);
-    width: 0;
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-    width: auto;
-  }
-}
 
