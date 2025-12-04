@@ -92,13 +92,13 @@ export function TableCard({
           <div className="table-card-detail">
             <span className="table-card-label">Buy-In:</span>
             <span className="table-card-value">
-              {formatEth(table.minimumBuyIn)} - {formatEth(table.maximumBuyIn)} ETH
+              {formatEth(table.minimumBuyIn)} - {formatEth(table.maximumBuyIn)}
             </span>
           </div>
           <div className="table-card-detail">
             <span className="table-card-label">Blinds:</span>
             <span className="table-card-value">
-              {formatEth(table.smallBlind)} / {formatEth(table.bigBlind)} ETH
+              {formatEth(table.smallBlind)} / {formatEth(table.bigBlind)}
             </span>
           </div>
           <div className="table-card-detail">

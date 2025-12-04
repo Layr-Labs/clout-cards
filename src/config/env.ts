@@ -22,8 +22,9 @@ dotenv.config();
  */
 export function isProduction(): boolean {
   return (
+    process.env.IS_LOCAL !== 'true' &&(
     process.env.NODE_ENV === 'production' ||
-    process.env.ENVIRONMENT === 'production'
+    process.env.ENVIRONMENT === 'production')
   );
 }
 

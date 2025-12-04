@@ -73,11 +73,11 @@ export function constructDatabaseUrl(): string {
     return `postgresql://${username}:${encodedPassword}@${host}:${port}/${database}`;
   } else {
     // Local development: use defaults, allow overrides via env vars
-    const username = process.env.DB_USERNAME || LOCAL_DB_CONFIG.username;
-    const password = process.env.DB_PASSWORD || LOCAL_DB_CONFIG.password;
-    const database = process.env.DB_NAME || LOCAL_DB_CONFIG.database;
-    const host = process.env.DB_HOST || LOCAL_DB_CONFIG.host;
-    const port = process.env.DB_PORT || LOCAL_DB_CONFIG.port;
+    const username = LOCAL_DB_CONFIG.username;
+    const password = LOCAL_DB_CONFIG.password;
+    const database = LOCAL_DB_CONFIG.database;
+    const host = LOCAL_DB_CONFIG.host;
+    const port = LOCAL_DB_CONFIG.port;
 
     const encodedPassword = encodeURIComponent(password);
     return `postgresql://${username}:${encodedPassword}@${host}:${port}/${database}`;

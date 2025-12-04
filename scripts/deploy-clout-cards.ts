@@ -267,6 +267,11 @@ async function deployProxy(
     throw new Error('Transaction receipt is null');
   }
   
+  // Check if transaction succeeded
+  if (receipt.status !== 1) {
+    throw new Error(`Proxy deployment transaction failed with status: ${receipt.status}`);
+  }
+  
   // Get contract address from receipt
   const proxyAddress = receipt.contractAddress;
   if (!proxyAddress) {
@@ -275,8 +280,37 @@ async function deployProxy(
   
   console.log(`✅ Proxy deployed at: ${proxyAddress}`);
   
+  // Wait a bit for contract state to be available (some networks need time to index)
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
   // Return the proxy contract with the implementation ABI (since proxy delegates calls)
-  return new ethers.Contract(proxyAddress, implementationArtifact.abi, wallet);
+  const proxyContract = new ethers.Contract(proxyAddress, implementationArtifact.abi, wallet);
+  
+  // Verify initialization succeeded by checking if owner() call works
+  try {
+    const owner = await proxyContract.owner({ blockTag: receipt.blockNumber });
+    if (!owner || owner === ethers.ZeroAddress) {
+      throw new Error('Proxy initialization appears to have failed - owner is zero address');
+    }
+    console.log(`   Verified initialization: owner = ${owner}`);
+  } catch (error: any) {
+    // If the call fails, it might be a timing issue - try once more with latest block
+    try {
+      const owner = await proxyContract.owner();
+      if (!owner || owner === ethers.ZeroAddress) {
+        throw new Error('Proxy initialization appears to have failed - owner is zero address');
+      }
+      console.log(`   Verified initialization: owner = ${owner}`);
+    } catch (retryError: any) {
+      console.error('⚠️  Warning: Could not verify proxy initialization immediately.');
+      console.error('   This might be a timing issue. The proxy was deployed successfully.');
+      console.error('   Please verify manually by calling owner() on the proxy contract.');
+      console.error(`   Error: ${retryError.message}`);
+      // Don't throw - deployment succeeded, verification just failed
+    }
+  }
+  
+  return proxyContract;
 }
 
 /**
@@ -479,9 +513,33 @@ async function main() {
     const proxy = await deployProxy(wallet, implementationAddress, deployerAddress, houseAddress);
     const proxyAddress = await proxy.getAddress();
     
-    // Verify initialization
-    const owner = await proxy.owner();
-    const house = await proxy.house();
+    // Verify initialization (with retry logic for timing issues)
+    let owner: string;
+    let house: string;
+    let retries = 3;
+    let lastError: Error | null = null;
+    
+    while (retries > 0) {
+      try {
+        owner = await proxy.owner();
+        house = await proxy.house();
+        if (owner && owner !== ethers.ZeroAddress && house && house !== ethers.ZeroAddress) {
+          break; // Success
+        }
+        throw new Error('Owner or house address is zero');
+      } catch (error: any) {
+        lastError = error;
+        retries--;
+        if (retries > 0) {
+          console.log(`   Retrying verification (${retries} attempts remaining)...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+    
+    if (!owner || !house) {
+      throw new Error(`Failed to verify proxy initialization after retries. Last error: ${lastError?.message || 'Unknown'}`);
+    }
     
     console.log('');
     console.log('✅ Deployment complete!');

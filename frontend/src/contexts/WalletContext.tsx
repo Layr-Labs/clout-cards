@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { ethers } from 'ethers'
 import { getSessionMessage } from '../services/session'
+import { getTargetChain, type ChainConfig } from '../config/chains'
 
 // Extend Window interface to include ethereum
 declare global {
@@ -61,11 +62,89 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [])
 
   /**
-   * Checks if a previously connected wallet is still connected and has valid signature
+   * Ensures the wallet is connected to the correct chain for the current environment
+   *
+   * Checks the current chain ID and prompts the user to switch if necessary.
+   * If the chain doesn't exist in the wallet, attempts to add it.
+   *
+   * @param targetChain - The chain configuration to switch to
+   * @throws {Error} If the user rejects the chain switch or the switch fails
+   */
+  async function ensureCorrectChain(targetChain: ChainConfig): Promise<void> {
+    if (!window.ethereum) {
+      throw new Error('No wallet provider found')
+    }
+
+    // Get current chain ID
+    const currentChainIdHex = await window.ethereum.request({
+      method: 'eth_chainId',
+    }) as string
+
+    const currentChainId = parseInt(currentChainIdHex, 16)
+
+    // If already on correct chain, nothing to do
+    if (currentChainId === targetChain.chainId) {
+      return
+    }
+
+    console.log(`Switching from chain ${currentChainId} to ${targetChain.name} (${targetChain.chainId})`)
+
+    try {
+      // Try to switch to the target chain
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: targetChain.chainIdHex }],
+      })
+    } catch (switchError: unknown) {
+      // Error code 4902 means the chain hasn't been added to the wallet
+      const error = switchError as { code?: number }
+      if (error.code === 4902) {
+        console.log(`Chain ${targetChain.name} not found in wallet, adding it...`)
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: targetChain.chainIdHex,
+                chainName: targetChain.name,
+                nativeCurrency: targetChain.nativeCurrency,
+                rpcUrls: targetChain.rpcUrls,
+                blockExplorerUrls: targetChain.blockExplorerUrls,
+              },
+            ],
+          })
+        } catch (addError) {
+          console.error('Failed to add chain:', addError)
+          throw new Error(`Failed to add ${targetChain.name} to your wallet. Please add it manually.`)
+        }
+      } else {
+        // User rejected the switch or other error
+        throw new Error(`Please switch to ${targetChain.name} to use this application.`)
+      }
+    }
+  }
+
+  /**
+   * Checks if a previously connected wallet is still connected, on correct chain, and has valid signature
    */
   async function checkConnection(savedAddress: string, savedSignature: string) {
     try {
       if (typeof window.ethereum !== 'undefined') {
+        // First check if on correct chain
+        const targetChain = getTargetChain()
+        const currentChainIdHex = await window.ethereum.request({
+          method: 'eth_chainId',
+        }) as string
+        const currentChainId = parseInt(currentChainIdHex, 16)
+
+        if (currentChainId !== targetChain.chainId) {
+          // Wrong chain - don't restore connection, user will need to reconnect
+          console.log(`Wrong chain (${currentChainId}), expected ${targetChain.chainId}. Clearing saved session.`)
+          localStorage.removeItem('walletAddress')
+          localStorage.removeItem('walletSignature')
+          return
+        }
+
         const provider = new ethers.BrowserProvider(window.ethereum)
         const accounts = await provider.listAccounts()
         const connectedAddress = accounts[0]?.address.toLowerCase()
@@ -74,6 +153,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setAddress(connectedAddress)
           setProvider(provider)
           setSignature(savedSignature)
+
+          // Set up event listeners for restored connection
+          window.ethereum.on('accountsChanged', handleAccountsChanged as (...args: unknown[]) => void)
+          window.ethereum.on('chainChanged', handleChainChanged as (...args: unknown[]) => void)
         } else {
           // Address changed, clear saved state
           localStorage.removeItem('walletAddress')
@@ -96,10 +179,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
    * approved the site, or silently reconnect if they have. To force a
    * re-prompt, the user must disconnect first (which revokes permissions).
    *
-   * After connecting, requests a session message from the backend and prompts
-   * the user to sign it. The signature is stored in localStorage as a session key.
+   * After connecting:
+   * 1. Ensures the wallet is on the correct chain (local dev or Base Sepolia)
+   * 2. Requests a session message from the backend
+   * 3. Prompts the user to sign it
    *
-   * @throws {Error} If no wallet provider is found, connection fails, or signing fails
+   * The signature is stored in localStorage as a session key.
+   *
+   * @throws {Error} If no wallet provider is found, wrong chain, connection fails, or signing fails
    */
   async function connectWallet() {
     try {
@@ -117,16 +204,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('No accounts found. Please select an account in your wallet.')
       }
 
+      // Ensure user is on the correct chain for this environment
+      const targetChain = getTargetChain()
+      await ensureCorrectChain(targetChain)
+
+      // Re-create provider after potential chain switch
+      const updatedProvider = new ethers.BrowserProvider(window.ethereum)
+
       const connectedAddress = accounts[0].toLowerCase()
       setAddress(connectedAddress)
-      setProvider(provider)
+      setProvider(updatedProvider)
       localStorage.setItem('walletAddress', connectedAddress)
 
       // Get session message from backend
       const message = await getSessionMessage(connectedAddress)
 
       // Sign the message with the wallet
-      const signer = await provider.getSigner()
+      const signer = await updatedProvider.getSigner()
       const signature = await signer.signMessage(message)
 
       // Store signature in localStorage
@@ -168,10 +262,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   /**
-   * Handles chain changes - reloads the page to ensure proper state
+   * Handles chain changes - validates the new chain and disconnects if wrong
+   *
+   * If the user switches to the wrong chain, disconnects the wallet and
+   * shows an alert prompting them to switch back.
    */
-  function handleChainChanged() {
-    window.location.reload()
+  async function handleChainChanged() {
+    if (!window.ethereum) {
+      return
+    }
+
+    try {
+      const targetChain = getTargetChain()
+      const currentChainIdHex = await window.ethereum.request({
+        method: 'eth_chainId',
+      }) as string
+      const currentChainId = parseInt(currentChainIdHex, 16)
+
+      if (currentChainId !== targetChain.chainId) {
+        // User switched to wrong chain - disconnect and alert
+        console.warn(`User switched to chain ${currentChainId}, expected ${targetChain.chainId}`)
+        disconnectWallet()
+        alert(`Please connect to ${targetChain.name} to use this application.`)
+      } else {
+        // Chain is correct, reload to refresh state
+        window.location.reload()
+      }
+    } catch (error) {
+      console.error('Error handling chain change:', error)
+      window.location.reload()
+    }
   }
 
   /**

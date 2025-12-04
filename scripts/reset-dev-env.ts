@@ -178,7 +178,7 @@ async function main() {
 
   // Step 4: Run database migrations
   console.log('🗄️  Step 4: Running database migrations...');
-  execSync('npx prisma migrate dev --name reset_dev_env', { stdio: 'inherit' });
+  execSync('export IS_LOCAL=true &&npx prisma migrate dev --name reset_dev_env', { stdio: 'inherit' });
   console.log('✅ Database migrations completed\n');
 
   // Step 5: Get TEE public key
@@ -207,10 +207,12 @@ async function main() {
     console.log(`📋 Contract Proxy Address: ${proxyAddress}`);
     console.log('');
     console.log('To start the dev server with this contract address:');
+    console.log(`  export IS_LOCAL=true`);
     console.log(`  export CLOUTCARDS_CONTRACT_ADDRESS=${proxyAddress}`);
     console.log(`  npm run dev:full`);
     console.log('');
     console.log('Or add to .env file:');
+    console.log(`  echo "IS_LOCAL=true" >> .env`);
     console.log(`  echo "CLOUTCARDS_CONTRACT_ADDRESS=${proxyAddress}" >> .env`);
     console.log('='.repeat(60));
   } else {

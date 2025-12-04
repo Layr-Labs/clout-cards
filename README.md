@@ -59,16 +59,18 @@ npx ts-node scripts/reset-dev-env.ts
 3. **Start full dev server** (backend + frontend):
 ```bash
 # Option 1: Set inline (one-time use)
-CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress npm run dev:full
+IS_LOCAL=true CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress npm run dev:full
 
 # Option 2: Export for current shell session
+export IS_LOCAL=true
 export CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress
 npm run dev:full
 
 # Option 3: One-liner with export
-export CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress && npm run dev:full
+export IS_LOCAL=true && export CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress && npm run dev:full
 
 # Option 4: Add to .env file (persists across sessions)
+echo "IS_LOCAL=true" >> .env
 echo "CLOUTCARDS_CONTRACT_ADDRESS=0xYourProxyAddress" >> .env
 npm run dev:full
 ```
