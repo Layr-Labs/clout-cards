@@ -10,6 +10,7 @@
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "ts-node src/index.ts",
     "dev:full": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" --names \"backend,frontend\" --prefix-colors \"blue,green\"",
+    "frontend:install": "cd frontend && npm install",
     "frontend:build": "cd frontend && npm run build",
     "test": "vitest",
     "test:ui": "vitest --ui",
