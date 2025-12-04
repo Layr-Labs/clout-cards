@@ -297,3 +297,22 @@ model HandAction {
   @@index([timestamp])
   @@map("hand_actions")
 }
+
+/**
+ * Leaderboard statistics
+ * Tracks player performance metrics aggregated by Twitter handle.
+ * Stats are updated incrementally on each hand_end event.
+ */
+model LeaderboardStats {
+  twitterHandle        String   @id @map("twitter_handle") @db.VarChar(255)
+  handsPlayed         Int      @default(0) @map("hands_played")
+  handsWon            Int      @default(0) @map("hands_won")
+  totalLifetimeBets   BigInt   @default(0) @map("total_lifetime_bets") // Sum of all bets in gwei
+  totalLifetimeWinnings BigInt @default(0) @map("total_lifetime_winnings") // Sum of winnings in gwei
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([totalLifetimeWinnings(sort: Desc)])
+  @@index([totalLifetimeBets(sort: Desc)])
+  @@index([handsPlayed(sort: Desc)])
+  @@map("leaderboard_stats")
+}

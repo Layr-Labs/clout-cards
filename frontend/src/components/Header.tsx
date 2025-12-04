@@ -53,7 +53,7 @@ export function Header({ onLoginClick, navLinks, actionButton }: HeaderProps) {
   const defaultNavLinks = [
     { to: '/', label: 'Home' },
     { to: '/play', label: 'Tables' },
-    { href: '#leaderboard', label: 'Leaderboard' },
+    { to: '/leaderboard', label: 'Leaderboard' },
   ]
 
   const links = navLinks || defaultNavLinks

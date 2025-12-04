@@ -21,6 +21,7 @@ import {
   roundToIncrement,
   shouldCreateSidePots,
 } from './potSplitting';
+import { updateLeaderboardStats } from './leaderboard';
 
 // Types from Prisma schema
 type HandStatus = 'WAITING_FOR_PLAYERS' | 'SHUFFLING' | 'PRE_FLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'COMPLETED';
@@ -2154,6 +2155,11 @@ async function createHandEndEvent(
 
   await prisma.$transaction(async (tx) => {
     await createEventInTransaction(tx, EventKind.HAND_END, payloadJson, null, null);
+    // Update leaderboard stats for all players in this hand
+    await updateLeaderboardStats(tx, handId).catch((error) => {
+      console.error(`Failed to update leaderboard stats for hand ${handId}:`, error);
+      // Don't throw - leaderboard update failure shouldn't block hand completion
+    });
   });
 }
 
@@ -2368,6 +2374,11 @@ async function createHandEndEventShowdown(
 
   await prisma.$transaction(async (tx) => {
     await createEventInTransaction(tx, EventKind.HAND_END, payloadJson, null, null);
+    // Update leaderboard stats for all players in this hand
+    await updateLeaderboardStats(tx, handId).catch((error) => {
+      console.error(`Failed to update leaderboard stats for hand ${handId}:`, error);
+      // Don't throw - leaderboard update failure shouldn't block hand completion
+    });
   });
 }
 

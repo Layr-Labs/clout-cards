@@ -37,6 +37,7 @@ import { initializeEventNotifier, registerEventCallback, EventNotification } fro
 import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
 import { startHandStartChecker } from './services/handStartChecker';
 import { runMigrations } from './utils/runMigrations';
+import { getLeaderboard, type LeaderboardSortBy } from './services/leaderboard';
 
 /**
  * Express application instance
@@ -400,6 +401,76 @@ app.get('/tablePlayers', async (req: Request, res: Response): Promise<void> => {
     res.status(200).json(playersJson);
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to fetch table players');
+  }
+});
+
+/**
+ * GET /api/leaderboard
+ *
+ * Returns leaderboard statistics for top players.
+ * No authentication required - this is public information.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - Query params:
+ *   - sortBy: 'winnings' | 'bets' | 'hands' (optional, default: 'winnings')
+ *   - limit: number (optional, default: 20, max: 100)
+ *
+ * Response:
+ * - 200: Array of leaderboard entry objects
+ *   - Each entry includes: rank, twitterHandle, handsPlayed, handsWon, totalLifetimeBets, totalLifetimeWinnings
+ *   - BigInt fields (totalLifetimeBets, totalLifetimeWinnings) are returned as strings
+ *   - Entries are ordered by the specified sortBy criteria (descending)
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid sortBy or limit parameter
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/api/leaderboard', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Parse and validate query parameters
+    const sortByParam = req.query.sortBy as string;
+    const limitParam = req.query.limit as string;
+
+    // Validate sortBy
+    const validSortBy: LeaderboardSortBy[] = ['winnings', 'bets', 'hands'];
+    const sortBy: LeaderboardSortBy = validSortBy.includes(sortByParam as LeaderboardSortBy)
+      ? (sortByParam as LeaderboardSortBy)
+      : 'winnings';
+
+    // Validate limit
+    let limit = 20;
+    if (limitParam) {
+      const parsedLimit = parseInt(limitParam, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1) {
+        throw new ValidationError('Limit must be a positive number');
+      }
+      limit = Math.min(parsedLimit, 100); // Cap at 100
+    }
+
+    // Fetch leaderboard data
+    const leaderboard = await getLeaderboard(sortBy, limit);
+
+    // Serialize BigInt fields to strings for JSON response
+    const leaderboardJson = leaderboard.map((entry) => ({
+      rank: entry.rank,
+      twitterHandle: entry.twitterHandle,
+      handsPlayed: entry.handsPlayed,
+      handsWon: entry.handsWon,
+      totalLifetimeBets: entry.totalLifetimeBets.toString(),
+      totalLifetimeWinnings: entry.totalLifetimeWinnings.toString(),
+    }));
+
+    res.status(200).json(leaderboardJson);
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to fetch leaderboard');
   }
 });
 
