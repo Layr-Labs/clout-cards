@@ -119,10 +119,17 @@ export function DepositDialog({
       const blockNumber = BigInt(receipt.blockNumber);
       const startBlock = blockNumber > 0n ? blockNumber - 1n : blockNumber;
       const filter = contract.filters.Deposited(null, address);
-      const events = await contract.queryFilter(filter, startBlock, blockNumber + 1n);
+      
+      // Try to query for events - may fail on some RPCs (like Base Sepolia) due to log indexing lag
+      let foundEvent = null;
+      try {
+        const events = await contract.queryFilter(filter, startBlock, blockNumber + 1n);
+        foundEvent = events.find(e => e.transactionHash === txHash) || null;
+      } catch (queryError) {
+        // Log indexing lag on L2 RPCs - fall through to event listener
+        console.warn('Failed to query logs (RPC lag likely), falling back to event listener:', queryError);
+      }
 
-      // Find the event from this transaction
-      const foundEvent = events.find(e => e.transactionHash === txHash);
       if (foundEvent && foundEvent.args) {
         setDepositEvent({
           player: foundEvent.args[0] as string,
@@ -137,7 +144,7 @@ export function DepositDialog({
         return;
       }
 
-      // If event not found in query, set up a listener as fallback
+      // If event not found in query or query failed, set up a listener as fallback
       // This handles cases where the event might be emitted in a future block
       let eventFound = false;
       const listener = (player: string, depositor: string, amount: bigint, eventPayload?: any) => {
