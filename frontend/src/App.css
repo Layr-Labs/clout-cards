@@ -2458,6 +2458,7 @@
   display: flex;
   justify-content: center;
   padding: 64px 32px;
+  padding-top: 100px; /* Extra top padding to account for fixed header */
 }
 
 .leaderboard-container {
@@ -2574,6 +2575,10 @@
 }
 
 @media (max-width: 768px) {
+  .content-container {
+    padding-top: 80px; /* Less padding on mobile since header is smaller */
+  }
+
   .leaderboard-container h1 {
     font-size: 2rem;
   }

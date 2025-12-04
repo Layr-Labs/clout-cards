@@ -24,7 +24,7 @@ function LandingPage() {
       <Header
         navLinks={[
           { to: '/', label: 'Home' },
-          { href: '#leaderboard', label: 'Leaderboard' },
+          { to: '/leaderboard', label: 'Leaderboard' },
           { href: '#docs', label: 'Docs' },
         ]}
         actionButton={
