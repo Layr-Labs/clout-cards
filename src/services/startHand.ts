@@ -302,6 +302,20 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
     });
 
     // 11. Create start_hand event with full payload
+    // Calculate post-blind balances for the event
+    const playerBalances = eligiblePlayers.map((p) => ({
+      seatNumber: p.seatNumber,
+      walletAddress: p.walletAddress,
+      // Include updated balance after blinds are deducted
+      tableBalanceGwei: (
+        p.seatNumber === smallBlindSeat
+          ? p.tableBalanceGwei - table.smallBlind
+          : p.seatNumber === bigBlindSeat
+            ? p.tableBalanceGwei - table.bigBlind
+            : p.tableBalanceGwei
+      ).toString(),
+    }));
+
     const eventPayload = {
       kind: 'hand_start',
       table: {
@@ -319,10 +333,8 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
         shuffleSeedHash: deckCommitmentHash,
         actionTimeoutAt: actionTimeoutAt.toISOString(),
       },
-      players: eligiblePlayers.map((p) => ({
-        seatNumber: p.seatNumber,
-        walletAddress: p.walletAddress,
-      })),
+      playerBalances, // Standardized balance updates
+      players: playerBalances, // Backward compatibility - same data
     };
     const payloadJson = JSON.stringify(eventPayload);
 

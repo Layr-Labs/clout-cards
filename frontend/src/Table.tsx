@@ -247,7 +247,7 @@ function Table() {
         const foundTable = tables.find(t => t.id === tableId)
         
         if (foundTable) {
-          setTable(foundTable)
+        setTable(foundTable)
 
           // Check if we should show countdown (waiting for next hand)
           // Only if: no active hand AND we have a lastHandCompletedAt AND we're within the delay window
@@ -450,6 +450,69 @@ function Table() {
   }, [])
 
   /**
+   * Unified handler for updating player balances from event payloads
+   *
+   * Processes balance updates consistently across all event types (hand_start, hand_action, hand_end).
+   * Updates the players state and triggers balance animations when balances change.
+   *
+   * @param playerBalances - Array of player balance objects with seatNumber and tableBalanceGwei
+   */
+  const updatePlayerBalances = useCallback((playerBalances: Array<{ seatNumber: number; tableBalanceGwei: string }>) => {
+    if (!playerBalances || playerBalances.length === 0) {
+      return;
+    }
+
+    console.log('[Table] updatePlayerBalances: processing balance updates', {
+      playerBalances: playerBalances.map(pb => ({ seatNumber: pb.seatNumber, tableBalanceGwei: pb.tableBalanceGwei })),
+    });
+
+    // Collect balance changes to trigger animations after state update
+    const balanceChanges: Array<{ seatNumber: number; newBalance: string }> = [];
+
+    setPlayers((prevPlayers) => {
+      console.log('[Table] updatePlayerBalances setPlayers: prevPlayers', prevPlayers.map(p => ({ seatNumber: p.seatNumber, tableBalanceGwei: p.tableBalanceGwei })));
+
+      const updatedPlayers = prevPlayers.map((p) => {
+        const payloadBalance = playerBalances.find((pb) => pb.seatNumber === p.seatNumber);
+
+        // Update balance if found in payload
+        if (payloadBalance && payloadBalance.tableBalanceGwei !== undefined) {
+          const newBalance = payloadBalance.tableBalanceGwei;
+          const oldBalance = p.tableBalanceGwei;
+
+          console.log('[Table] updatePlayerBalances setPlayers: updating balance', {
+            seatNumber: p.seatNumber,
+            oldBalance,
+            newBalance,
+            willAnimate: newBalance !== oldBalance,
+          });
+
+          // Track balance change for animation
+          if (newBalance !== oldBalance) {
+            balanceChanges.push({ seatNumber: p.seatNumber, newBalance });
+          }
+
+          return { ...p, tableBalanceGwei: newBalance };
+        }
+
+        return p;
+      });
+
+      console.log('[Table] updatePlayerBalances setPlayers: updatedPlayers', updatedPlayers.map(p => ({ seatNumber: p.seatNumber, tableBalanceGwei: p.tableBalanceGwei })));
+      return updatedPlayers;
+    });
+
+    // Trigger animations after state update
+    balanceChanges.forEach(({ seatNumber, newBalance }) => {
+      setAnimatingBalance({
+        seatNumber,
+        targetAmount: newBalance,
+        animateFromZero: false,
+      });
+    });
+  }, []);
+
+  /**
    * Event handler for SSE events
    * Updates state based on event type
    */
@@ -556,6 +619,15 @@ function Table() {
               players: mergedPlayers,
             }
           })
+
+          // Update table balances for players from the hand_start event
+          // This is needed because blinds are deducted when the hand starts
+          // Use standardized playerBalances field, fall back to players for backward compatibility
+          const balanceData = (payload.playerBalances as any[]) || playersData.map((p: any) => ({
+            seatNumber: p.seatNumber,
+            tableBalanceGwei: p.tableBalanceGwei,
+          }));
+          updatePlayerBalances(balanceData);
 
           // Fetch current hand to get hole cards for authorized player
           // Only need wallet authentication (not Twitter) for hole cards
@@ -677,37 +749,13 @@ function Table() {
             }, 1500)
           }
           
-          // Update table balance for the acting player if provided
-          // Use functional setState to avoid stale closure issue
-          if (actionData?.tableBalanceGwei && actionData?.seatNumber !== undefined) {
-            setPlayers((prevPlayers) => {
-              const actingPlayer = prevPlayers.find(p => p.seatNumber === actionData.seatNumber)
-              
-              if (actingPlayer) {
-                const newBalance = actionData.tableBalanceGwei
-                const oldBalance = actingPlayer.tableBalanceGwei
-                
-                if (newBalance !== oldBalance) {
-                  // Trigger balance animation for this player (animate from current balance, not 0)
-                  setAnimatingBalance({
-                    seatNumber: actionData.seatNumber,
-                    targetAmount: newBalance,
-                    animateFromZero: false, // Animate from existing balance
-                  })
-                  
-                  // Update the player's balance in state
-                  return prevPlayers.map((p) =>
-                    p.seatNumber === actionData.seatNumber
-                      ? { ...p, tableBalanceGwei: newBalance }
-                      : p
-                  )
-                }
-              }
-              
-              // No change needed, return same array reference
-              return prevPlayers
-            })
-          }
+          // Update table balances using standardized playerBalances field
+          // Fall back to action.tableBalanceGwei for backward compatibility
+          const balanceData = (payload.playerBalances as any[]) || 
+            (actionData?.tableBalanceGwei && actionData?.seatNumber !== undefined
+              ? [{ seatNumber: actionData.seatNumber, tableBalanceGwei: actionData.tableBalanceGwei }]
+              : []);
+          updatePlayerBalances(balanceData);
 
           setCurrentHand((prev) => {
             if (!prev) return prev
@@ -839,31 +887,14 @@ function Table() {
             }, 3000) as any
           }
 
-          // Update table balances for all players and trigger animations
-          // Use functional setState to avoid stale closure issue
-          setPlayers((prevPlayers) => {
-            const updatedPlayers = prevPlayers.map((p) => {
-              const payloadPlayer = playersData.find((pp: any) => pp.seatNumber === p.seatNumber)
-              if (payloadPlayer?.tableBalanceGwei) {
-                const newBalance = payloadPlayer.tableBalanceGwei
-                const oldBalance = p.tableBalanceGwei
-                
-                // Trigger animation if balance changed
-                if (newBalance !== oldBalance) {
-                  setAnimatingBalance({
-                    seatNumber: p.seatNumber,
-                    targetAmount: newBalance,
-                    animateFromZero: false, // Animate from existing balance
-                  })
-                }
-                
-                return { ...p, tableBalanceGwei: newBalance }
-              }
-              return p
-            })
-            
-            return updatedPlayers
-          })
+          // Update table balances using standardized playerBalances field
+          // Fall back to players array for backward compatibility
+          const balanceData = (payload.playerBalances as any[]) || 
+            playersData.map((p: any) => ({
+              seatNumber: p.seatNumber,
+              tableBalanceGwei: p.tableBalanceGwei,
+            }));
+          updatePlayerBalances(balanceData);
 
           setCurrentHand((prev) => {
             if (!prev) return prev
@@ -1522,15 +1553,15 @@ function Table() {
                   : null
                 
                 return (
-                    <div
-                      key={seatIndex}
-                      ref={(el) => {
-                        if (el) {
-                          seatRefs.current.set(seatIndex, el)
-                        } else {
-                          seatRefs.current.delete(seatIndex)
-                        }
-                      }}
+                  <div
+                    key={seatIndex}
+                    ref={(el) => {
+                      if (el) {
+                        seatRefs.current.set(seatIndex, el)
+                      } else {
+                        seatRefs.current.delete(seatIndex)
+                      }
+                    }}
                       className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''} ${isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED') ? 'table-seat-avatar-with-standup' : ''}`}
                     style={{
                       left: `${position.x}%`,
@@ -1662,15 +1693,15 @@ function Table() {
                           </div>
                           {/* Stand Up Button - outside content, aligned to player-info edges */}
                           {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED') && (
-                            <button
-                              className="table-seat-stand-up-button"
-                              onClick={handleStandUpClick}
-                              disabled={isStandingUp}
-                              title="Stand up from the table"
-                            >
-                              Stand Up
-                            </button>
-                          )}
+                              <button
+                                className="table-seat-stand-up-button"
+                                onClick={handleStandUpClick}
+                                disabled={isStandingUp}
+                                title="Stand up from the table"
+                              >
+                                Stand Up
+                              </button>
+                            )}
                         </div>
                       </>
                     ) : (

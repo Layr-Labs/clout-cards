@@ -1306,6 +1306,39 @@ export function calculateActionTimeout(table: { actionTimeoutSeconds: number | n
 }
 
 /**
+ * Gets all active player balances for a table
+ *
+ * Returns an array of all active table seat sessions with their current balances.
+ * Used to provide consistent balance updates in event payloads.
+ *
+ * @param tx - Prisma transaction client
+ * @param tableId - Table ID
+ * @returns Array of player balance objects with seatNumber, walletAddress, and tableBalanceGwei
+ */
+async function getAllPlayerBalances(
+  tx: any,
+  tableId: number
+): Promise<Array<{ seatNumber: number; walletAddress: string; tableBalanceGwei: string }>> {
+  const allActiveSessions = await tx.tableSeatSession.findMany({
+    where: {
+      tableId,
+      isActive: true,
+    },
+    select: {
+      seatNumber: true,
+      walletAddress: true,
+      tableBalanceGwei: true,
+    },
+  });
+
+  return allActiveSessions.map((session: any) => ({
+    seatNumber: session.seatNumber,
+    walletAddress: session.walletAddress,
+    tableBalanceGwei: session.tableBalanceGwei?.toString() || '0',
+  }));
+}
+
+/**
  * Builds a consistent hand_action event payload
  *
  * Ensures all action events include pots and have consistent structure.
@@ -1357,6 +1390,11 @@ async function buildHandActionEventPayload(
     amount: string;
     eligibleSeatNumbers: number[];
   }>;
+  playerBalances: Array<{
+    seatNumber: number;
+    walletAddress: string;
+    tableBalanceGwei: string;
+  }>;
   action: {
     type: string;
     seatNumber: number;
@@ -1384,6 +1422,9 @@ async function buildHandActionEventPayload(
     eligibleSeatNumbers: Array.isArray(pot.eligibleSeatNumbers) ? pot.eligibleSeatNumbers : [],
   }));
 
+  // Get all player balances for consistent balance updates
+  const playerBalances = await getAllPlayerBalances(tx, table.id);
+
   // Format timestamp
   const timestampISO = timestamp instanceof Date ? timestamp.toISOString() : timestamp;
 
@@ -1403,12 +1444,13 @@ async function buildHandActionEventPayload(
       actionTimeoutAt,
     },
     pots,
+    playerBalances,
     action: {
       type: actionType,
       seatNumber,
       walletAddress,
       amount: amount?.toString() || null,
-      tableBalanceGwei: tableBalanceGwei?.toString() || null,
+      tableBalanceGwei: tableBalanceGwei?.toString() || null, // Deprecated: use playerBalances instead
       timestamp: timestampISO,
       ...(extraActionFields || {}),
     },
@@ -2030,6 +2072,13 @@ async function createHandEndEvent(
   // Create a map of hand players by seat number for easy lookup
   const handPlayersMap = new Map(hand.players.map((p: any) => [p.seatNumber, p]));
 
+  // Extract playerBalances for standardized balance updates
+  const playerBalances = allActiveSessions.map((session: any) => ({
+    seatNumber: session.seatNumber,
+    walletAddress: session.walletAddress,
+    tableBalanceGwei: session.tableBalanceGwei?.toString() || '0',
+  }));
+
   const payload = {
     kind: 'hand_end',
     table: {
@@ -2047,6 +2096,7 @@ async function createHandEndEvent(
     },
     rakeBps, // Rake in basis points
     communityCards: (hand.communityCards || []) as Card[],
+    playerBalances, // Standardized balance updates
     players: await Promise.all(allActiveSessions.map(async (session) => {
       // Check if this player was in the hand
       const handPlayer = handPlayersMap.get(session.seatNumber) as any;
@@ -2224,6 +2274,13 @@ async function createHandEndEventShowdown(
   // Create a map of hand players by seat number for easy lookup
   const handPlayersMap = new Map(hand.players.map((p: any) => [p.seatNumber, p]));
 
+  // Extract playerBalances for standardized balance updates
+  const playerBalances = allActiveSessions.map((session: any) => ({
+    seatNumber: session.seatNumber,
+    walletAddress: session.walletAddress,
+    tableBalanceGwei: session.tableBalanceGwei?.toString() || '0',
+  }));
+
   const payload = {
     kind: 'hand_end',
     table: {
@@ -2241,6 +2298,7 @@ async function createHandEndEventShowdown(
     },
     rakeBps, // Rake in basis points
     communityCards,
+    playerBalances, // Standardized balance updates
     players: await Promise.all(allActiveSessions.map(async (session) => {
       // Check if this player was in the hand
       const handPlayer = handPlayersMap.get(session.seatNumber) as any;

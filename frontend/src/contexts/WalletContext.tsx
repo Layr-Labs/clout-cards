@@ -290,7 +290,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Error handling chain change:', error)
-      window.location.reload()
+    window.location.reload()
     }
   }
 

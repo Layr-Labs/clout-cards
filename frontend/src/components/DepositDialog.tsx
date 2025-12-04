@@ -123,7 +123,7 @@ export function DepositDialog({
       // Try to query for events - may fail on some RPCs (like Base Sepolia) due to log indexing lag
       let foundEvent = null;
       try {
-        const events = await contract.queryFilter(filter, startBlock, blockNumber + 1n);
+      const events = await contract.queryFilter(filter, startBlock, blockNumber + 1n);
         foundEvent = events.find(e => e.transactionHash === txHash) || null;
       } catch (queryError) {
         // Log indexing lag on L2 RPCs - fall through to event listener
