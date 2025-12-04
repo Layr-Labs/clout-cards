@@ -8,7 +8,6 @@ import { prisma } from '../db/client';
 import { createEventInTransaction, EventKind } from '../db/events';
 import { getEscrowBalanceWithWithdrawal } from './escrowBalance';
 import { getTwitterUserInfo } from './twitter';
-import { startHand } from './startHand';
 import { validateTableExistsAndActive } from '../utils/tableValidation';
 
 /**
@@ -195,33 +194,10 @@ export async function joinTable(
       twitterAvatarUrl: session.twitterAvatarUrl,
       joinedAt: session.joinedAt,
     };
-  }).then(async (session) => {
-    // After transaction commits, check if we can start a hand
-    try {
-      // Check if there's already an active hand
-      const existingHand = await prisma.hand.findFirst({
-        where: {
-          tableId: input.tableId,
-          status: {
-            not: 'COMPLETED',
-          },
-        },
-      });
-
-      if (!existingHand) {
-        // Try to start a hand (will fail gracefully if conditions not met)
-        await startHand(input.tableId).catch((error) => {
-          // Silently fail - hand will start when conditions are met
-          // This is expected if there aren't 2+ eligible players yet
-          console.log(`Could not start hand after join: ${error.message}`);
-        });
-      }
-    } catch (error) {
-      // Don't fail the join operation if hand start fails
-      console.error('Error attempting to start hand after join:', error);
-    }
-
-    return session;
   });
+  // Note: Hand start is handled by handStartChecker service, which respects
+  // the handStartDelaySeconds timer. We don't start hands immediately on join
+  // to ensure the delay is always respected (e.g., when a player leaves and
+  // quickly rejoins between hands).
 }
 

@@ -114,7 +114,7 @@ export async function createTable(
 /**
  * Gets all poker tables from the database
  *
- * @returns Array of all poker tables
+ * @returns Array of all poker tables including handStartDelaySeconds
  * @throws {Error} If query fails
  */
 export async function getAllTables(): Promise<Array<{
@@ -129,6 +129,7 @@ export async function getAllTables(): Promise<Array<{
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  handStartDelaySeconds: number | null;
 }>> {
   return await prisma.pokerTable.findMany({
     orderBy: {

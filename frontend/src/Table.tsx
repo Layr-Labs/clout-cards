@@ -233,7 +233,7 @@ function Table() {
   }
 
   /**
-   * Loads table information from the API
+   * Loads table information from the API and starts countdown if waiting for hand
    */
   useEffect(() => {
     if (!tableId || isNaN(tableId)) {
@@ -247,7 +247,54 @@ function Table() {
         const foundTable = tables.find(t => t.id === tableId)
         
         if (foundTable) {
-        setTable(foundTable)
+          setTable(foundTable)
+
+          // Check if we should show countdown (waiting for next hand)
+          // Only if: no active hand AND we have a lastHandCompletedAt AND we're within the delay window
+          if (!foundTable.hasActiveHand && foundTable.lastHandCompletedAt) {
+            const completedAt = new Date(foundTable.lastHandCompletedAt)
+            const delaySeconds = foundTable.handStartDelaySeconds || 30
+            const targetTime = completedAt.getTime() + (delaySeconds * 1000)
+            const now = Date.now()
+            const remaining = Math.ceil((targetTime - now) / 1000)
+
+            // Only show countdown if we're still within the delay window
+            if (remaining > 0) {
+              console.log('[Table] loadTableData: starting countdown from initial load', { remaining, delaySeconds })
+              
+              // Set up countdown (same logic as hand_end handler)
+              setHandStartCountdown(remaining)
+              
+              // Show countdown immediately since this is a page reload
+              setShowCountdown(true)
+              
+              // Clear any existing interval
+              if (countdownIntervalRef.current) {
+                clearInterval(countdownIntervalRef.current)
+              }
+              
+              // Update countdown every second
+              countdownIntervalRef.current = setInterval(() => {
+                const now = Date.now()
+                const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
+                setHandStartCountdown(remaining)
+                
+                if (remaining <= 0) {
+                  if (countdownIntervalRef.current) {
+                    clearInterval(countdownIntervalRef.current)
+                    countdownIntervalRef.current = null
+                  }
+                  // Trigger exit animation
+                  setCountdownExiting(true)
+                  setTimeout(() => {
+                    setHandStartCountdown(null)
+                    setShowCountdown(false)
+                    setCountdownExiting(false)
+                  }, 500)
+                }
+              }, 1000) as any
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load table data:', err)
@@ -1475,16 +1522,16 @@ function Table() {
                   : null
                 
                 return (
-                  <div
-                    key={seatIndex}
-                    ref={(el) => {
-                      if (el) {
-                        seatRefs.current.set(seatIndex, el)
-                      } else {
-                        seatRefs.current.delete(seatIndex)
-                      }
-                    }}
-                    className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''}`}
+                    <div
+                      key={seatIndex}
+                      ref={(el) => {
+                        if (el) {
+                          seatRefs.current.set(seatIndex, el)
+                        } else {
+                          seatRefs.current.delete(seatIndex)
+                        }
+                      }}
+                      className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''} ${isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED') ? 'table-seat-avatar-with-standup' : ''}`}
                     style={{
                       left: `${position.x}%`,
                       top: `${position.y}%`,
@@ -1595,12 +1642,7 @@ function Table() {
                         
                         {/* Player Info Box */}
                         <div className={`table-seat-player-info ${position.x > 50 ? 'table-seat-player-info-right' : ''} ${isSeatTurn(seatIndex) ? 'table-seat-player-info-turn' : ''} ${winnerSeats.has(seatIndex) ? 'table-seat-winner-bounce' : ''}`}>
-                          <div 
-                            className="table-seat-player-info-content"
-                            style={{
-                              marginTop: (isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand) ? '60px' : '0'
-                            }}
-                          >
+                          <div className="table-seat-player-info-content">
                             <a
                               href={`https://twitter.com/${player.twitterHandle.replace('@', '')}`}
                               target="_blank"
@@ -1617,19 +1659,18 @@ function Table() {
                                 animateFromZero={animatingBalance?.seatNumber === seatIndex ? (animatingBalance.animateFromZero ?? false) : false}
                               />
                             )}
-                            {/* Stand Up Button - only show if this is the current user's seat and no hand active */}
-                            {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && !currentHand && (
-                              <button
-                                className="table-seat-stand-up-button"
-                                onClick={handleStandUpClick}
-                                disabled={isStandingUp}
-                                title="Stand up from the table"
-                                style={{ marginTop: '20px' }}
-                              >
-                                Stand Up
-                              </button>
-                            )}
                           </div>
+                          {/* Stand Up Button - outside content, aligned to player-info edges */}
+                          {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED') && (
+                            <button
+                              className="table-seat-stand-up-button"
+                              onClick={handleStandUpClick}
+                              disabled={isStandingUp}
+                              title="Stand up from the table"
+                            >
+                              Stand Up
+                            </button>
+                          )}
                         </div>
                       </>
                     ) : (

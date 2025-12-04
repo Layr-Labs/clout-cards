@@ -53,6 +53,12 @@ export interface PokerTable {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Delay in seconds before starting a new hand after the previous one ends */
+  handStartDelaySeconds: number;
+  /** ISO timestamp of when the last hand completed (for countdown calculation) */
+  lastHandCompletedAt: string | null;
+  /** Whether there's currently an active hand at this table */
+  hasActiveHand: boolean;
 }
 
 /**

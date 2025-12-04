@@ -1669,6 +1669,19 @@
   transition: box-shadow 0.5s ease-in-out, border-color 0.5s ease-in-out;
 }
 
+/* Elevated z-index when showing Stand Up button (to appear above hole cards) */
+.table-seat-avatar-with-standup .table-seat-player-info {
+  z-index: 5;
+}
+
+.table-seat-avatar-with-standup .table-seat-player-info-content {
+  padding-top: 60px;
+}
+
+.table-seat-avatar-with-standup .table-seat-avatar-circle {
+  z-index: 6;
+}
+
 .table-seat-player-info-turn {
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.5),
@@ -1786,26 +1799,33 @@
   border: 1px solid rgba(100, 100, 100, 0.3);
 }
 
+/* Make content container use flex column for alignment */
+.table-seat-player-info-content {
+  display: flex;
+  flex-direction: column;
+}
+
 /* Stand Up Button - red casino glimmer style */
 .table-seat-stand-up-button {
   background: linear-gradient(135deg, #dc2626 0%, #ef4444 50%, #f87171 100%);
   color: #ffffff;
   border: 2px solid #ef4444;
   border-radius: 8px;
-  padding: 10px 24px;
-  font-size: 0.8rem;
+  padding: 8px 20px;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
   cursor: pointer;
   white-space: nowrap;
-  min-height: 40px;
+  min-height: 36px;
   box-shadow: 
     0 0 10px rgba(239, 68, 68, 0.5),
     0 2px 8px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  margin-top: 2px;
-  width: 100%;
+  margin-top: 20px;
+  margin-left: auto; /* Push to right edge by default (left-side seats) */
+  margin-right: -20px; /* Negative margin to align with info box right edge */
   position: relative;
   overflow: hidden;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -1815,6 +1835,13 @@
   line-height: 1.2;
   opacity: 0;
   animation: standUpButtonFadeIn 1s ease-in forwards;
+  z-index: 5; /* Above hole cards (z-index: 3) */
+}
+
+/* Left-align for right-side seats (info box extends left) */
+.table-seat-player-info-right .table-seat-stand-up-button {
+  margin-left: -20px; /* Negative margin to align with info box left edge */
+  margin-right: auto; /* Push to left edge */
 }
 
 @keyframes standUpButtonFadeIn {

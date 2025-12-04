@@ -278,10 +278,46 @@ app.get('/pokerTables', async (req: Request, res: Response): Promise<void> => {
   try {
     const tables = await getAllTables();
 
-    // Serialize BigInt fields to strings for JSON response
-    const tablesJson = tables.map(serializeTable);
+    // For each table, get the last completed hand's completedAt timestamp
+    // This allows the frontend to calculate countdown timer on page reload
+    const tablesWithHandInfo = await Promise.all(
+      tables.map(async (table) => {
+        const lastCompletedHand = await (prisma as any).hand.findFirst({
+          where: {
+            tableId: table.id,
+            status: 'COMPLETED',
+          },
+          orderBy: {
+            completedAt: 'desc',
+          },
+          select: {
+            completedAt: true,
+          },
+        });
 
-    res.status(200).json(tablesJson);
+        // Check if there's currently an active hand
+        const activeHand = await (prisma as any).hand.findFirst({
+          where: {
+            tableId: table.id,
+            status: {
+              not: 'COMPLETED',
+            },
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        return {
+          ...serializeTable(table),
+          handStartDelaySeconds: table.handStartDelaySeconds ?? 30,
+          lastHandCompletedAt: lastCompletedHand?.completedAt?.toISOString() || null,
+          hasActiveHand: !!activeHand,
+        };
+      })
+    );
+
+    res.status(200).json(tablesWithHandInfo);
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to fetch poker tables');
   }
