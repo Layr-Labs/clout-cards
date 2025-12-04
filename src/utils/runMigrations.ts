@@ -8,6 +8,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import { constructDatabaseUrl } from '../config/database';
 
 const execAsync = promisify(exec);
 
@@ -26,6 +27,14 @@ export async function runMigrations(): Promise<void> {
   try {
     console.log('🔄 Running database migrations...');
     
+    // Construct DATABASE_URL before running migrations
+    // This ensures the password is properly URL-encoded and the connection string is correct
+    const databaseUrl = constructDatabaseUrl();
+    
+    // Debug: Log connection details (without password) for troubleshooting
+    const urlObj = new URL(databaseUrl);
+    console.log(`   Connecting to: ${urlObj.protocol}//${urlObj.username}@${urlObj.hostname}:${urlObj.port}${urlObj.pathname}`);
+    
     // Get the project root directory (where package.json and prisma folder are)
     const projectRoot = path.resolve(__dirname, '../..');
     
@@ -37,7 +46,8 @@ export async function runMigrations(): Promise<void> {
         cwd: projectRoot,
         env: {
           ...process.env,
-          // Ensure Prisma uses the DATABASE_URL from environment
+          // Explicitly set DATABASE_URL to ensure it's available to Prisma
+          DATABASE_URL: databaseUrl,
         },
       }
     );
