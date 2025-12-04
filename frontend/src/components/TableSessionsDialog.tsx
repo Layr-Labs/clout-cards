@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { getTableSessions, type TableSeatSession } from '../services/tables';
 import { formatAddress } from '../utils/formatAddress';
-import { formatGwei } from '../utils/formatGwei';
+import { formatEth } from '../utils/formatEth';
 import { AsyncState } from './AsyncState';
 import './TableSessionsDialog.css';
 
@@ -120,7 +120,7 @@ export function TableSessionsDialog({
                     <th>Seat</th>
                     <th>Wallet Address</th>
                     <th>Twitter Handle</th>
-                    <th>Balance (gwei)</th>
+                    <th>Balance</th>
                     <th>Status</th>
                     <th>Joined At</th>
                     <th>Left At</th>
@@ -149,7 +149,7 @@ export function TableSessionsDialog({
                         )}
                       </td>
                       <td className="table-sessions-balance">
-                        {formatGwei(session.tableBalanceGwei)}
+                        {formatEth(session.tableBalanceGwei)}
                       </td>
                       <td className="table-sessions-status">
                         <span className={`table-sessions-status-badge ${session.isActive ? 'active' : 'inactive'}`}>

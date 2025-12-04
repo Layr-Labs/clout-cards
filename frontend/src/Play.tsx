@@ -2,7 +2,7 @@ import './App.css'
 import { useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
-import { getPokerTables, type PokerTable } from './services/tables'
+import { getPokerTables, getTablePlayers, type PokerTable, type TablePlayer } from './services/tables'
 import { LoginDialog } from './components/LoginDialog'
 import { Header } from './components/Header'
 import { useTwitterUser } from './hooks/useTwitterUser'
@@ -22,6 +22,7 @@ function Play() {
   const twitterUser = useTwitterUser()
   const navigate = useNavigate()
   const [tables, setTables] = useState<PokerTable[]>([])
+  const [tablePlayers, setTablePlayers] = useState<Map<number, TablePlayer[]>>(new Map())
   const [isLoadingTables, setIsLoadingTables] = useState(false)
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
   const [isFullyLoggedIn, setIsFullyLoggedIn] = useState(false)
@@ -97,7 +98,7 @@ function Play() {
   }, [isLoggedIn])
 
   /**
-   * Loads poker tables from the API
+   * Loads poker tables from the API and players for each table
    */
   useEffect(() => {
     async function loadTables() {
@@ -105,6 +106,23 @@ function Play() {
       try {
         const fetchedTables = await getPokerTables()
         setTables(fetchedTables)
+        
+        // Fetch players for each table in parallel
+        const playersMap = new Map<number, TablePlayer[]>()
+        await Promise.all(
+          fetchedTables.map(async (table) => {
+            try {
+              const players = await getTablePlayers(table.id)
+              if (players.length > 0) {
+                playersMap.set(table.id, players)
+              }
+            } catch (error) {
+              // Silently fail if players can't be fetched
+              console.error(`Failed to load players for table ${table.id}:`, error)
+            }
+          })
+        )
+        setTablePlayers(playersMap)
       } catch (error) {
         console.error('Failed to load tables:', error)
       } finally {
@@ -164,6 +182,7 @@ function Play() {
                 <TableCard
                   key={table.id}
                   table={table}
+                  players={tablePlayers.get(table.id)}
                   className="play-table-card"
                   renderAction={() => (
                     isFullyLoggedIn ? (
