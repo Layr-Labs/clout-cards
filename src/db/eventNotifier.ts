@@ -11,6 +11,7 @@
 
 import { Client } from 'pg';
 import { constructDatabaseUrl } from '../config/database';
+import { isProduction } from '../config/env';
 
 /**
  * Notification data structure
@@ -45,7 +46,21 @@ async function getPgClient(): Promise<Client> {
   }
 
   const databaseUrl = constructDatabaseUrl();
-  pgClient = new Client({ connectionString: databaseUrl });
+  
+  // Configure SSL for AWS RDS in production
+  // For RDS, we use sslmode=require which requires SSL but doesn't verify the certificate
+  // The pg library needs explicit SSL configuration to avoid certificate verification errors
+  const clientConfig: { connectionString: string; ssl?: boolean | { rejectUnauthorized: boolean } } = {
+    connectionString: databaseUrl,
+  };
+  
+  if (isProduction()) {
+    // For AWS RDS, disable certificate verification (matches sslmode=require behavior)
+    // This is acceptable since we're using sslmode=require (not verify-full)
+    clientConfig.ssl = { rejectUnauthorized: false };
+  }
+  
+  pgClient = new Client(clientConfig);
 
   // Handle connection errors
   pgClient.on('error', (err) => {
