@@ -68,7 +68,8 @@ export function constructDatabaseUrl(): string {
     }
 
     const encodedPassword = encodeURIComponent(password);
-    return `postgresql://${username}:${encodedPassword}@${host}:${port}/${database}`;
+    // AWS RDS requires SSL connections - add sslmode=require for production
+    return `postgresql://${username}:${encodedPassword}@${host}:${port}/${database}?sslmode=require`;
   } else {
     // Local development: use defaults, allow overrides via env vars
     const username = process.env.DB_USERNAME || LOCAL_DB_CONFIG.username;
