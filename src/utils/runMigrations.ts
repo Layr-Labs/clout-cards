@@ -31,10 +31,6 @@ export async function runMigrations(): Promise<void> {
     // This ensures the password is properly URL-encoded and the connection string is correct
     const databaseUrl = constructDatabaseUrl();
     
-    // Debug: Log connection details (without password) for troubleshooting
-    const urlObj = new URL(databaseUrl);
-    console.log(`   Connecting to: ${urlObj.protocol}//${urlObj.username}@${urlObj.hostname}:${urlObj.port}${urlObj.pathname}`);
-    
     // Get the project root directory (where package.json and prisma folder are)
     const projectRoot = path.resolve(__dirname, '../..');
     
