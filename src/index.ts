@@ -36,6 +36,7 @@ import { serializeTable, serializeTableSeatSession, parseTableInput } from './ut
 import { initializeEventNotifier, registerEventCallback, EventNotification } from './db/eventNotifier';
 import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
 import { startHandStartChecker } from './services/handStartChecker';
+import { runMigrations } from './utils/runMigrations';
 
 /**
  * Express application instance
@@ -1373,7 +1374,26 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
  * - Logs to console (I/O operation)
  * - Keeps process alive indefinitely
  */
-app.listen(APP_PORT, async (): Promise<void> => {
+/**
+ * Starts the server after running database migrations
+ *
+ * Ensures database schema is up to date before accepting HTTP requests.
+ * If migrations fail, the server will not start.
+ */
+(async () => {
+  // Run database migrations before starting the server
+  // This ensures the database schema is up to date before accepting requests
+  try {
+    await runMigrations();
+  } catch (error) {
+    console.error('❌ Failed to run database migrations. Server will not start.');
+    console.error('Please ensure database is accessible and migrations can be applied.');
+    console.error(error);
+    process.exit(1);
+  }
+
+  // Start the server after migrations succeed
+  app.listen(APP_PORT, async (): Promise<void> => {
   console.log(`Server is running on port ${APP_PORT}`);
   
   // Initialize event notifier for SSE
@@ -1417,4 +1437,5 @@ app.listen(APP_PORT, async (): Promise<void> => {
   } catch (error) {
     console.error('⚠️  Failed to start hand start checker:', error);
   }
-});
+  });
+})();
