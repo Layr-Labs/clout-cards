@@ -102,4 +102,3 @@ prisma/dev.db*
 **/dev.db*
 
 /src/generated/prisma
-frontend/docs/site/
