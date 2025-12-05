@@ -1,15 +1,15 @@
 {
-  "rewrites": [
+  "redirects": [
     {
       "source": "/docs",
-      "destination": "/docs/index.html"
+      "destination": "/docs/",
+      "permanent": false
     },
     {
-      "source": "/docs/:path((?!.*\\.).*)",
-      "destination": "/docs/:path/index.html"
-    }
-  ],
-  "redirects": [
+      "source": "/docs/:path((?!.*\\.).*[^/])",
+      "destination": "/docs/:path/",
+      "permanent": false
+    },
     {
       "source": "/:path*",
       "destination": "https://cloutcards.fun/docs/:path*",
@@ -20,6 +20,16 @@
           "value": "docs.cloutcards.fun"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/docs/",
+      "destination": "/docs/index.html"
+    },
+    {
+      "source": "/docs/:path*/",
+      "destination": "/docs/:path/index.html"
     }
   ]
 }
