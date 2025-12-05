@@ -1465,6 +1465,309 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
 });
 
 /**
+ * GET /api/tables/:tableId/handHistory
+ *
+ * Returns the history of completed hands for a specific table.
+ * Provides summary information including winners, pot sizes, and community cards.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - Path params:
+ *   - tableId: number (Table ID to get history for)
+ * - Query params:
+ *   - limit: number (optional, max 50, default 20)
+ *
+ * Response:
+ * - 200: Array of hand summaries
+ *   - Each entry includes: id, startedAt, completedAt, winners, totalPot, communityCards
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid tableId or limit
+ * - 404: { error: string; message: string } - Table not found
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/api/tables/:tableId/handHistory', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tableId = parseInt(req.params.tableId, 10);
+    if (isNaN(tableId)) {
+      throw new ValidationError('Invalid table ID');
+    }
+
+    // Parse and validate limit
+    let limit = 20;
+    if (req.query.limit) {
+      const parsedLimit = parseInt(req.query.limit as string, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 50) {
+        throw new ValidationError('limit must be a number between 1 and 50');
+      }
+      limit = parsedLimit;
+    }
+
+    // Verify table exists
+    const table = await prisma.pokerTable.findUnique({
+      where: { id: tableId },
+      select: { id: true, name: true },
+    });
+
+    if (!table) {
+      throw new NotFoundError('Table not found');
+    }
+
+    // Fetch completed hands with related data
+    const hands = await prisma.hand.findMany({
+      where: {
+        tableId,
+        status: 'COMPLETED',
+      },
+      orderBy: {
+        completedAt: 'desc',
+      },
+      take: limit,
+      include: {
+        pots: {
+          select: {
+            potNumber: true,
+            amount: true,
+            winnerSeatNumbers: true,
+          },
+        },
+        players: {
+          select: {
+            seatNumber: true,
+            walletAddress: true,
+            holeCards: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    // Transform to response format
+    const handSummaries = hands.map((hand) => {
+      // Calculate total pot
+      const totalPot = hand.pots.reduce((sum, pot) => sum + pot.amount, 0n);
+
+      // Get winner info from pots
+      const winnerSeats = new Set<number>();
+      hand.pots.forEach((pot) => {
+        const winners = pot.winnerSeatNumbers as number[] | null;
+        if (winners) {
+          winners.forEach((seat) => winnerSeats.add(seat));
+        }
+      });
+
+      // Map winners to their wallet addresses and amounts
+      const winners = Array.from(winnerSeats).map((seatNumber) => {
+        const player = hand.players.find((p) => p.seatNumber === seatNumber);
+        // Calculate winnings for this player across all pots
+        let winnings = 0n;
+        hand.pots.forEach((pot) => {
+          const potWinners = pot.winnerSeatNumbers as number[] | null;
+          if (potWinners && potWinners.includes(seatNumber)) {
+            winnings += pot.amount / BigInt(potWinners.length);
+          }
+        });
+        return {
+          seatNumber,
+          walletAddress: player?.walletAddress || 'unknown',
+          amount: winnings.toString(),
+        };
+      });
+
+      return {
+        id: hand.id,
+        startedAt: hand.startedAt.toISOString(),
+        completedAt: hand.completedAt?.toISOString() || null,
+        winners,
+        totalPot: totalPot.toString(),
+        communityCards: hand.communityCards as any[],
+        playerCount: hand.players.length,
+      };
+    });
+
+    res.status(200).json(handSummaries);
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to fetch hand history');
+  }
+});
+
+/**
+ * GET /api/hands/:handId/events
+ *
+ * Returns all events for a specific hand, including full signature data for verification.
+ * Also returns the hand record with deck commitment (shuffleSeedHash) and revealed deck.
+ *
+ * Auth:
+ * - No authentication required (public endpoint for transparency)
+ *
+ * Request:
+ * - Path params:
+ *   - handId: number (Hand ID to get events for)
+ *
+ * Response:
+ * - 200: {
+ *     hand: { id, shuffleSeedHash, shuffleSeed, deck, startedAt, completedAt, communityCards },
+ *     events: Array of events with signature data
+ *   }
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid handId
+ * - 404: { error: string; message: string } - Hand not found
+ * - 500: { error: string; message: string } - Server error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.get('/api/hands/:handId/events', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const handId = parseInt(req.params.handId, 10);
+    if (isNaN(handId)) {
+      throw new ValidationError('Invalid hand ID');
+    }
+
+    // Fetch the hand with all related data
+    const hand = await prisma.hand.findUnique({
+      where: { id: handId },
+      include: {
+        players: {
+          select: {
+            seatNumber: true,
+            walletAddress: true,
+            holeCards: true,
+            status: true,
+          },
+        },
+        pots: {
+          select: {
+            potNumber: true,
+            amount: true,
+            winnerSeatNumbers: true,
+          },
+        },
+      },
+    });
+
+    if (!hand) {
+      throw new NotFoundError('Hand not found');
+    }
+
+    // Fetch wallet-to-Twitter handle mapping from TableSeatSession
+    // This allows us to display Twitter handles for player actions
+    const sessions = await prisma.tableSeatSession.findMany({
+      where: {
+        tableId: hand.tableId,
+        walletAddress: {
+          in: hand.players.map((p) => p.walletAddress),
+        },
+      },
+      orderBy: {
+        joinedAt: 'desc',
+      },
+      select: {
+        walletAddress: true,
+        twitterHandle: true,
+      },
+    });
+
+    // Create a map of wallet address to Twitter handle (use most recent session per wallet)
+    const walletToTwitter: Record<string, string> = {};
+    for (const session of sessions) {
+      const lowerAddr = session.walletAddress.toLowerCase();
+      if (!walletToTwitter[lowerAddr] && session.twitterHandle) {
+        walletToTwitter[lowerAddr] = session.twitterHandle;
+      }
+    }
+
+    // Fetch all events related to this hand
+    // Events are filtered by looking for hand.id in the payloadJson
+    const events = await prisma.event.findMany({
+      where: {
+        OR: [
+          // Match hand_start, hand_end, community_cards events for this hand
+          {
+            kind: { in: ['hand_start', 'hand_end', 'community_cards'] },
+            payloadJson: { contains: `"id":${handId}` },
+          },
+          // Match bet events (player actions - stored as 'bet' kind)
+          {
+            kind: 'bet',
+            payloadJson: { contains: `"id":${handId}` },
+          },
+        ],
+      },
+      orderBy: {
+        eventId: 'asc',
+      },
+      select: {
+        eventId: true,
+        kind: true,
+        payloadJson: true,
+        digest: true,
+        sigR: true,
+        sigS: true,
+        sigV: true,
+        teePubkey: true,
+        teeVersion: true,
+        blockTs: true,
+      },
+    });
+
+    // Return hand data with deck for verification, and all events with signatures
+    res.status(200).json({
+      hand: {
+        id: hand.id,
+        tableId: hand.tableId,
+        shuffleSeedHash: hand.shuffleSeedHash,
+        shuffleSeed: hand.shuffleSeed,
+        deck: hand.deck,
+        startedAt: hand.startedAt.toISOString(),
+        completedAt: hand.completedAt?.toISOString() || null,
+        communityCards: hand.communityCards,
+        dealerPosition: hand.dealerPosition,
+        players: hand.players,
+        pots: hand.pots.map((pot) => ({
+          potNumber: pot.potNumber,
+          amount: pot.amount.toString(),
+          winnerSeatNumbers: pot.winnerSeatNumbers,
+        })),
+      },
+      events: events.map((event) => ({
+        eventId: event.eventId,
+        kind: event.kind,
+        payloadJson: event.payloadJson,
+        digest: event.digest,
+        sigR: event.sigR,
+        sigS: event.sigS,
+        sigV: event.sigV,
+        teePubkey: event.teePubkey,
+        teeVersion: event.teeVersion,
+        blockTs: event.blockTs.toISOString(),
+      })),
+      // Include EIP-712 domain info for client-side verification
+      eip712Domain: {
+        name: 'CloutCardsEvents',
+        version: '1',
+        chainId: parseInt(process.env.CHAIN_ID || '31337', 10),
+        verifyingContract: ethers.ZeroAddress,
+      },
+      // Wallet address to Twitter handle mapping for display
+      walletToTwitter,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to fetch hand events');
+  }
+});
+
+/**
  * Starts the Express server and begins listening for incoming connections
  *
  * Binds the Express application to the specified port and starts accepting HTTP requests.

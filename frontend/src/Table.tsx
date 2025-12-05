@@ -17,8 +17,9 @@ import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
 import type { JoinTableEventPayload, LeaveTableEventPayload } from './utils/animations'
 import { AnimatePresence, motion } from 'framer-motion'
-import { FaComments } from 'react-icons/fa'
+import { FaComments, FaHistory } from 'react-icons/fa'
 import { sendChatMessage, type ChatMessage } from './services/chat'
+import { HandHistory } from './components/HandHistory'
 
 /**
  * Balance display component with count-up animation
@@ -191,6 +192,9 @@ function Table() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [unreadChatCount, setUnreadChatCount] = useState(0)
   const isChatOpenRef = useRef(false)
+  
+  // Hand history state
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -1884,6 +1888,15 @@ function Table() {
         onSendMessage={handleSendChatMessage}
         isFullyLoggedIn={isFullyLoggedIn}
       />
+
+      {/* Hand History Panel - inside layout wrapper */}
+      {tableId && (
+        <HandHistory
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          tableId={tableId}
+        />
+      )}
       </div>{/* End table-layout-wrapper */}
 
       {/* Login Dialog */}
@@ -1955,8 +1968,19 @@ function Table() {
         )
       })()}
 
-      {/* Chat Icon Button - Only visible for logged in users when chat is closed */}
-      {isFullyLoggedIn && !isChatOpen && (
+      {/* History Icon Button - Hidden when history or chat panel is open */}
+      {!isHistoryOpen && !isChatOpen && (
+        <button
+          className="history-icon-button"
+          onClick={() => setIsHistoryOpen(true)}
+          aria-label="Open hand history"
+        >
+          <FaHistory />
+        </button>
+      )}
+
+      {/* Chat Icon Button - Only visible for logged in users when chat and history are closed */}
+      {isFullyLoggedIn && !isChatOpen && !isHistoryOpen && (
         <button
           className="chat-icon-button"
           onClick={() => setIsChatOpen(true)}

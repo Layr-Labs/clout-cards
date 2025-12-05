@@ -1,0 +1,1061 @@
+/**
+ * Hand History Component Styles
+ *
+ * Styles for the hand history panel including list view,
+ * detail view, and TEE verification sections.
+ */
+
+/* ============================================
+   Hand History Panel Container
+   ============================================ */
+
+.hand-history-panel {
+  width: 400px;
+  min-width: 400px;
+  height: calc(100vh - 80px);
+  background: linear-gradient(180deg, #0d0d1a 0%, #1a1a2e 100%);
+  border-left: 1px solid #2a2a4a;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+
+.hand-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2a4a;
+  background: rgba(0, 0, 0, 0.2);
+  gap: 12px;
+}
+
+.hand-history-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  flex: 1;
+}
+
+.hand-history-close-button,
+.hand-history-back-button {
+  background: none;
+  border: none;
+  color: #8888aa;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  border-radius: 4px;
+}
+
+.hand-history-close-button:hover,
+.hand-history-back-button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================
+   Content Area
+   ============================================ */
+
+.hand-history-content,
+.hand-history-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.hand-history-content::-webkit-scrollbar,
+.hand-history-detail-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.hand-history-content::-webkit-scrollbar-track,
+.hand-history-detail-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.hand-history-content::-webkit-scrollbar-thumb,
+.hand-history-detail-content::-webkit-scrollbar-thumb {
+  background: #3a3a5a;
+  border-radius: 3px;
+}
+
+.hand-history-content::-webkit-scrollbar-thumb:hover,
+.hand-history-detail-content::-webkit-scrollbar-thumb:hover {
+  background: #4a4a6a;
+}
+
+/* ============================================
+   Loading, Error, Empty States
+   ============================================ */
+
+.hand-history-loading,
+.hand-history-error,
+.hand-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6666aa;
+  text-align: center;
+  padding: 20px;
+}
+
+.hand-history-loading p,
+.hand-history-error p,
+.hand-history-empty p {
+  margin: 0;
+}
+
+.hand-history-empty-hint {
+  font-size: 0.85rem;
+  margin-top: 8px !important;
+  opacity: 0.7;
+}
+
+.hand-history-spinner {
+  font-size: 2rem;
+  margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.hand-history-retry-button {
+  margin-top: 16px;
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #6666cc 0%, #4444aa 100%);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hand-history-retry-button:hover {
+  background: linear-gradient(135deg, #7777dd 0%, #5555bb 100%);
+  transform: scale(1.02);
+}
+
+/* ============================================
+   Hand List
+   ============================================ */
+
+.hand-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hand-history-item {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+
+.hand-history-item:hover {
+  border-color: #4a4a7a;
+  background: rgba(60, 60, 100, 0.2);
+  transform: translateX(-4px);
+}
+
+.hand-history-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hand-history-item-id {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.hand-history-item-time {
+  font-size: 0.8rem;
+  color: #8888aa;
+}
+
+/* Mini cards for hand history list */
+.hand-history-item-cards {
+  display: inline-flex;
+  gap: 3px;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.hand-history-card-mini {
+  width: 40px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.hand-history-card-mini .card {
+  width: 40px !important;
+  height: 56px !important;
+  border-radius: 5px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.hand-history-card-mini .card-front {
+  padding: 3px !important;
+  border-width: 1px !important;
+}
+
+/* Show top corner with suit */
+.hand-history-card-mini .card-corner-top {
+  font-size: 0.55rem !important;
+  line-height: 1 !important;
+}
+
+.hand-history-card-mini .card-corner-top .card-suit {
+  font-size: 0.85rem !important;
+  margin-top: 0 !important;
+}
+
+/* Hide bottom corner */
+.hand-history-card-mini .card-corner-bottom {
+  display: none !important;
+}
+
+.hand-history-card-mini .card-center {
+  padding: 0 !important;
+  flex: 1 !important;
+}
+
+.hand-history-card-mini .card-rank-center {
+  font-size: 1.1rem !important;
+  line-height: 1 !important;
+}
+
+.hand-history-card-mini .card:hover {
+  transform: none !important;
+}
+
+/* Tiny cards for player hole cards in detail view */
+.hand-history-card-tiny {
+  width: 32px;
+  height: 45px;
+  flex-shrink: 0;
+}
+
+.hand-history-card-tiny .card {
+  width: 32px !important;
+  height: 45px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+.hand-history-card-tiny .card-front {
+  padding: 2px !important;
+  border-width: 1px !important;
+}
+
+.hand-history-card-tiny .card-corner-top {
+  font-size: 0.45rem !important;
+  line-height: 1 !important;
+}
+
+.hand-history-card-tiny .card-corner-top .card-suit {
+  font-size: 0.7rem !important;
+  margin-top: 0 !important;
+}
+
+.hand-history-card-tiny .card-corner-bottom {
+  display: none !important;
+}
+
+.hand-history-card-tiny .card-center {
+  padding: 0 !important;
+  flex: 1 !important;
+}
+
+.hand-history-card-tiny .card-rank-center {
+  font-size: 0.9rem !important;
+  line-height: 1 !important;
+}
+
+.hand-history-card-tiny .card:hover {
+  transform: none !important;
+}
+
+.hand-history-no-cards {
+  font-size: 0.85rem;
+  color: #6666aa;
+  font-style: italic;
+}
+
+/* Hand info */
+.hand-history-item-info {
+  display: flex;
+  gap: 20px;
+  font-size: 0.85rem;
+}
+
+.hand-history-item-pot,
+.hand-history-item-winners {
+  display: flex;
+  gap: 6px;
+}
+
+.hand-history-label {
+  color: #8888aa;
+}
+
+.hand-history-value {
+  color: #e0e0e0;
+  font-weight: 500;
+}
+
+/* Chevron */
+.hand-history-item-chevron {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6666aa;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.hand-history-item:hover .hand-history-item-chevron {
+  color: #9999ff;
+  transform: translateY(-50%) translateX(4px);
+}
+
+/* ============================================
+   History Icon Button
+   ============================================ */
+
+.history-icon-button {
+  position: fixed;
+  bottom: 24px;
+  right: 90px; /* Positioned left of chat button */
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #44aa66 0%, #228844 100%);
+  border: none;
+  color: #ffffff;
+  font-size: 1.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(68, 170, 102, 0.4);
+  transition: all 0.2s ease;
+  z-index: 900;
+}
+
+.history-icon-button:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(68, 170, 102, 0.5);
+}
+
+.history-icon-button:active {
+  transform: scale(0.98);
+}
+
+/* ============================================
+   Verification Sections
+   ============================================ */
+
+.verification-section {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.verification-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.verification-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.verification-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2a2a4a 0%, #3a3a5a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  color: #8888cc;
+  flex-shrink: 0;
+}
+
+.verification-info {
+  flex: 1;
+}
+
+.verification-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.verification-subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #8888aa;
+}
+
+.verification-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.verification-badge.valid {
+  background: rgba(68, 204, 102, 0.15);
+  color: #44cc66;
+}
+
+.verification-badge.invalid {
+  background: rgba(255, 68, 68, 0.15);
+  color: #ff4444;
+}
+
+.verification-badge.verifying {
+  background: rgba(255, 204, 0, 0.15);
+  color: #ffcc00;
+}
+
+.verification-badge .spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Verification details */
+.verification-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.verification-label {
+  color: #8888aa;
+  flex-shrink: 0;
+}
+
+.verification-code {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.8rem;
+  color: #e0e0e0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+/* Copyable hash component */
+.copyable-hash {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copyable-hash-value {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.8rem;
+  color: #e0e0e0;
+  cursor: help;
+}
+
+.copyable-hash-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: #8888aa;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.copyable-hash-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #aaaacc;
+}
+
+.copyable-hash-button .copied {
+  color: #44cc66;
+}
+
+.verification-error {
+  color: #ff6666;
+  font-size: 0.85rem;
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255, 68, 68, 0.1);
+  border-radius: 6px;
+}
+
+/* Expand button */
+.verification-expand-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #3a3a5a;
+  border-radius: 8px;
+  color: #8888cc;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.verification-expand-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #5a5a8a;
+  color: #aaaaff;
+}
+
+/* Events list */
+.verification-events-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.verification-event {
+  padding: 12px 0;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.verification-event:last-child {
+  border-bottom: none;
+}
+
+.verification-event:first-child {
+  padding-top: 0;
+}
+
+.verification-event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.verification-event-kind {
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.verification-event-status {
+  font-size: 1.1rem;
+}
+
+.verification-event-status.valid {
+  color: #44cc66;
+}
+
+.verification-event-status.invalid {
+  color: #ff4444;
+}
+
+.verification-event-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+.verification-event-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.verification-event-row span:first-child {
+  color: #8888aa;
+  min-width: 80px;
+}
+
+.verification-event-row code {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Roboto Mono', monospace;
+  color: #c0c0c0;
+}
+
+.verification-event-error {
+  color: #ff6666;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+/* Deck grid */
+.verification-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+  max-height: 350px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.verification-deck-card {
+  position: relative;
+  width: 44px;
+  height: 62px;
+}
+
+.verification-deck-position {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #aaaacc;
+  font-size: 0.6rem;
+  padding: 2px 5px;
+  border-radius: 4px;
+  z-index: 1;
+  font-weight: 600;
+}
+
+.verification-deck-card .card {
+  width: 44px !important;
+  height: 62px !important;
+  border-radius: 5px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.verification-deck-card .card-front {
+  padding: 3px !important;
+  border-width: 1px !important;
+}
+
+.verification-deck-card .card-corner-top {
+  font-size: 0.5rem !important;
+  line-height: 1 !important;
+}
+
+.verification-deck-card .card-corner-top .card-suit {
+  font-size: 0.8rem !important;
+  margin-top: 0 !important;
+}
+
+.verification-deck-card .card-corner-bottom {
+  display: none !important;
+}
+
+.verification-deck-card .card-center {
+  padding: 0 !important;
+  flex: 1 !important;
+}
+
+.verification-deck-card .card-rank-center {
+  font-size: 1.1rem !important;
+  line-height: 1 !important;
+}
+
+.verification-deck-card .card:hover {
+  transform: none !important;
+}
+
+/* ============================================
+   Hand Summary Section
+   ============================================ */
+
+.hand-summary-section {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #2a2a4a;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.hand-summary-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.hand-summary-row {
+  margin-bottom: 16px;
+}
+
+.hand-summary-row:last-child {
+  margin-bottom: 0;
+}
+
+.hand-summary-label {
+  display: block;
+  font-size: 0.85rem;
+  color: #8888aa;
+  margin-bottom: 8px;
+}
+
+.hand-summary-cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 50px;
+}
+
+.hand-summary-empty {
+  color: #6666aa;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.hand-summary-pots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hand-summary-pot {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.9rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.pot-name {
+  color: #8888aa;
+  min-width: 80px;
+}
+
+.pot-amount {
+  color: #44cc66;
+  font-weight: 500;
+}
+
+.pot-winners {
+  color: #e0e0e0;
+}
+
+.hand-summary-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hand-summary-player {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.player-seat {
+  color: #8888aa;
+  min-width: 60px;
+}
+
+.player-address {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.8rem;
+  color: #c0c0c0;
+}
+
+.player-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.player-status.active {
+  background: rgba(68, 204, 102, 0.2);
+  color: #44cc66;
+}
+
+.player-status.folded {
+  background: rgba(136, 136, 170, 0.2);
+  color: #8888aa;
+}
+
+.player-status.all_in {
+  background: rgba(255, 204, 0, 0.2);
+  color: #ffcc00;
+}
+
+.player-cards {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* ============================================
+   Detail View
+   ============================================ */
+
+.hand-history-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ============================================
+   Responsive Styles
+   ============================================ */
+
+@media (max-width: 768px) {
+  .hand-history-panel {
+    position: fixed;
+    top: 80px;
+    right: 0;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: calc(100vh - 80px);
+    border-left: none;
+  }
+
+  .history-icon-button {
+    bottom: 16px;
+    right: 76px;
+    width: 50px;
+    height: 50px;
+    font-size: 1.2rem;
+  }
+
+  .verification-code {
+    max-width: 120px;
+  }
+
+  .hand-summary-player {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .player-cards {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+}
+
+/* ============================================
+   Event View Button and Modal
+   ============================================ */
+
+.verification-event-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.verification-event-view-button {
+  background: rgba(136, 136, 204, 0.15);
+  border: 1px solid #4a4a7a;
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: #8888cc;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.verification-event-view-button:hover {
+  background: rgba(136, 136, 204, 0.3);
+  border-color: #6a6aaa;
+  color: #aaaaff;
+}
+
+/* Payload Modal */
+.payload-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.payload-modal {
+  background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%);
+  border: 1px solid #3a3a5a;
+  border-radius: 12px;
+  max-width: 700px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.payload-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.payload-modal-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.payload-modal-close {
+  background: transparent;
+  border: none;
+  color: #8888aa;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.payload-modal-close:hover {
+  color: #ff6666;
+}
+
+.payload-modal-content {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.payload-modal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.payload-meta-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.payload-meta-row span {
+  color: #8888aa;
+  min-width: 70px;
+}
+
+.payload-meta-row code {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Roboto Mono', monospace;
+  color: #e0e0e0;
+}
+
+.payload-json-container {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  overflow: auto;
+  max-height: 400px;
+}
+
+.payload-json {
+  margin: 0;
+  padding: 16px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #c0e0c0;
+  white-space: pre;
+}
+
+.payload-copy-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(136, 136, 204, 0.15);
+  border: 1px solid #4a4a7a;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: #8888cc;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.payload-copy-button:hover {
+  background: rgba(136, 136, 204, 0.3);
+  border-color: #6a6aaa;
+  color: #aaaaff;
+}
+
