@@ -1,6 +1,6 @@
 site_name: Clout Cards Documentation
 site_description: Documentation for Clout Cards - Crypto Poker with Twitter Integration
-site_url: https://docs.cloutcards.io
+site_url: https://docs.cloutcards.fun
 site_dir: ../public/docs
 
 theme:
