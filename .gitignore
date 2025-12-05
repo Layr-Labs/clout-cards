@@ -102,3 +102,6 @@ prisma/dev.db*
 **/dev.db*
 
 /src/generated/prisma
+
+# MkDocs build output (use frontend/public/docs instead)
+frontend/docs/site/

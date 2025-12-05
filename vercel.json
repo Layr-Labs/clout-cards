@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/:path*",
-      "destination": "https://cloutcards.fun/docs/site/:path*",
+      "destination": "https://cloutcards.fun/docs/:path*",
       "permanent": true,
       "has": [
         {
