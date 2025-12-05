@@ -1,0 +1,13 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://cloutcards.fun/docs/site/:path*",
+      "permanent": true,
+      "has": [
+        { "type": "host", "value": "docs.cloutcards.fun" }
+      ]
+    }
+  ]
+}
+
