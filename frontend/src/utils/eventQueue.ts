@@ -107,6 +107,20 @@ export class EventQueue {
       return;
     }
 
+    // Chat messages are ephemeral (no DB storage, no reconnection tracking)
+    // Process them immediately without eventId validation
+    if (event.payload.kind === 'chat_message') {
+      console.log('[EventQueue] Processing chat message immediately', {
+        messageId: event.payload.messageId,
+      });
+      try {
+        await this.handler(event);
+      } catch (error) {
+        console.error('[EventQueue] Error processing chat message', { error });
+      }
+      return;
+    }
+
     // Ignore duplicate events (events we've already processed)
     if (event.eventId <= this.lastProcessedEventId) {
       console.warn('[EventQueue] Ignoring duplicate/old event', {

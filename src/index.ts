@@ -38,6 +38,8 @@ import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
 import { startHandStartChecker } from './services/handStartChecker';
 import { runMigrations } from './utils/runMigrations';
 import { getLeaderboard, type LeaderboardSortBy } from './services/leaderboard';
+import { subscribeToChat } from './services/chat';
+import chatRoutes from './routes/chat';
 
 /**
  * Express application instance
@@ -67,6 +69,9 @@ app.use(express.json()); // Parse JSON request bodies
 
 // Twitter OAuth routes
 app.use('/', twitterAuthRoutes);
+
+// Chat routes (real-time chat via SSE)
+app.use('/api/tables', chatRoutes);
 
 /**
  * Server port number
@@ -1366,8 +1371,11 @@ app.get('/api/tables/:tableId/events', async (req: Request, res: Response): Prom
       }
     };
 
-    // Register callback for this connection
-    const unsubscribe = registerEventCallback(notificationHandler);
+    // Register callback for this connection (game events via PostgreSQL LISTEN/NOTIFY)
+    const unsubscribeEvents = registerEventCallback(notificationHandler);
+
+    // Register for chat messages (in-memory pub/sub, no database)
+    const unsubscribeChat = subscribeToChat(tableId, res);
 
     // Keep connection alive with periodic heartbeat
     const heartbeatInterval = setInterval(() => {
@@ -1376,18 +1384,21 @@ app.get('/api/tables/:tableId/events', async (req: Request, res: Response): Prom
           res.write(': heartbeat\n\n');
         } catch (error) {
           clearInterval(heartbeatInterval);
-          unsubscribe(); // Unregister callback on error
+          unsubscribeEvents(); // Unregister game events callback on error
+          unsubscribeChat(); // Unregister chat callback on error
         }
       } else {
         clearInterval(heartbeatInterval);
-        unsubscribe(); // Unregister callback when connection closed
+        unsubscribeEvents(); // Unregister game events callback when connection closed
+        unsubscribeChat(); // Unregister chat callback when connection closed
       }
     }, 30000); // Send heartbeat every 30 seconds
 
     // Handle client disconnect - cleanup
     req.on('close', () => {
       clearInterval(heartbeatInterval);
-      unsubscribe(); // Unregister callback
+      unsubscribeEvents(); // Unregister game events callback
+      unsubscribeChat(); // Unregister chat callback
       console.log(`[SSE] Client disconnected from table ${tableId} events stream`);
     });
   } catch (error) {

@@ -7,6 +7,7 @@ import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { BetRaiseDialog } from './components/BetRaiseDialog'
+import { Chat } from './components/Chat'
 import { formatEth } from './utils/formatEth'
 import { Card } from './components/Card'
 import { useWallet } from './contexts/WalletContext'
@@ -16,6 +17,8 @@ import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
 import type { JoinTableEventPayload, LeaveTableEventPayload } from './utils/animations'
 import { AnimatePresence, motion } from 'framer-motion'
+import { FaComments } from 'react-icons/fa'
+import { sendChatMessage, type ChatMessage } from './services/chat'
 
 /**
  * Balance display component with count-up animation
@@ -182,6 +185,12 @@ function Table() {
   const [winnerSeats, setWinnerSeats] = useState<Set<number>>(new Set())
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const countdownDisplayTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
+  const isChatOpenRef = useRef(false)
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -190,6 +199,18 @@ function Table() {
   const tableId = id ? parseInt(id, 10) : null
   const isFullyLoggedIn = isLoggedIn && !!twitterUser && !!address && !!signature
   const escrowBalanceGwei = escrowBalanceState?.balanceGwei || '0'
+
+  // Keep ref in sync with chat open state for use in event handler
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen
+  }, [isChatOpen])
+
+  // Reset unread count when chat opens
+  useEffect(() => {
+    if (isChatOpen) {
+      setUnreadChatCount(0)
+    }
+  }, [isChatOpen])
 
   /**
    * Calculates seat positions around an oval table
@@ -1029,6 +1050,20 @@ function Table() {
           break
         }
 
+        case 'chat_message': {
+          // Handle chat message from SSE
+          const chatPayload = payload as unknown as ChatMessage
+          
+          // Add message to chat
+          setChatMessages((prev) => [...prev, chatPayload])
+          
+          // Increment unread count if chat is closed
+          if (!isChatOpenRef.current) {
+            setUnreadChatCount((prev) => prev + 1)
+          }
+          break
+        }
+
         default:
           console.log(`[Table] Unhandled event kind: ${kind}`, payload)
       }
@@ -1048,6 +1083,22 @@ function Table() {
     lastEventId: currentHand?.lastEventId,
     onEvent: handleEvent,
   })
+
+  /**
+   * Handles sending a chat message
+   */
+  async function handleSendChatMessage(message: string) {
+    if (!tableId || !signature || !address) {
+      throw new Error('Not authenticated')
+    }
+
+    const twitterToken = localStorage.getItem('twitterAccessToken')
+    if (!twitterToken) {
+      throw new Error('Twitter authentication required')
+    }
+
+    await sendChatMessage(tableId, message, signature, twitterToken, address)
+  }
 
   /**
    * Handles Buy In button click
@@ -1432,14 +1483,16 @@ function Table() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${isChatOpen ? 'chat-open' : ''}`}>
       {/* Header */}
       <Header
         onLoginClick={() => setIsLoginDialogOpen(true)}
       />
 
-      {/* Main Content */}
-      <main className="table-main">
+      {/* Main Content Wrapper - flex container for table and chat */}
+      <div className="table-layout-wrapper">
+        {/* Main Content */}
+        <main className="table-main">
         {/* Background Table Image */}
         <div className="table-image-container">
           <img 
@@ -1823,6 +1876,16 @@ function Table() {
         </AnimatePresence>
       </main>
 
+      {/* Chat Panel - inside layout wrapper */}
+      <Chat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        messages={chatMessages}
+        onSendMessage={handleSendChatMessage}
+        isFullyLoggedIn={isFullyLoggedIn}
+      />
+      </div>{/* End table-layout-wrapper */}
+
       {/* Login Dialog */}
       <LoginDialog
         isOpen={isLoginDialogOpen}
@@ -1891,6 +1954,23 @@ function Table() {
           />
         )
       })()}
+
+      {/* Chat Icon Button - Only visible for logged in users when chat is closed */}
+      {isFullyLoggedIn && !isChatOpen && (
+        <button
+          className="chat-icon-button"
+          onClick={() => setIsChatOpen(true)}
+          aria-label="Open chat"
+        >
+          <FaComments />
+          {unreadChatCount > 0 && (
+            <span className="chat-notification-badge">
+              {unreadChatCount > 99 ? '99+' : unreadChatCount}
+            </span>
+          )}
+        </button>
+      )}
+
     </div>
   )
 }

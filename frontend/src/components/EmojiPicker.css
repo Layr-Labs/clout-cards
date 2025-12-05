@@ -1,0 +1,26 @@
+/**
+ * Emoji Picker Styles
+ */
+
+.emoji-picker-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  z-index: 1000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Override emoji-picker-react styles for better integration */
+.emoji-picker-popup .EmojiPickerReact {
+  --epr-bg-color: #1a1a2e !important;
+  --epr-category-label-bg-color: #1a1a2e !important;
+  --epr-hover-bg-color: #2a2a4a !important;
+  --epr-search-bg-color: #0d0d1a !important;
+  --epr-search-border-color: #3a3a5a !important;
+  --epr-text-color: #e0e0e0 !important;
+  border: 1px solid #3a3a5a !important;
+}
+

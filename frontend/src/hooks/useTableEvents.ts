@@ -130,6 +130,27 @@ export function useTableEvents(options: UseTableEventsOptions): UseTableEventsRe
       }
 
       try {
+        const payload = JSON.parse(event.data);
+
+        // Chat messages have string IDs (ephemeral, no DB storage)
+        // Game events have numeric IDs (from database, for reconnection)
+        if (payload.kind === 'chat_message') {
+          // Handle chat messages without requiring numeric event ID
+          console.log('[useTableEvents] Chat message received from SSE', {
+            messageId: payload.messageId,
+            tableId,
+          });
+
+          const tableEvent: TableEvent = {
+            eventId: 0, // Chat messages don't have numeric IDs
+            payload,
+          };
+
+          eventQueueRef.current.enqueue(tableEvent);
+          return;
+        }
+
+        // Game events require numeric event IDs
         const eventId = event.lastEventId ? parseInt(event.lastEventId, 10) : 0;
 
         if (isNaN(eventId) || eventId <= 0) {
@@ -140,8 +161,6 @@ export function useTableEvents(options: UseTableEventsOptions): UseTableEventsRe
           });
           return;
         }
-
-        const payload = JSON.parse(event.data);
 
         console.log('[useTableEvents] Event received from SSE', {
           eventId,
