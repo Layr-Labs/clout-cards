@@ -20,8 +20,11 @@ import { constructDatabaseUrl } from "./src/config/database";
 
 // Note: constructDatabaseUrl is imported from shared config to avoid duplication
 
-// Set DATABASE_URL in environment so Prisma schema validation works
-process.env.DATABASE_URL = constructDatabaseUrl();
+// Only construct DATABASE_URL if it's not already set (allows tests to override)
+// This ensures tests can set DATABASE_URL before Prisma CLI loads this config
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = constructDatabaseUrl();
+}
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

@@ -19,9 +19,14 @@ import { constructDatabaseUrl } from '../config/database';
  * This must be called before PrismaClient is instantiated, as Prisma reads
  * DATABASE_URL from the environment. We construct it from individual variables
  * to prevent configuration errors.
+ *
+ * Only constructs DATABASE_URL if it's not already set (allows tests to override).
+ * This ensures tests can set DATABASE_URL before this module is imported.
  */
-const databaseUrl = constructDatabaseUrl();
-process.env.DATABASE_URL = databaseUrl;
+if (!process.env.DATABASE_URL) {
+  const databaseUrl = constructDatabaseUrl();
+  process.env.DATABASE_URL = databaseUrl;
+}
 
 /**
  * Prisma client instance
@@ -44,6 +49,11 @@ process.env.DATABASE_URL = databaseUrl;
  * ```
  */
 export const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL || constructDatabaseUrl(),
+    },
+  },
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 
