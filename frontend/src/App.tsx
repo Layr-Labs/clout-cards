@@ -66,6 +66,7 @@ function LandingPage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, ease: "linear" }}
+              onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
             >
               Learn More
             </motion.button>
@@ -74,7 +75,7 @@ function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section className="features">
+      <section id="features" className="features">
         <motion.h2 
           className="features-title"
           initial={{ opacity: 0, y: 30 }}
@@ -159,6 +160,22 @@ function LandingPage() {
             </p>
           </motion.div>
         </div>
+
+        {/* Documentation CTA */}
+        <motion.div 
+          className="docs-cta"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+        >
+          <p className="docs-cta-text">
+            Learn how it works by reading the docs.
+          </p>
+          <a href="/docs/" className="docs-cta-button">
+            Documentation
+          </a>
+        </motion.div>
       </section>
 
       {/* How to Play Section */}
@@ -230,6 +247,23 @@ function LandingPage() {
             </div>
           </motion.div>
         </div>
+      </section>
+
+      {/* Final CTA Section */}
+      <section className="final-cta">
+        <motion.div
+          className="final-cta-content"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.6 }}
+        >
+          <h2 className="final-cta-title">Ready to Play?</h2>
+          <p className="final-cta-subtitle">Join the table and show them what you've got.</p>
+          <Link to="/play" className="cta-button cta-primary final-cta-button">
+            Play Now
+          </Link>
+        </motion.div>
       </section>
     </div>
   )
