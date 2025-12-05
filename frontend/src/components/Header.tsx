@@ -50,10 +50,12 @@ export function Header({ onLoginClick, navLinks, actionButton }: HeaderProps) {
   const isFullyLoggedIn = isLoggedIn && !!twitterUser && !!address
 
   // Default navigation links
-  const defaultNavLinks = [
+  // Note: /docs/ is a static MkDocs site, not a React route, so use href
+  const defaultNavLinks: Array<{ to?: string; href?: string; label: string }> = [
     { to: '/', label: 'Home' },
     { to: '/play', label: 'Tables' },
     { to: '/leaderboard', label: 'Leaderboard' },
+    { href: '/docs/', label: 'Docs' },
   ]
 
   const links = navLinks || defaultNavLinks

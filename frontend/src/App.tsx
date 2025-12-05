@@ -25,7 +25,7 @@ function LandingPage() {
         navLinks={[
           { to: '/', label: 'Home' },
           { to: '/leaderboard', label: 'Leaderboard' },
-          { href: '#docs', label: 'Docs' },
+          { href: '/docs/', label: 'Docs' },
         ]}
         actionButton={
           <Link to="/play" className="header-play-button">Play Now</Link>

@@ -182,8 +182,8 @@ function Admin() {
       <Header
         navLinks={[
           { to: '/', label: 'Home' },
-          { href: '#leaderboard', label: 'Leaderboard' },
-          { href: '#docs', label: 'Docs' },
+          { to: '/leaderboard', label: 'Leaderboard' },
+          { href: '/docs/', label: 'Docs' },
         ]}
         actionButton={
           <Link to="/play" className="header-play-button">Play Now</Link>
