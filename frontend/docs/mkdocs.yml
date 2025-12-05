@@ -1,0 +1,49 @@
+site_name: Clout Cards Documentation
+site_description: Documentation for Clout Cards - Crypto Poker with Twitter Integration
+site_url: https://docs.cloutcards.io
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: deep purple
+    accent: purple
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - How To Play:
+    - Overview: how-to-play/index.md
+    - Getting Started: how-to-play/getting-started.md
+    - Depositing Funds: how-to-play/depositing.md
+    - Joining a Table: how-to-play/joining-table.md
+    - Playing Poker: how-to-play/playing-poker.md
+    - Withdrawing Funds: how-to-play/withdrawing.md
+  - Architecture:
+    - Overview: architecture/index.md
+    - EigenCloud TEE: architecture/tee.md
+    - Smart Contracts: architecture/smart-contracts.md
+    - Backend Services: architecture/backend.md
+    - Frontend: architecture/frontend.md
+    - Real-time Events: architecture/events.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+

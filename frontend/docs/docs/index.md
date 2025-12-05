@@ -1,0 +1,30 @@
+# Clout Cards Documentation
+
+Welcome to the Clout Cards documentation! Clout Cards is a crypto poker platform that combines on-chain asset management with Twitter social identity.
+
+## What is Clout Cards?
+
+Clout Cards allows you to:
+
+- **Play real poker** with ETH deposits and wagers
+- **Use your Twitter identity** to represent you at the table
+- **Deposit and withdraw** funds through smart contracts on Base Sepolia
+- **Chat with other players** in real-time at your table
+
+## Quick Links
+
+- **[How To Play](how-to-play/index.md)** - Learn how to get started, deposit funds, join tables, and play poker.
+- **[Architecture](architecture/index.md)** - Understand the technical architecture including smart contracts, backend services, and real-time events.
+
+## Getting Started
+
+1. **Connect your wallet** - Use MetaMask or another Web3 wallet
+2. **Sign in with Twitter** - Link your Twitter account for identity
+3. **Deposit ETH** - Fund your escrow balance via the smart contract
+4. **Join a table** - Pick a table and buy in with your escrow balance
+5. **Play poker!** - Standard Texas Hold'em rules apply
+
+## Need Help?
+
+If you have questions or run into issues, reach out to the team on Twitter or check the GitHub repository.
+
