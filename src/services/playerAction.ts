@@ -885,6 +885,7 @@ function createSettlementData(handId: number, settlement: {
   winnerSeatNumbers: number[];
   totalPotAmount: bigint;
   shuffleSeed: string;
+  deckNonce: string;
   deck: any;
   rakeBps: number;
   potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
@@ -895,6 +896,7 @@ function createSettlementData(handId: number, settlement: {
     winnerSeatNumbers: settlement.winnerSeatNumbers,
     totalPotAmount: settlement.totalPotAmount,
     shuffleSeed: settlement.shuffleSeed,
+    deckNonce: settlement.deckNonce,
     deck: settlement.deck,
     isShowdown: true,
     rakeBps: settlement.rakeBps,
@@ -1209,10 +1211,6 @@ async function getTableAndHand(
     throw new Error(`Table with id ${tableId} not found`);
   }
 
-  if (!table.isActive) {
-    throw new Error(`Table ${table.name} is not active`);
-  }
-
   // Get active hand
   const hand = await (tx as any).hand.findFirst({
     where: {
@@ -1226,6 +1224,12 @@ async function getTableAndHand(
       ...(includePots ? { pots: true } : {}),
     },
   });
+
+  // Only check table active status if there's no active hand
+  // If there IS an active hand, players should be able to finish it even if the table was deactivated
+  if (!table.isActive && !hand) {
+    throw new Error(`Table ${table.name} is not active`);
+  }
 
   if (!hand) {
     throw new Error(`No active hand found for table ${tableId}`);
@@ -1606,6 +1610,7 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
   tableId: number;
   totalPotAmount: bigint;
   shuffleSeed: string;
+  deckNonce: string;
   deck: any;
   rakeBps: number;
   potRakeInfo: Array<{ potNumber: number; potAmountBeforeRake: bigint; rakeAmount: bigint; potAmountAfterRake: bigint }>;
@@ -1674,6 +1679,12 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
   // Get the shuffle seed from the hand's startedAt timestamp
   // The seed was Date.now() when the hand started, so we use startedAt
   const shuffleSeed = hand.startedAt.getTime().toString();
+  
+  // Get the deck nonce for commitment verification (generated at hand start)
+  const deckNonce = hand.deckNonce;
+  if (!deckNonce) {
+    throw new Error(`Deck nonce not found for hand ${handId}`);
+  }
 
   // Query full hand data WITHIN transaction before updating status (to avoid race conditions)
   const handForEvent = await (tx as any).hand.findUnique({
@@ -1704,6 +1715,7 @@ async function settleHand(handId: number, winnerSeatNumber: number, tx: any): Pr
     tableId: hand.tableId,
     totalPotAmount: totalPotAmountAfterRake, // Return pot amount after rake
     shuffleSeed,
+    deckNonce,
     deck: hand.deck,
     rakeBps,
     potRakeInfo, // Include rake info for event payload
@@ -1723,6 +1735,7 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
   winnerSeatNumbers: number[];
   totalPotAmount: bigint;
   shuffleSeed: string;
+  deckNonce: string;
   deck: any;
   handEvaluations: Array<{
     seatNumber: number;
@@ -1962,6 +1975,12 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
 
   // Get shuffle seed
   const shuffleSeed = hand.startedAt.getTime().toString();
+  
+  // Get the deck nonce for commitment verification (generated at hand start)
+  const deckNonce = hand.deckNonce;
+  if (!deckNonce) {
+    throw new Error(`Deck nonce not found for hand ${handId}`);
+  }
 
   // Query full hand data WITHIN transaction before updating status (to avoid race conditions)
   const handForEvent = await (tx as any).hand.findUnique({
@@ -2004,6 +2023,7 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
     winnerSeatNumbers: allWinners.length > 0 ? allWinners : winners, // Fallback to original winners if no pot winners
     totalPotAmount: totalPotAmountAfterRake, // Return pot amount after rake
     shuffleSeed,
+    deckNonce,
     deck: hand.deck,
     handEvaluations,
     rakeBps,
@@ -2019,6 +2039,7 @@ export async function settleHandShowdown(handId: number, tx: any): Promise<{
  * @param winnerSeatNumber - Winner's seat number
  * @param totalPotAmount - Total pot amount awarded
  * @param shuffleSeed - Revealed shuffle seed
+ * @param deckNonce - Secret nonce for deck commitment verification
  * @param deck - Full deck for verification
  */
 async function createHandEndEvent(
@@ -2026,6 +2047,7 @@ async function createHandEndEvent(
   winnerSeatNumber: number,
   totalPotAmount: bigint,
   shuffleSeed: string,
+  deckNonce: string,
   deck: any,
   tableId: number,
   rakeBps: number,
@@ -2092,6 +2114,7 @@ async function createHandEndEvent(
       winnerSeatNumbers: [winnerSeatNumber],
       totalPotAmount: totalPotAmount.toString(),
       shuffleSeed, // Revealed seed for verification
+      deckNonce, // Secret nonce for commitment verification
       deck, // Full deck for verification
       completedAt: hand.completedAt?.toISOString(),
     },
@@ -2170,6 +2193,7 @@ async function createHandEndEvent(
  * @param winnerSeatNumbers - Array of winner seat numbers (for ties)
  * @param totalPotAmount - Total pot amount awarded
  * @param shuffleSeed - Revealed shuffle seed
+ * @param deckNonce - Secret nonce for deck commitment verification
  * @param deck - Full deck for verification
  */
 async function createHandEndEventShowdown(
@@ -2177,6 +2201,7 @@ async function createHandEndEventShowdown(
   winnerSeatNumbers: number[],
   totalPotAmount: bigint,
   shuffleSeed: string,
+  deckNonce: string,
   deck: any,
   tableId: number,
   rakeBps: number,
@@ -2299,6 +2324,7 @@ async function createHandEndEventShowdown(
       winnerSeatNumbers,
       totalPotAmount: totalPotAmount.toString(),
       shuffleSeed, // Revealed seed for verification
+      deckNonce, // Secret nonce for commitment verification
       deck, // Full deck for verification
       completedAt: hand.completedAt?.toISOString(),
     },
@@ -2400,6 +2426,7 @@ type SingleWinnerSettlementData = {
   winnerSeatNumber: number;
   totalPotAmount: bigint;
   shuffleSeed: string;
+  deckNonce: string;
   deck: any;
   rakeBps: number;
   potRakeInfo: PotRakeInfo[];
@@ -2414,6 +2441,7 @@ type ShowdownSettlementData = {
   winnerSeatNumbers: number[];
   totalPotAmount: bigint;
   shuffleSeed: string;
+  deckNonce: string;
   deck: any;
   isShowdown: boolean;
   rakeBps: number;
@@ -2472,6 +2500,7 @@ async function handlePostActionSettlement(
       settlementData.winnerSeatNumbers,
       settlementData.totalPotAmount,
       settlementData.shuffleSeed,
+      settlementData.deckNonce,
       settlementData.deck,
       tableId,
       settlementData.rakeBps,
@@ -2486,6 +2515,7 @@ async function handlePostActionSettlement(
       settlementData.winnerSeatNumber,
       settlementData.totalPotAmount,
       settlementData.shuffleSeed,
+      settlementData.deckNonce,
       settlementData.deck,
       tableId,
       settlementData.rakeBps,
@@ -2667,6 +2697,7 @@ export async function foldAction(
           winnerSeatNumber: remainingPlayer.seatNumber,
           totalPotAmount: settlement.totalPotAmount,
           shuffleSeed: settlement.shuffleSeed,
+          deckNonce: settlement.deckNonce,
           deck: settlement.deck,
           rakeBps: settlement.rakeBps,
           potRakeInfo: settlement.potRakeInfo,
@@ -2698,6 +2729,7 @@ export async function foldAction(
                   winnerSeatNumbers: settlement.winnerSeatNumbers,
                   totalPotAmount: settlement.totalPotAmount,
                   shuffleSeed: settlement.shuffleSeed,
+                  deckNonce: settlement.deckNonce,
                   deck: settlement.deck,
                   isShowdown: true,
                   rakeBps: settlement.rakeBps,
@@ -2723,6 +2755,7 @@ export async function foldAction(
                 winnerSeatNumbers: settlement.winnerSeatNumbers,
                 totalPotAmount: settlement.totalPotAmount,
                 shuffleSeed: settlement.shuffleSeed,
+                deckNonce: settlement.deckNonce,
                 deck: settlement.deck,
                 isShowdown: true,
                 rakeBps: settlement.rakeBps,

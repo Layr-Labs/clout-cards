@@ -474,3 +474,56 @@ export async function playerAction(
   });
 }
 
+/**
+ * Response from updating table status
+ */
+export interface UpdateTableStatusResponse {
+  id: number;
+  name: string;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+/**
+ * Updates a table's active status (activate or deactivate)
+ *
+ * POST /admin/tables/:tableId/status
+ *
+ * Auth:
+ * - Requires admin signature authentication
+ *
+ * Request:
+ * - Path params: tableId
+ * - Query params: adminAddress
+ * - Body: { isActive: boolean }
+ * - Headers: Authorization (signature)
+ *
+ * Response:
+ * - 200: { id, name, isActive, updatedAt }
+ * - 400: Invalid parameters
+ * - 401: Unauthorized
+ * - 404: Table not found
+ * - 409: Table already in requested state
+ *
+ * @param tableId - The poker table ID
+ * @param isActive - New active status (true = activate, false = deactivate)
+ * @param signature - Admin session signature
+ * @param adminAddress - Admin wallet address
+ * @returns Promise that resolves to updated table state
+ * @throws {Error} If the request fails
+ */
+export async function updateTableStatus(
+  tableId: number,
+  isActive: boolean,
+  signature: string,
+  adminAddress: string
+): Promise<UpdateTableStatusResponse> {
+  return apiClient<UpdateTableStatusResponse>(`/admin/tables/${tableId}/status`, {
+    method: 'POST',
+    requireAuth: true,
+    signature,
+    adminAddress,
+    body: JSON.stringify({ isActive }),
+  });
+}
+

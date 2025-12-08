@@ -168,17 +168,17 @@ function Play() {
             Join a table and start playing!
           </p>
 
-          {/* Tables List */}
+          {/* Tables List - only show active tables */}
           <AsyncState
             isLoading={isLoadingTables}
             error={null}
-            isEmpty={tables.length === 0}
+            isEmpty={tables.filter(t => t.isActive).length === 0}
             emptyMessage="No tables available. Check back later!"
             loadingMessage="Loading tables..."
             className="play-tables-state"
           >
             <div className="play-tables-list">
-              {tables.map((table) => (
+              {tables.filter(t => t.isActive).map((table) => (
                 <TableCard
                   key={table.id}
                   table={table}
@@ -189,7 +189,6 @@ function Play() {
                       <button
                         className="cta-button cta-primary play-table-join-button"
                         onClick={() => handleJoin(table)}
-                        disabled={!table.isActive}
                       >
                         Join
                       </button>

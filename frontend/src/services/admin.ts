@@ -36,3 +36,45 @@ export async function isAdmin(address: string): Promise<boolean> {
   return normalizedAdmins.includes(normalizedAddress);
 }
 
+/**
+ * Response from resetting the leaderboard
+ */
+export interface ResetLeaderboardResponse {
+  success: boolean;
+  recordsDeleted: number;
+}
+
+/**
+ * Resets the leaderboard by deleting all records from the leaderboard_stats table
+ *
+ * POST /admin/leaderboard/reset
+ *
+ * Auth:
+ * - Requires admin signature authentication
+ *
+ * Request:
+ * - Query params: adminAddress
+ * - Headers: Authorization (signature)
+ *
+ * Response:
+ * - 200: { success: true; recordsDeleted: number }
+ * - 401: Unauthorized
+ * - 500: Server error
+ *
+ * @param signature - Admin session signature
+ * @param adminAddress - Admin wallet address
+ * @returns Promise that resolves to the reset result
+ * @throws {Error} If the request fails
+ */
+export async function resetLeaderboard(
+  signature: string,
+  adminAddress: string
+): Promise<ResetLeaderboardResponse> {
+  return apiClient<ResetLeaderboardResponse>('/admin/leaderboard/reset', {
+    method: 'POST',
+    requireAuth: true,
+    signature,
+    adminAddress,
+  });
+}
+

@@ -134,27 +134,34 @@ export function verifyEventSignature(
  * Verifies that a deck matches its commitment hash
  *
  * The backend commits to the deck at hand_start by computing:
- *   keccak256(JSON.stringify(deck))
+ *   keccak256(JSON.stringify(deck) + nonce)
  *
- * This function recomputes that hash from the revealed deck and compares.
+ * where nonce is a 256-bit random value generated at hand start. The nonce
+ * makes it computationally infeasible to brute-force the commitment.
  *
- * @param shuffleSeedHash - The hash committed at hand_start
+ * This function recomputes that hash from the revealed deck and nonce and compares.
+ *
+ * @param shuffleSeedHash - The commitment hash published at hand_start
  * @param deck - The full deck revealed at hand_end
+ * @param nonce - The secret nonce revealed at hand_end (256-bit hex string)
  * @returns Verification result with computed and expected hashes
  *
  * @example
  * ```typescript
- * const result = verifyDeckCommitment(hand.shuffleSeedHash, hand.deck);
- * if (result.valid) {
- *   console.log('Deck commitment verified!');
- * } else {
- *   console.error('Deck was modified after commitment!');
+ * if (hand.deck && hand.deckNonce) {
+ *   const result = verifyDeckCommitment(hand.shuffleSeedHash, hand.deck, hand.deckNonce);
+ *   if (result.valid) {
+ *     console.log('Deck commitment verified!');
+ *   } else {
+ *     console.error('Deck was modified after commitment!');
+ *   }
  * }
  * ```
  */
 export function verifyDeckCommitment(
   shuffleSeedHash: string,
-  deck: Card[]
+  deck: Card[],
+  nonce: string
 ): DeckVerificationResult {
   try {
     // Normalize card key ordering to match backend: { suit, rank }
@@ -165,7 +172,8 @@ export function verifyDeckCommitment(
       rank: card.rank,
     }));
     const deckJson = JSON.stringify(normalizedDeck);
-    const computedHash = ethers.keccak256(ethers.toUtf8Bytes(deckJson));
+    // Commitment = keccak256(deck || nonce)
+    const computedHash = ethers.keccak256(ethers.toUtf8Bytes(deckJson + nonce));
 
     // Compare hashes (case-insensitive)
     const valid = computedHash.toLowerCase() === shuffleSeedHash.toLowerCase();

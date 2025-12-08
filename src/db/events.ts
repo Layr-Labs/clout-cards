@@ -34,6 +34,9 @@ export enum EventKind {
   JOIN_TABLE = 'join_table',
   LEAVE_TABLE = 'leave_table',
   CREATE_TABLE = 'create_table',
+  TABLE_DEACTIVATED = 'table_deactivated',
+  TABLE_ACTIVATED = 'table_activated',
+  LEADERBOARD_RESET = 'leaderboard_reset',
   // Add more as needed
 }
 

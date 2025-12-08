@@ -231,3 +231,45 @@ export function getTotalSubscriberCount(): number {
   return total;
 }
 
+/**
+ * System sender constant used for system messages
+ */
+const SYSTEM_SENDER: ChatSender = {
+  walletAddress: 'system',
+  twitterHandle: 'System',
+  twitterAvatarUrl: null,
+};
+
+/**
+ * Sends a system message to all subscribers for a table
+ *
+ * System messages are special announcements from the system (not from players).
+ * They are displayed differently in the chat UI (centered, different styling).
+ * Like regular chat messages, they are ephemeral and not persisted.
+ *
+ * @param tableId - The poker table ID to send the system message to
+ * @param message - The system message text
+ *
+ * @example
+ * ```typescript
+ * // Send deactivation notice
+ * sendSystemMessage(1, 'This table has been deactivated by an administrator.');
+ * ```
+ */
+export function sendSystemMessage(tableId: number, message: string): void {
+  // Create chat message payload with system sender
+  const payload: ChatMessagePayload = {
+    kind: 'chat_message',
+    tableId,
+    message,
+    sender: SYSTEM_SENDER,
+    timestamp: new Date().toISOString(),
+    messageId: generateMessageId(),
+  };
+
+  // Broadcast to all subscribers (no database write)
+  broadcastChatMessage(tableId, payload);
+
+  console.log(`[Chat] System message sent to table ${tableId}: ${message}`);
+}
+

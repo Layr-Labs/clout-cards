@@ -114,6 +114,7 @@ export async function createTestHand(
     lastRaiseAmount?: bigint;
     communityCards?: Card[];
     shuffleSeedHash?: string;
+    deckNonce?: string;
   }
 ): Promise<any> {
   const {
@@ -129,6 +130,7 @@ export async function createTestHand(
     lastRaiseAmount = null,
     communityCards = [],
     shuffleSeedHash = '0x' + '0'.repeat(64), // Default hash
+    deckNonce = '0'.repeat(64), // Default 256-bit nonce (all zeros for tests)
   } = options;
 
   // If deckPosition is set and communityCards is empty, extract community cards from deck
@@ -155,6 +157,7 @@ export async function createTestHand(
       lastRaiseAmount,
       communityCards: finalCommunityCards as any,
       shuffleSeedHash,
+      deckNonce,
     },
   });
 }

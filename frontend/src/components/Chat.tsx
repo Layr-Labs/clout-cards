@@ -26,6 +26,8 @@ interface ChatProps {
   onSendMessage: (message: string) => Promise<void>;
   /** Whether the user is fully logged in (can send messages) */
   isFullyLoggedIn: boolean;
+  /** Whether the table is active (if false, chat is disabled) */
+  isTableActive?: boolean;
 }
 
 /**
@@ -67,14 +69,17 @@ function formatRelativeTime(timestamp: string): string {
  * - Twitter avatar and handle for each message
  * - Emoji picker for quick emoji insertion
  * - Disabled input for non-logged-in users
+ * - Disabled input when table is deactivated
+ * - System messages displayed with special styling
  *
  * @param isOpen - Whether the chat panel is visible
  * @param onClose - Called when close button is clicked
  * @param messages - Array of chat messages to display
  * @param onSendMessage - Called with message text when send is clicked
  * @param isFullyLoggedIn - Whether user can send messages
+ * @param isTableActive - Whether the table is active (chat disabled if false)
  */
-export function Chat({ isOpen, onClose, messages, onSendMessage, isFullyLoggedIn }: ChatProps) {
+export function Chat({ isOpen, onClose, messages, onSendMessage, isFullyLoggedIn, isTableActive = true }: ChatProps) {
   const [inputValue, setInputValue] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -91,13 +96,13 @@ export function Chat({ isOpen, onClose, messages, onSendMessage, isFullyLoggedIn
   }, [messages, isOpen]);
 
   /**
-   * Focus input when chat opens
+   * Focus input when chat opens (only if table is active)
    */
   useEffect(() => {
-    if (isOpen && isFullyLoggedIn && inputRef.current) {
+    if (isOpen && isFullyLoggedIn && isTableActive && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isOpen, isFullyLoggedIn]);
+  }, [isOpen, isFullyLoggedIn, isTableActive]);
 
   /**
    * Handle emoji selection from picker
@@ -114,7 +119,7 @@ export function Chat({ isOpen, onClose, messages, onSendMessage, isFullyLoggedIn
    * Handle sending a message
    */
   async function handleSend() {
-    if (!inputValue.trim() || isSending || !isFullyLoggedIn) {
+    if (!inputValue.trim() || isSending || !isFullyLoggedIn || !isTableActive) {
       return;
     }
 
@@ -177,57 +182,78 @@ export function Chat({ isOpen, onClose, messages, onSendMessage, isFullyLoggedIn
                 <p className="chat-empty-hint">Be the first to say something!</p>
               </div>
             ) : (
-              messages.map((msg) => (
-                <div key={msg.messageId} className="chat-message">
-                  <div className="chat-message-avatar">
-                    {msg.sender.twitterAvatarUrl ? (
-                      <img
-                        src={msg.sender.twitterAvatarUrl}
-                        alt={msg.sender.twitterHandle}
-                        className="chat-avatar-image"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            const initial = document.createElement('div');
-                            initial.className = 'chat-avatar-initial';
-                            initial.textContent = msg.sender.twitterHandle.charAt(1).toUpperCase();
-                            parent.appendChild(initial);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className="chat-avatar-initial">
-                        {msg.sender.twitterHandle.charAt(1).toUpperCase()}
+              messages.map((msg) => {
+                const isSystemMessage = msg.sender.walletAddress === 'system';
+
+                if (isSystemMessage) {
+                  return (
+                    <div key={msg.messageId} className="chat-message chat-message-system">
+                      <div className="chat-system-message-content">
+                        <p className="chat-system-message-text">{msg.message}</p>
+                        <span className="chat-message-time">
+                          {formatRelativeTime(msg.timestamp)}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                  <div className="chat-message-content">
-                    <div className="chat-message-header">
-                      <a
-                        href={`https://twitter.com/${msg.sender.twitterHandle.replace('@', '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="chat-message-handle"
-                      >
-                        {msg.sender.twitterHandle}
-                      </a>
-                      <span className="chat-message-time">
-                        {formatRelativeTime(msg.timestamp)}
-                      </span>
                     </div>
-                    <p className="chat-message-text">{msg.message}</p>
+                  );
+                }
+
+                return (
+                  <div key={msg.messageId} className="chat-message">
+                    <div className="chat-message-avatar">
+                      {msg.sender.twitterAvatarUrl ? (
+                        <img
+                          src={msg.sender.twitterAvatarUrl}
+                          alt={msg.sender.twitterHandle}
+                          className="chat-avatar-image"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              const initial = document.createElement('div');
+                              initial.className = 'chat-avatar-initial';
+                              initial.textContent = msg.sender.twitterHandle.charAt(1).toUpperCase();
+                              parent.appendChild(initial);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="chat-avatar-initial">
+                          {msg.sender.twitterHandle.charAt(1).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="chat-message-content">
+                      <div className="chat-message-header">
+                        <a
+                          href={`https://twitter.com/${msg.sender.twitterHandle.replace('@', '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="chat-message-handle"
+                        >
+                          {msg.sender.twitterHandle}
+                        </a>
+                        <span className="chat-message-time">
+                          {formatRelativeTime(msg.timestamp)}
+                        </span>
+                      </div>
+                      <p className="chat-message-text">{msg.message}</p>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input Area */}
           <div className="chat-input-area">
-            {!isFullyLoggedIn ? (
+            {!isTableActive ? (
+              <div className="chat-disabled-prompt">
+                Chat disabled - table is deactivated
+              </div>
+            ) : !isFullyLoggedIn ? (
               <div className="chat-login-prompt">
                 Sign in with Twitter to chat
               </div>

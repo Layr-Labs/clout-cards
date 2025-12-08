@@ -138,3 +138,82 @@ export async function getAllTables(): Promise<Array<{
   });
 }
 
+/**
+ * Result of updating table active status
+ */
+export interface UpdateTableActiveStatusResult {
+  id: number;
+  name: string;
+  isActive: boolean;
+  updatedAt: Date;
+}
+
+/**
+ * Updates a table's active status (activate or deactivate)
+ *
+ * This function:
+ * 1. Validates the table exists
+ * 2. Updates the isActive field
+ * 3. Creates a TEE-signed event (TABLE_ACTIVATED or TABLE_DEACTIVATED)
+ *
+ * When a table is deactivated:
+ * - Existing hands can complete normally
+ * - No new hands will start (handStartChecker checks isActive)
+ * - Players cannot join (joinTable uses validateTableExistsAndActive)
+ * - Chat is disabled (chat route checks isActive)
+ * - Players can still stand up to recover funds
+ *
+ * @param tableId - ID of the table to update
+ * @param isActive - New active status (true = activate, false = deactivate)
+ * @param adminAddress - Address of the admin making the change
+ * @returns Updated table record with id, name, isActive, and updatedAt
+ * @throws {Error} If table not found or transaction fails
+ */
+export async function updateTableActiveStatus(
+  tableId: number,
+  isActive: boolean,
+  adminAddress: string
+): Promise<UpdateTableActiveStatusResult> {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Find the table
+    const table = await tx.pokerTable.findUnique({
+      where: { id: tableId },
+      select: { id: true, name: true, isActive: true },
+    });
+
+    if (!table) {
+      throw new Error(`Table with id ${tableId} not found`);
+    }
+
+    // 2. Check if status is actually changing
+    if (table.isActive === isActive) {
+      throw new Error(`Table ${table.name} is already ${isActive ? 'active' : 'inactive'}`);
+    }
+
+    // 3. Update the table status
+    const updatedTable = await tx.pokerTable.update({
+      where: { id: tableId },
+      data: { isActive },
+      select: { id: true, name: true, isActive: true, updatedAt: true },
+    });
+
+    // 4. Create the event payload
+    const eventKind = isActive ? EventKind.TABLE_ACTIVATED : EventKind.TABLE_DEACTIVATED;
+    const payload = {
+      kind: isActive ? 'table_activated' : 'table_deactivated',
+      admin: adminAddress,
+      table: {
+        id: table.id,
+        name: table.name,
+      },
+      timestamp: new Date().toISOString(),
+    };
+    const payloadJson = JSON.stringify(payload);
+
+    // 5. Create the TEE-signed event
+    await createEventInTransaction(tx, eventKind, payloadJson, adminAddress, null);
+
+    return updatedTable;
+  });
+}
+

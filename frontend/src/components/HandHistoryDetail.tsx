@@ -193,11 +193,12 @@ export function HandHistoryDetail({
         );
         setSignatureResults(sigResults.results);
 
-        // Verify deck commitment
-        if (response.hand.deck && response.hand.shuffleSeedHash) {
+        // Verify deck commitment (only for completed hands with revealed deck and nonce)
+        if (response.hand.deck && response.hand.shuffleSeedHash && response.hand.deckNonce) {
           const deckVerification = verifyDeckCommitment(
             response.hand.shuffleSeedHash,
-            response.hand.deck
+            response.hand.deck,
+            response.hand.deckNonce
           );
           setDeckResult(deckVerification);
         }

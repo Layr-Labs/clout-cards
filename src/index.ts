@@ -15,7 +15,7 @@ import { getAdminAddresses } from './services/admins';
 import { parseIntEnv, isProduction } from './config/env';
 import { generateSessionMessage } from './utils/messages';
 import { requireAdminAuth } from './middleware/adminAuth';
-import { createTable, CreateTableInput, getAllTables } from './services/tables';
+import { createTable, CreateTableInput, getAllTables, updateTableActiveStatus } from './services/tables';
 import { getRecentEvents } from './db/events';
 import { verifyEventSignature } from './services/eventVerification';
 import twitterAuthRoutes from './routes/twitterAuth';
@@ -38,7 +38,7 @@ import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
 import { startHandStartChecker } from './services/handStartChecker';
 import { runMigrations } from './utils/runMigrations';
 import { getLeaderboard, type LeaderboardSortBy } from './services/leaderboard';
-import { subscribeToChat } from './services/chat';
+import { subscribeToChat, sendSystemMessage } from './services/chat';
 import chatRoutes from './routes/chat';
 
 /**
@@ -553,6 +553,168 @@ app.get('/admin/tableSessions', requireAdminAuth({ addressSource: 'query' }), as
     res.status(200).json(sessionsJson);
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to fetch table sessions');
+  }
+});
+
+/**
+ * POST /admin/tables/:tableId/status
+ *
+ * Updates a table's active status (activate or deactivate).
+ * Requires admin authentication.
+ *
+ * When a table is deactivated:
+ * - Existing hands can complete normally
+ * - No new hands will start
+ * - Players cannot join the table
+ * - Chat is disabled
+ * - Players can still stand up to recover funds
+ *
+ * Auth:
+ * - Requires admin signature authentication via requireAdminAuth middleware
+ *
+ * Request:
+ * - Path params:
+ *   - tableId: number (required) - The poker table ID
+ * - Query params:
+ *   - adminAddress: string (required) - Admin wallet address for auth
+ * - Body:
+ *   - isActive: boolean (required) - New active status
+ *
+ * Response:
+ * - 200: { id: number; name: string; isActive: boolean; updatedAt: string }
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid or missing parameters
+ * - 401: { error: string; message: string } - Unauthorized (not admin)
+ * - 404: { error: string; message: string } - Table not found
+ * - 409: { error: string; message: string } - Table already in requested state
+ * - 500: { error: string; message: string } - Server error
+ *
+ * Side effects:
+ * - Creates a TEE-signed TABLE_ACTIVATED or TABLE_DEACTIVATED event
+ * - On deactivation, sends a system chat message to the table
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/admin/tables/:tableId/status', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Parse and validate tableId from path params
+    const tableIdStr = req.params.tableId;
+    if (!tableIdStr) {
+      throw new ValidationError('tableId is required');
+    }
+
+    const tableId = parseInt(tableIdStr, 10);
+    if (isNaN(tableId) || tableId <= 0) {
+      throw new ValidationError('tableId must be a positive integer');
+    }
+
+    // Validate request body
+    const { isActive } = req.body;
+    if (typeof isActive !== 'boolean') {
+      throw new ValidationError('isActive must be a boolean');
+    }
+
+    // Get admin address from middleware
+    const adminAddress = (req as Request & { adminAddress: string }).adminAddress;
+
+    // Update table status (creates TEE-signed event)
+    const updatedTable = await updateTableActiveStatus(tableId, isActive, adminAddress);
+
+    // If table was deactivated, send system chat message
+    if (!isActive) {
+      sendSystemMessage(
+        tableId,
+        'This table has been deactivated by an administrator. Current hand will complete, but no new hands will start.'
+      );
+    }
+
+    // Return updated table state
+    res.status(200).json({
+      id: updatedTable.id,
+      name: updatedTable.name,
+      isActive: updatedTable.isActive,
+      updatedAt: updatedTable.updatedAt.toISOString(),
+    });
+  } catch (error) {
+    // Check for "already in state" error and return 409 Conflict
+    if (error instanceof Error && error.message.includes('already')) {
+      sendErrorResponse(res, new ConflictError(error.message), 'Failed to update table status');
+    } else {
+      sendErrorResponse(res, error, 'Failed to update table status');
+    }
+  }
+});
+
+/**
+ * POST /admin/leaderboard/reset
+ *
+ * Resets the leaderboard by deleting all records from the leaderboard_stats table.
+ * Requires admin authentication.
+ *
+ * Auth:
+ * - Requires admin signature authentication via requireAdminAuth middleware
+ *
+ * Request:
+ * - Query params:
+ *   - adminAddress: string (required) - Admin wallet address for auth
+ * - Headers:
+ *   - Authorization: Bearer <signature> (session signature)
+ *
+ * Response:
+ * - 200: { success: true; recordsDeleted: number }
+ *
+ * Error model:
+ * - 401: { error: string; message: string } - Unauthorized (not admin)
+ * - 500: { error: string; message: string } - Server error
+ *
+ * Side effects:
+ * - Deletes all records from leaderboard_stats table
+ * - Creates a TEE-signed LEADERBOARD_RESET event
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/admin/leaderboard/reset', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Get admin address from middleware
+    const adminAddress = (req as Request & { adminAddress: string }).adminAddress;
+
+    // Use transaction to delete records and create event atomically
+    const result = await prisma.$transaction(async (tx) => {
+      // Delete all records from leaderboard_stats
+      const deleteResult = await tx.leaderboardStats.deleteMany({});
+      const recordsDeleted = deleteResult.count;
+
+      // Create event payload
+      const payload = {
+        kind: 'leaderboard_reset',
+        admin: adminAddress,
+        timestamp: new Date().toISOString(),
+        recordsDeleted,
+      };
+      const payloadJson = JSON.stringify(payload);
+
+      // Import EventKind dynamically to avoid circular dependency
+      const { createEventInTransaction, EventKind } = await import('./db/events');
+
+      // Create TEE-signed event
+      await createEventInTransaction(tx, EventKind.LEADERBOARD_RESET, payloadJson, adminAddress, null);
+
+      return recordsDeleted;
+    });
+
+    res.status(200).json({
+      success: true,
+      recordsDeleted: result,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to reset leaderboard');
   }
 });
 
@@ -1602,7 +1764,11 @@ app.get('/api/tables/:tableId/handHistory', async (req: Request, res: Response):
  * GET /api/hands/:handId/events
  *
  * Returns all events for a specific hand, including full signature data for verification.
- * Also returns the hand record with deck commitment (shuffleSeedHash) and revealed deck.
+ * Also returns the hand record with deck commitment (shuffleSeedHash).
+ *
+ * SECURITY: Sensitive fields (deck, shuffleSeed, deckNonce) are only revealed for
+ * COMPLETED hands to prevent mid-hand deck leakage. For active hands, these fields
+ * return null.
  *
  * Auth:
  * - No authentication required (public endpoint for transparency)
@@ -1613,7 +1779,13 @@ app.get('/api/tables/:tableId/handHistory', async (req: Request, res: Response):
  *
  * Response:
  * - 200: {
- *     hand: { id, shuffleSeedHash, shuffleSeed, deck, startedAt, completedAt, communityCards },
+ *     hand: {
+ *       id, shuffleSeedHash,
+ *       shuffleSeed (null if not completed),
+ *       deckNonce (null if not completed),
+ *       deck (null if not completed),
+ *       startedAt, completedAt, communityCards
+ *     },
  *     events: Array of events with signature data
  *   }
  *
@@ -1722,13 +1894,19 @@ app.get('/api/hands/:handId/events', async (req: Request, res: Response): Promis
     });
 
     // Return hand data with deck for verification, and all events with signatures
+    // SECURITY: Only reveal deck, shuffleSeed, and deckNonce for COMPLETED hands
+    // to prevent mid-hand deck leakage
+    const isCompleted = hand.status === 'COMPLETED';
+    
     res.status(200).json({
       hand: {
         id: hand.id,
         tableId: hand.tableId,
         shuffleSeedHash: hand.shuffleSeedHash,
-        shuffleSeed: hand.shuffleSeed,
-        deck: hand.deck,
+        // Only reveal sensitive data after hand completion
+        shuffleSeed: isCompleted ? hand.shuffleSeed : null,
+        deckNonce: isCompleted ? hand.deckNonce : null,
+        deck: isCompleted ? hand.deck : null,
         startedAt: hand.startedAt.toISOString(),
         completedAt: hand.completedAt?.toISOString() || null,
         communityCards: hand.communityCards,

@@ -87,12 +87,14 @@ export interface HandDetail {
   id: number;
   /** Table ID */
   tableId: number;
-  /** Keccak256 hash of the deck JSON (committed at hand start) */
+  /** Keccak256 hash of deck commitment: keccak256(deck || nonce), published at hand start */
   shuffleSeedHash: string;
   /** Shuffle seed revealed at hand end (null if hand not complete) */
   shuffleSeed: string | null;
-  /** Full deck of 52 cards (revealed at hand end) */
-  deck: Card[];
+  /** Secret 256-bit nonce for deck commitment verification (null if hand not complete) */
+  deckNonce: string | null;
+  /** Full deck of 52 cards (null if hand not complete, revealed at hand end) */
+  deck: Card[] | null;
   /** ISO timestamp when hand started */
   startedAt: string;
   /** ISO timestamp when hand completed */
@@ -161,7 +163,10 @@ export async function getHandHistory(
  * Fetches all events for a specific hand with TEE signature data
  *
  * Returns the hand details including the deck commitment (shuffleSeedHash),
- * revealed deck, and all events with their signatures for verification.
+ * revealed deck, nonce, and all events with their signatures for verification.
+ *
+ * Note: deck, shuffleSeed, and deckNonce are only returned for completed hands.
+ * For active hands, these fields will be null.
  *
  * @param handId - The hand ID to get events for
  * @returns Promise resolving to hand detail with events and EIP-712 domain
@@ -175,8 +180,10 @@ export async function getHandHistory(
  *   const isValid = verifyEventSignature(event, eip712Domain);
  *   console.log(`Event ${event.eventId}: ${isValid ? 'valid' : 'INVALID'}`);
  * }
- * // Verify deck commitment
- * const deckValid = verifyDeckCommitment(hand.shuffleSeedHash, hand.deck);
+ * // Verify deck commitment (only for completed hands)
+ * if (hand.deck && hand.deckNonce) {
+ *   const deckValid = verifyDeckCommitment(hand.shuffleSeedHash, hand.deck, hand.deckNonce);
+ * }
  * ```
  */
 export async function getHandEvents(handId: number): Promise<HandEventsResponse> {

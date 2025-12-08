@@ -7,10 +7,11 @@ import { Header } from './components/Header'
 import { formatAddress } from './utils/formatAddress'
 import { JsonViewerDialog } from './components/JsonViewerDialog'
 import { getEvents, type Event } from './services/events'
-import { isAdmin } from './services/admin'
+import { isAdmin, resetLeaderboard } from './services/admin'
 import { AddTableDialog } from './components/AddTableDialog'
 import { TableSessionsDialog } from './components/TableSessionsDialog'
-import { createTable, getPokerTables, type PokerTable } from './services/tables'
+import { createTable, getPokerTables, updateTableStatus, type PokerTable } from './services/tables'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { TableCard } from './components/TableCard'
 import { AsyncState } from './components/AsyncState'
 
@@ -22,7 +23,7 @@ import { AsyncState } from './components/AsyncState'
  */
 function Admin() {
   const { address, isConnected, isLoggedIn, connectWallet, signature } = useWallet()
-  const [activeTab, setActiveTab] = useState<'tables' | 'metadata'>('tables')
+  const [activeTab, setActiveTab] = useState<'tables' | 'metadata' | 'actions'>('tables')
   const [isConnecting, setIsConnecting] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null)
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false)
@@ -36,6 +37,12 @@ function Admin() {
   const [isAddTableDialogOpen, setIsAddTableDialogOpen] = useState(false)
   const [selectedTable, setSelectedTable] = useState<PokerTable | null>(null)
   const [isSessionsDialogOpen, setIsSessionsDialogOpen] = useState(false)
+  const [tableToToggle, setTableToToggle] = useState<PokerTable | null>(null)
+  const [isToggleDialogOpen, setIsToggleDialogOpen] = useState(false)
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  // Actions tab state
+  const [isResetLeaderboardDialogOpen, setIsResetLeaderboardDialogOpen] = useState(false)
+  const [isResettingLeaderboard, setIsResettingLeaderboard] = useState(false)
 
   /**
    * Handles wallet connection with error handling
@@ -176,6 +183,58 @@ function Admin() {
     }
   }
 
+  /**
+   * Handles toggling table active status
+   */
+  async function handleToggleTableStatus() {
+    if (!tableToToggle || !address || !signature) {
+      return
+    }
+
+    setIsTogglingStatus(true)
+    try {
+      const newStatus = !tableToToggle.isActive
+      await updateTableStatus(tableToToggle.id, newStatus, signature, address)
+
+      // Refresh table list after successful update
+      const fetchedTables = await getPokerTables()
+      setTables(fetchedTables)
+
+      // Close dialog
+      setIsToggleDialogOpen(false)
+      setTableToToggle(null)
+    } catch (error) {
+      console.error('Failed to update table status:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update table status')
+    } finally {
+      setIsTogglingStatus(false)
+    }
+  }
+
+  /**
+   * Handles resetting the leaderboard
+   * Deletes all leaderboard stats and creates a LEADERBOARD_RESET event
+   */
+  async function handleResetLeaderboard() {
+    if (!address || !signature) {
+      return
+    }
+
+    setIsResettingLeaderboard(true)
+    try {
+      const result = await resetLeaderboard(signature, address)
+      alert(`Leaderboard reset successfully. ${result.recordsDeleted} records deleted.`)
+
+      // Close dialog
+      setIsResetLeaderboardDialogOpen(false)
+    } catch (error) {
+      console.error('Failed to reset leaderboard:', error)
+      alert(error instanceof Error ? error.message : 'Failed to reset leaderboard')
+    } finally {
+      setIsResettingLeaderboard(false)
+    }
+  }
+
   return (
     <div className="app">
       {/* Header */}
@@ -248,6 +307,12 @@ function Admin() {
                     >
                       Metadata
                     </button>
+                    <button
+                      className={`admin-tab ${activeTab === 'actions' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('actions')}
+                    >
+                      Actions
+                    </button>
                   </div>
 
                   {/* Tab Content */}
@@ -283,12 +348,30 @@ function Admin() {
                               <TableCard
                                 key={table.id}
                                 table={table}
-                                onAction={() => {
-                                  setSelectedTable(table)
-                                  setIsSessionsDialogOpen(true)
-                                }}
                                 className="admin-table-card"
                                 showDetails={true}
+                                renderAction={() => (
+                                  <div className="admin-table-actions">
+                                    <button
+                                      className="admin-table-sessions-button"
+                                      onClick={() => {
+                                        setSelectedTable(table)
+                                        setIsSessionsDialogOpen(true)
+                                      }}
+                                    >
+                                      Sessions
+                                    </button>
+                                    <button
+                                      className={`admin-table-toggle-button ${table.isActive ? 'deactivate' : 'activate'}`}
+                                      onClick={() => {
+                                        setTableToToggle(table)
+                                        setIsToggleDialogOpen(true)
+                                      }}
+                                    >
+                                      {table.isActive ? 'Deactivate' : 'Activate'}
+                                    </button>
+                                  </div>
+                                )}
                               />
                             ))}
                           </div>
@@ -446,6 +529,43 @@ function Admin() {
                         </AsyncState>
                       </div>
                     )}
+
+                    {activeTab === 'actions' && (
+                      <div className="admin-tab-panel">
+                        <div className="admin-tab-header">
+                          <div className="admin-tab-header-left">
+                            <h2 className="admin-tab-title">Actions</h2>
+                            <p className="admin-tab-description">
+                              Administrative actions and system operations
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Actions List */}
+                        <div className="admin-actions-list">
+                          {/* Reset Leaderboard Action */}
+                          <div className="admin-action-card">
+                            <div className="admin-action-card-header">
+                              <h3 className="admin-action-card-title">Reset Leaderboard</h3>
+                            </div>
+                            <div className="admin-action-card-body">
+                              <p className="admin-action-card-description">
+                                This action will permanently delete all leaderboard statistics. 
+                                All player rankings, win/loss records, and earnings data will be 
+                                erased. This action cannot be undone.
+                              </p>
+                              <button
+                                className="admin-action-button admin-action-button-danger"
+                                onClick={() => setIsResetLeaderboardDialogOpen(true)}
+                                disabled={isResettingLeaderboard}
+                              >
+                                {isResettingLeaderboard ? 'Resetting...' : 'Reset Leaderboard'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : null}
@@ -483,6 +603,35 @@ function Admin() {
           adminAddress={address}
         />
       )}
+
+      {/* Toggle Table Status Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isToggleDialogOpen}
+        onClose={() => {
+          setIsToggleDialogOpen(false)
+          setTableToToggle(null)
+        }}
+        onConfirm={handleToggleTableStatus}
+        title={tableToToggle?.isActive ? 'Deactivate Table' : 'Activate Table'}
+        message={
+          tableToToggle?.isActive
+            ? `Are you sure you want to deactivate "${tableToToggle.name}"? New hands will not start and chat will be disabled. Players can still complete any active hand and stand up to recover their funds.`
+            : `Are you sure you want to activate "${tableToToggle?.name}"? This will allow new hands to start and enable chat.`
+        }
+        confirmText={tableToToggle?.isActive ? 'Deactivate' : 'Activate'}
+        isLoading={isTogglingStatus}
+      />
+
+      {/* Reset Leaderboard Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isResetLeaderboardDialogOpen}
+        onClose={() => setIsResetLeaderboardDialogOpen(false)}
+        onConfirm={handleResetLeaderboard}
+        title="Reset Leaderboard"
+        message="Are you sure you want to reset the leaderboard? This will permanently delete ALL leaderboard statistics including player rankings, win/loss records, and earnings data. This action CANNOT be undone."
+        confirmText="Reset Leaderboard"
+        isLoading={isResettingLeaderboard}
+      />
     </div>
   )
 }

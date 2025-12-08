@@ -3,8 +3,13 @@
  *
  * Handles starting a new poker hand at a table with atomic transactions.
  * Creates hand, shuffles deck, assigns dealer/blinds, posts blinds, deals cards.
+ *
+ * Security: Uses cryptographic commit-reveal scheme for deck integrity.
+ * - Commitment = keccak256(deck || nonce) where nonce is a 256-bit random value
+ * - Nonce is kept secret until hand completion, making brute-force reversal infeasible
  */
 
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { prisma } from '../db/client';
 import { createEventInTransaction, EventKind } from '../db/events';
@@ -118,10 +123,12 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
     const timestamp = Date.now();
     const shuffledDeck = shuffleDeck(standardDeck, timestamp);
 
-    // 3. Create deck commitment hash (hash of JSON stringified shuffled deck)
-    // The commitment is the hash of the full shuffled deck JSON
+    // 3. Create deck commitment hash with secret nonce (commit-reveal scheme)
+    // commitment = keccak256(deck || nonce) where nonce is 256-bit random value
+    // The nonce prevents brute-force reversal of the commitment during the hand
     const deckJson = JSON.stringify(shuffledDeck);
-    const deckCommitmentHash = keccak256(toUtf8Bytes(deckJson));
+    const deckNonce = crypto.randomBytes(32).toString('hex'); // 256-bit entropy
+    const deckCommitmentHash = keccak256(toUtf8Bytes(deckJson + deckNonce));
 
     // 4. Assign dealer and blinds with rotation
     // Find the most recent completed hand to get the previous dealer position
@@ -192,6 +199,7 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
         communityCards: [] as any,
         shuffleSeedHash: deckCommitmentHash,
         shuffleSeed: null, // Will be revealed after hand completes
+        deckNonce, // Secret nonce for commitment (revealed after hand completes)
       },
     });
 

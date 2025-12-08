@@ -181,9 +181,10 @@ enum HandPlayerStatus {
  * The deck is stored as a JSON array of 52 cards in shuffled order. The deckPosition
  * tracks where we are in the deck as cards are dealt, enabling verification that
  * cards were dealt correctly.
- * Cryptographic verification:
- * - shuffleSeedHash: Commitment to the shuffle seed (created before dealing)
- * - shuffleSeed: The actual seed (revealed after hand completes for verification)
+* Cryptographic verification (commit-reveal scheme):
+* - shuffleSeedHash: Commitment hash = keccak256(deck || deckNonce), published at hand start
+* - shuffleSeed: The shuffle seed (revealed after hand completes for verification)
+* - deckNonce: Secret 256-bit nonce that makes the commitment computationally infeasible to reverse
  * Pot tracking:
  * - Pots are stored separately in the Pot table
  * - Sum Pot.amount WHERE handId = id to get total pot
@@ -203,8 +204,9 @@ model Hand {
   deck              Json // Full shuffled deck (52 cards) as JSON array
   deckPosition      Int           @default(0) @map("deck_position") // Current position in deck (0-51)
   communityCards    Json          @default("[]") @map("community_cards") // Community cards as JSON array (flop/turn/river)
-  shuffleSeedHash   String        @map("shuffle_seed_hash") @db.VarChar(66) // Cryptographic commitment to shuffle seed (keccak256 hash)
+  shuffleSeedHash   String        @map("shuffle_seed_hash") @db.VarChar(66) // Cryptographic commitment to deck: keccak256(deck || nonce)
   shuffleSeed       String?       @map("shuffle_seed") @db.VarChar(66) // Shuffle seed (revealed after hand completes, hex string)
+  deckNonce         String?       @map("deck_nonce") @db.VarChar(66) // Secret 256-bit nonce for deck commitment (revealed after hand completes)
   startedAt         DateTime      @default(now()) @map("started_at")
   completedAt       DateTime?     @map("completed_at")
 

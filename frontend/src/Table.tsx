@@ -180,6 +180,7 @@ function Table() {
   const [handStartCountdown, setHandStartCountdown] = useState<number | null>(null)
   const [showCountdown, setShowCountdown] = useState(false)
   const [countdownExiting, setCountdownExiting] = useState(false)
+  const [showTableClosed, setShowTableClosed] = useState(false)
   const [updatingPotNumbers, setUpdatingPotNumbers] = useState<Set<number>>(new Set())
   const previousPotAmountsRef = useRef<Map<number, string>>(new Map())
   const seatRefs = useRef<Map<number, HTMLDivElement>>(new Map())
@@ -274,50 +275,60 @@ function Table() {
         if (foundTable) {
         setTable(foundTable)
 
-          // Check if we should show countdown (waiting for next hand)
-          // Only if: no active hand AND we have a lastHandCompletedAt AND we're within the delay window
+          // Check if we should show countdown or table closed (waiting for next hand)
+          // Only if: no active hand AND we have a lastHandCompletedAt
           if (!foundTable.hasActiveHand && foundTable.lastHandCompletedAt) {
-            const completedAt = new Date(foundTable.lastHandCompletedAt)
-            const delaySeconds = foundTable.handStartDelaySeconds || 30
-            const targetTime = completedAt.getTime() + (delaySeconds * 1000)
-            const now = Date.now()
-            const remaining = Math.ceil((targetTime - now) / 1000)
+            // If table is inactive, show "TABLE CLOSED" instead of countdown
+            if (!foundTable.isActive) {
+              console.log('[Table] loadTableData: table is inactive, showing TABLE CLOSED')
+              setShowTableClosed(true)
+              setShowCountdown(false)
+              setHandStartCountdown(null)
+            } else {
+              // Table is active, check if we're within the countdown window
+              const completedAt = new Date(foundTable.lastHandCompletedAt)
+              const delaySeconds = foundTable.handStartDelaySeconds || 30
+              const targetTime = completedAt.getTime() + (delaySeconds * 1000)
+              const now = Date.now()
+              const remaining = Math.ceil((targetTime - now) / 1000)
 
-            // Only show countdown if we're still within the delay window
-            if (remaining > 0) {
-              console.log('[Table] loadTableData: starting countdown from initial load', { remaining, delaySeconds })
-              
-              // Set up countdown (same logic as hand_end handler)
-              setHandStartCountdown(remaining)
-              
-              // Show countdown immediately since this is a page reload
-              setShowCountdown(true)
-              
-              // Clear any existing interval
-              if (countdownIntervalRef.current) {
-                clearInterval(countdownIntervalRef.current)
-              }
-              
-              // Update countdown every second
-              countdownIntervalRef.current = setInterval(() => {
-                const now = Date.now()
-                const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
+              // Only show countdown if we're still within the delay window
+              if (remaining > 0) {
+                console.log('[Table] loadTableData: starting countdown from initial load', { remaining, delaySeconds })
+                
+                // Set up countdown (same logic as hand_end handler)
                 setHandStartCountdown(remaining)
                 
-                if (remaining <= 0) {
-                  if (countdownIntervalRef.current) {
-                    clearInterval(countdownIntervalRef.current)
-                    countdownIntervalRef.current = null
-                  }
-                  // Trigger exit animation
-                  setCountdownExiting(true)
-                  setTimeout(() => {
-                    setHandStartCountdown(null)
-                    setShowCountdown(false)
-                    setCountdownExiting(false)
-                  }, 500)
+                // Show countdown immediately since this is a page reload
+                setShowCountdown(true)
+                setShowTableClosed(false)
+                
+                // Clear any existing interval
+                if (countdownIntervalRef.current) {
+                  clearInterval(countdownIntervalRef.current)
                 }
-              }, 1000) as any
+                
+                // Update countdown every second
+                countdownIntervalRef.current = setInterval(() => {
+                  const now = Date.now()
+                  const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
+                  setHandStartCountdown(remaining)
+                  
+                  if (remaining <= 0) {
+                    if (countdownIntervalRef.current) {
+                      clearInterval(countdownIntervalRef.current)
+                      countdownIntervalRef.current = null
+                    }
+                    // Trigger exit animation
+                    setCountdownExiting(true)
+                    setTimeout(() => {
+                      setHandStartCountdown(null)
+                      setShowCountdown(false)
+                      setCountdownExiting(false)
+                    }, 500)
+                  }
+                }, 1000) as any
+              }
             }
           }
         }
@@ -555,6 +566,7 @@ function Table() {
           setHandStartCountdown(null)
           setShowCountdown(false)
           setCountdownExiting(false)
+          setShowTableClosed(false)
           if (countdownIntervalRef.current) {
             clearInterval(countdownIntervalRef.current)
             countdownIntervalRef.current = null
@@ -860,57 +872,119 @@ function Table() {
           })
           setWinnerSeats(allWinnerSeats)
 
-          // Start countdown timer if completedAt is available
-          if (handData?.completedAt) {
-            const completedAt = new Date(handData.completedAt)
-            const delaySeconds = (tableData?.handStartDelaySeconds && tableData.handStartDelaySeconds > 0)
-              ? tableData.handStartDelaySeconds
-              : 30 // Default 30 seconds
-            const targetTime = completedAt.getTime() + (delaySeconds * 1000)
-            
-            // Clear any existing interval and timeout
-            if (countdownIntervalRef.current) {
-              clearInterval(countdownIntervalRef.current)
-            }
-            if (countdownDisplayTimeoutRef.current) {
-              clearTimeout(countdownDisplayTimeoutRef.current)
-            }
-            
-            // Hide countdown initially
-            setShowCountdown(false)
-            
-            // Update countdown immediately (but don't show yet)
-            const updateCountdown = () => {
-              const now = Date.now()
-              const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
-              setHandStartCountdown(remaining)
+          // Clear any existing interval and timeout
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current)
+            countdownIntervalRef.current = null
+          }
+          if (countdownDisplayTimeoutRef.current) {
+            clearTimeout(countdownDisplayTimeoutRef.current)
+            countdownDisplayTimeoutRef.current = null
+          }
+
+          // Refetch table data to get latest isActive status (in case table was deactivated during the hand)
+          // Then decide whether to show countdown or table closed message
+          getPokerTables().then((allTables) => {
+            const updatedTable = allTables.find(t => t.id === tableId)
+            if (updatedTable) {
+              setTable(updatedTable)
               
-              if (remaining <= 0) {
-                if (countdownIntervalRef.current) {
-                  clearInterval(countdownIntervalRef.current)
-                  countdownIntervalRef.current = null
+              const isTableInactive = !updatedTable.isActive
+              
+              if (isTableInactive) {
+                // Table was deactivated - show "TABLE CLOSED" instead of countdown
+                setShowCountdown(false)
+                setHandStartCountdown(null)
+                setShowTableClosed(false) // Hide initially
+                
+                // Delay showing the "TABLE CLOSED" overlay by 3 seconds (same as countdown)
+                countdownDisplayTimeoutRef.current = setTimeout(() => {
+                  setShowTableClosed(true)
+                }, 3000) as any
+              } else if (handData?.completedAt) {
+                // Table is active - show countdown timer
+                const completedAt = new Date(handData.completedAt)
+                const delaySeconds = (updatedTable.handStartDelaySeconds && updatedTable.handStartDelaySeconds > 0)
+                  ? updatedTable.handStartDelaySeconds
+                  : 30 // Default 30 seconds
+                const targetTime = completedAt.getTime() + (delaySeconds * 1000)
+                
+                // Hide countdown initially
+                setShowCountdown(false)
+                setShowTableClosed(false)
+                
+                // Update countdown immediately (but don't show yet)
+                const updateCountdown = () => {
+                  const now = Date.now()
+                  const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
+                  setHandStartCountdown(remaining)
+                  
+                  if (remaining <= 0) {
+                    if (countdownIntervalRef.current) {
+                      clearInterval(countdownIntervalRef.current)
+                      countdownIntervalRef.current = null
+                    }
+                    // Trigger exit animation
+                    setCountdownExiting(true)
+                    // Hide after animation completes (0.5s)
+                    setTimeout(() => {
+                      setHandStartCountdown(null)
+                      setShowCountdown(false)
+                      setCountdownExiting(false)
+                    }, 500)
+                  }
                 }
-                // Trigger exit animation
-                setCountdownExiting(true)
-                // Hide after animation completes (0.5s)
-                setTimeout(() => {
-                  setHandStartCountdown(null)
-                  setShowCountdown(false)
-                  setCountdownExiting(false)
-                }, 500)
+                
+                updateCountdown()
+                
+                // Update every second
+                countdownIntervalRef.current = setInterval(updateCountdown, 1000) as any
+                
+                // Delay showing the countdown overlay by 3 seconds
+                countdownDisplayTimeoutRef.current = setTimeout(() => {
+                  setShowCountdown(true)
+                }, 3000) as any
               }
             }
-            
-            updateCountdown()
-            
-            // Update every second
-            countdownIntervalRef.current = setInterval(updateCountdown, 1000) as any
-            
-            // Delay showing the countdown overlay by 3 seconds
-            countdownDisplayTimeoutRef.current = setTimeout(() => {
-              setShowCountdown(true)
-            }, 3000) as any
-          }
+          }).catch((error) => {
+            console.error('[Table] Failed to refetch table data after hand_end:', error)
+            // Fall back to showing countdown with existing table data
+            if (handData?.completedAt) {
+              const completedAt = new Date(handData.completedAt)
+              const delaySeconds = (tableData?.handStartDelaySeconds && tableData.handStartDelaySeconds > 0)
+                ? tableData.handStartDelaySeconds
+                : 30
+              const targetTime = completedAt.getTime() + (delaySeconds * 1000)
+              
+              setShowCountdown(false)
+              setShowTableClosed(false)
+              
+              const updateCountdown = () => {
+                const now = Date.now()
+                const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
+                setHandStartCountdown(remaining)
+                
+                if (remaining <= 0) {
+                  if (countdownIntervalRef.current) {
+                    clearInterval(countdownIntervalRef.current)
+                    countdownIntervalRef.current = null
+                  }
+                  setCountdownExiting(true)
+                  setTimeout(() => {
+                    setHandStartCountdown(null)
+                    setShowCountdown(false)
+                    setCountdownExiting(false)
+                  }, 500)
+                }
+              }
+              
+              updateCountdown()
+              countdownIntervalRef.current = setInterval(updateCountdown, 1000) as any
+              countdownDisplayTimeoutRef.current = setTimeout(() => {
+                setShowCountdown(true)
+              }, 3000) as any
+            }
+          })
 
           // Update table balances using standardized playerBalances field
           // Fall back to players array for backward compatibility
@@ -1110,6 +1184,10 @@ function Table() {
   function handleBuyInClick(seatNumber: number) {
     if (!isFullyLoggedIn) {
       setIsLoginDialogOpen(true)
+      return
+    }
+    // Prevent joining deactivated tables
+    if (table && !table.isActive) {
       return
     }
     setSelectedSeatNumber(seatNumber)
@@ -1595,6 +1673,17 @@ function Table() {
               </div>
             </div>
           )}
+
+          {/* Table Closed Overlay - Shown when table is deactivated after hand ends */}
+          {showTableClosed && (
+            <div className="table-action-overlay countdown-overlay table-closed-overlay">
+              <div className="table-action-overlay-content">
+                <div className="table-action-overlay-action table-closed-text">
+                  TABLE CLOSED
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Seat Avatars */}
           {table && table.maxSeatCount > 0 && (
@@ -1765,7 +1854,7 @@ function Table() {
                       <>
                         <div className="table-seat-avatar-circle" />
                         <AnimatePresence initial={false}>
-                          {isFullyLoggedIn && !isUserSeated() && (
+                          {isFullyLoggedIn && !isUserSeated() && table.isActive && (
                             <motion.button
                               key={`buy-in-${seatIndex}`}
                               className="table-seat-buy-in-button"
@@ -1887,6 +1976,7 @@ function Table() {
         messages={chatMessages}
         onSendMessage={handleSendChatMessage}
         isFullyLoggedIn={isFullyLoggedIn}
+        isTableActive={table?.isActive ?? true}
       />
 
       {/* Hand History Panel - inside layout wrapper */}
