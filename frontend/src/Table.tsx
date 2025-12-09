@@ -1,6 +1,6 @@
 import './App.css'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, watchCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
@@ -155,6 +155,7 @@ function ActionTimeoutCountdown({ timeoutAt }: { timeoutAt: string | null }) {
  */
 function Table() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [table, setTable] = useState<PokerTable | null>(null)
   const [players, setPlayers] = useState<TablePlayer[]>([])
   const [currentHand, setCurrentHand] = useState<CurrentHand | null>(null)
@@ -1965,23 +1966,33 @@ function Table() {
                         <div className="table-seat-avatar-circle" />
                         <AnimatePresence initial={false}>
                           {isFullyLoggedIn && !isUserSeated() && table.isActive && (
-                            <motion.button
-                              key={`buy-in-${seatIndex}`}
-                              className="table-seat-buy-in-button"
-                              onClick={() => handleBuyInClick(seatIndex)}
-                              disabled={!canAffordSeat()}
-                              title={
-                                !canAffordSeat()
-                                  ? `Insufficient balance. Minimum buy-in: ${formatEth(table.minimumBuyIn)}`
-                                  : `Buy in to seat ${seatIndex}`
-                              }
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              transition={{ duration: 0.3, ease: 'easeOut' }}
-                            >
-                              Buy In
-                            </motion.button>
+                            canAffordSeat() ? (
+                              <motion.button
+                                key={`buy-in-${seatIndex}`}
+                                className="table-seat-buy-in-button"
+                                onClick={() => handleBuyInClick(seatIndex)}
+                                title={`Buy in to seat ${seatIndex}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.3, ease: 'easeOut' }}
+                              >
+                                Buy In
+                              </motion.button>
+                            ) : (
+                              <motion.button
+                                key={`deposit-${seatIndex}`}
+                                className="table-seat-deposit-button"
+                                onClick={() => navigate('/profile')}
+                                title={`Deposit funds to buy in. Minimum: ${formatEth(table.minimumBuyIn)}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.3, ease: 'easeOut' }}
+                              >
+                                Deposit
+                              </motion.button>
+                            )
                           )}
                         </AnimatePresence>
                       </>

@@ -2655,6 +2655,37 @@
   border: 1px solid rgba(100, 100, 100, 0.3);
 }
 
+/* Deposit Button - purple/violet when user can't afford buy-in */
+.table-seat-deposit-button {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5), 0 0 0 2px rgba(139, 92, 246, 0.3);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.table-seat-deposit-button:hover {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.7), 0 0 0 2px rgba(139, 92, 246, 0.5);
+}
+
+.table-seat-deposit-button:active {
+  transform: translateX(-50%) translateY(0);
+}
+
 /* Make content container use flex column for alignment */
 .table-seat-player-info-content {
   display: flex;
