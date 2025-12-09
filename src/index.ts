@@ -41,6 +41,7 @@ import { getLeaderboard, type LeaderboardSortBy } from './services/leaderboard';
 import { subscribeToChat, sendSystemMessage, LOBBY_CHANNEL_ID } from './services/chat';
 import chatRoutes from './routes/chat';
 import lobbyChatRoutes from './routes/lobbyChat';
+import { checkSolvency } from './services/accounting';
 
 /**
  * Express application instance
@@ -154,6 +155,49 @@ app.get('/admins', (req: Request, res: Response): void => {
     res.status(200).json(admins);
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to retrieve admin addresses');
+  }
+});
+
+/**
+ * GET /api/accounting/solvency
+ *
+ * Returns solvency information comparing total escrow balances to contract balance.
+ * Used to verify that the smart contract holds enough ETH to cover all player balances.
+ *
+ * Auth:
+ * - Requires admin signature authentication
+ *
+ * Request:
+ * - Query params:
+ *   - adminAddress: string (required) - Admin wallet address
+ * - Headers:
+ *   - Authorization: string (required) - Session signature
+ *
+ * Response:
+ * - 200: {
+ *     totalEscrowGwei: string,      // Sum of all player escrow balances
+ *     contractBalanceGwei: string,  // Contract ETH balance in gwei
+ *     isSolvent: boolean,           // true if contract >= escrow
+ *     shortfallGwei: string | null, // Difference if insolvent
+ *     breakdown: {
+ *       playerCount: number,
+ *       players: Array<{ address: string, balanceGwei: string }>
+ *     }
+ *   }
+ *
+ * Error model:
+ * - 401: { error: string; message: string } - Unauthorized
+ * - 500: { error: string; message: string } - RPC or database error
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ */
+app.get('/api/accounting/solvency', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const solvency = await checkSolvency();
+    res.status(200).json(solvency);
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to check solvency');
   }
 });
 

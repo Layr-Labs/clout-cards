@@ -7,7 +7,7 @@ import { Header } from './components/Header'
 import { formatAddress } from './utils/formatAddress'
 import { JsonViewerDialog } from './components/JsonViewerDialog'
 import { getEvents, type Event } from './services/events'
-import { isAdmin, resetLeaderboard } from './services/admin'
+import { isAdmin, resetLeaderboard, getAccountingSolvency, type SolvencyResult } from './services/admin'
 import { AddTableDialog } from './components/AddTableDialog'
 import { TableSessionsDialog } from './components/TableSessionsDialog'
 import { createTable, getPokerTables, updateTableStatus, type PokerTable } from './services/tables'
@@ -23,7 +23,7 @@ import { AsyncState } from './components/AsyncState'
  */
 function Admin() {
   const { address, isConnected, isLoggedIn, connectWallet, signature } = useWallet()
-  const [activeTab, setActiveTab] = useState<'tables' | 'metadata' | 'actions'>('tables')
+  const [activeTab, setActiveTab] = useState<'tables' | 'metadata' | 'actions' | 'accounting'>('tables')
   const [isConnecting, setIsConnecting] = useState(false)
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null)
   const [isCheckingAdmin, setIsCheckingAdmin] = useState(false)
@@ -43,6 +43,10 @@ function Admin() {
   // Actions tab state
   const [isResetLeaderboardDialogOpen, setIsResetLeaderboardDialogOpen] = useState(false)
   const [isResettingLeaderboard, setIsResettingLeaderboard] = useState(false)
+  // Accounting tab state
+  const [solvencyData, setSolvencyData] = useState<SolvencyResult | null>(null)
+  const [isLoadingSolvency, setIsLoadingSolvency] = useState(false)
+  const [solvencyError, setSolvencyError] = useState<string | null>(null)
 
   /**
    * Handles wallet connection with error handling
@@ -142,6 +146,31 @@ function Admin() {
 
     loadEvents()
   }, [isAdminUser, isLoggedIn, address, signature, activeTab])
+
+  /**
+   * Loads solvency data when admin is logged in and accounting tab is active
+   */
+  useEffect(() => {
+    async function loadSolvency() {
+      if (!isAdminUser || !isLoggedIn || !signature || !address || activeTab !== 'accounting') {
+        return
+      }
+
+      setIsLoadingSolvency(true)
+      setSolvencyError(null)
+      try {
+        const data = await getAccountingSolvency(signature, address)
+        setSolvencyData(data)
+      } catch (error) {
+        console.error('Failed to load solvency data:', error)
+        setSolvencyError(error instanceof Error ? error.message : 'Failed to load solvency data')
+      } finally {
+        setIsLoadingSolvency(false)
+      }
+    }
+
+    loadSolvency()
+  }, [isAdminUser, isLoggedIn, signature, address, activeTab])
 
   /**
    * Handles creating a new table
@@ -312,6 +341,12 @@ function Admin() {
                       onClick={() => setActiveTab('actions')}
                     >
                       Actions
+                    </button>
+                    <button
+                      className={`admin-tab ${activeTab === 'accounting' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('accounting')}
+                    >
+                      Accounting
                     </button>
                   </div>
 
@@ -564,6 +599,122 @@ function Admin() {
                             </div>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {activeTab === 'accounting' && (
+                      <div className="admin-tab-panel">
+                        <div className="admin-tab-header">
+                          <div className="admin-tab-header-left">
+                            <h2 className="admin-tab-title">Accounting</h2>
+                            <p className="admin-tab-description">
+                              Verify solvency by comparing escrow balances to contract balance
+                            </p>
+                          </div>
+                          <button
+                            className="admin-refresh-button"
+                            onClick={() => {
+                              if (!signature || !address) return
+                              setIsLoadingSolvency(true)
+                              setSolvencyError(null)
+                              getAccountingSolvency(signature, address)
+                                .then(data => setSolvencyData(data))
+                                .catch(err => setSolvencyError(err instanceof Error ? err.message : 'Failed to refresh'))
+                                .finally(() => setIsLoadingSolvency(false))
+                            }}
+                            disabled={isLoadingSolvency || !signature || !address}
+                          >
+                            {isLoadingSolvency ? 'Refreshing...' : 'Refresh'}
+                          </button>
+                        </div>
+
+                        {/* Solvency Status */}
+                        <AsyncState
+                          isLoading={isLoadingSolvency && !solvencyData}
+                          error={solvencyError}
+                          isEmpty={false}
+                          loadingMessage="Loading solvency data..."
+                          className="admin-accounting-state"
+                        >
+                          {solvencyData && (
+                            <div className="admin-accounting-content">
+                              {/* Solvency Summary Card */}
+                              <div className={`admin-solvency-card ${solvencyData.isSolvent ? 'solvent' : 'insolvent'}`}>
+                                <div className="admin-solvency-status">
+                                  <span className="admin-solvency-icon">
+                                    {solvencyData.isSolvent ? '✓' : '✗'}
+                                  </span>
+                                  <span className="admin-solvency-label">
+                                    {solvencyData.isSolvent ? 'Solvent' : 'INSOLVENT'}
+                                  </span>
+                                </div>
+                                {!solvencyData.isSolvent && solvencyData.shortfallGwei && (
+                                  <div className="admin-solvency-shortfall">
+                                    Shortfall: {(Number(solvencyData.shortfallGwei) / 1e9).toFixed(9)} ETH
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Balance Comparison */}
+                              <div className="admin-accounting-balances">
+                                <div className="admin-accounting-balance-card">
+                                  <div className="admin-accounting-balance-label">Total Escrow</div>
+                                  <div className="admin-accounting-balance-value">
+                                    {(Number(solvencyData.totalEscrowGwei) / 1e9).toFixed(9)} ETH
+                                  </div>
+                                  <div className="admin-accounting-balance-gwei">
+                                    {Number(solvencyData.totalEscrowGwei).toLocaleString()} gwei
+                                  </div>
+                                </div>
+                                <div className="admin-accounting-balance-divider">vs</div>
+                                <div className="admin-accounting-balance-card">
+                                  <div className="admin-accounting-balance-label">Contract Balance</div>
+                                  <div className="admin-accounting-balance-value">
+                                    {(Number(solvencyData.contractBalanceGwei) / 1e9).toFixed(9)} ETH
+                                  </div>
+                                  <div className="admin-accounting-balance-gwei">
+                                    {Number(solvencyData.contractBalanceGwei).toLocaleString()} gwei
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Player Breakdown */}
+                              <div className="admin-accounting-breakdown">
+                                <h3 className="admin-accounting-breakdown-title">
+                                  Player Escrow Balances ({solvencyData.breakdown.playerCount} players)
+                                </h3>
+                                {solvencyData.breakdown.players.length === 0 ? (
+                                  <p className="admin-accounting-empty">No players with escrow balances.</p>
+                                ) : (
+                                  <table className="admin-accounting-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Address</th>
+                                        <th>Balance (ETH)</th>
+                                        <th>Balance (gwei)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {solvencyData.breakdown.players.map((player) => (
+                                        <tr key={player.address}>
+                                          <td className="admin-accounting-address">
+                                            <code>{formatAddress(player.address)}</code>
+                                          </td>
+                                          <td className="admin-accounting-eth">
+                                            {(Number(player.balanceGwei) / 1e9).toFixed(9)}
+                                          </td>
+                                          <td className="admin-accounting-gwei">
+                                            {Number(player.balanceGwei).toLocaleString()}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </AsyncState>
                       </div>
                     )}
                   </div>
