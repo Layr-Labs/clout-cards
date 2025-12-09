@@ -28,6 +28,7 @@ nav:
   - Architecture:
     - Overview: architecture/index.md
     - EigenCloud TEE: architecture/tee.md
+    - Verifiability: architecture/verifiability.md
     - Smart Contracts: architecture/smart-contracts.md
     - Backend Services: architecture/backend.md
     - Frontend: architecture/frontend.md
