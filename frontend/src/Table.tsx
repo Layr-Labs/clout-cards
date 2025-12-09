@@ -1729,7 +1729,7 @@ function Table() {
                         seatRefs.current.delete(seatIndex)
                       }
                     }}
-                      className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''} ${isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED') ? 'table-seat-avatar-with-standup' : ''}`}
+                      className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''} ${isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED' || !getHandPlayerBySeat(seatIndex)) ? 'table-seat-avatar-with-standup' : ''}`}
                     style={{
                       left: `${position.x}%`,
                       top: `${position.y}%`,
@@ -1859,7 +1859,9 @@ function Table() {
                             )}
                           </div>
                           {/* Stand Up Button - outside content, aligned to player-info edges */}
-                          {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED') && (
+                          {/* Show when: no active hand, hand completed, or player not in current hand (joined mid-hand or can't afford blinds) */}
+                          {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && 
+                            (!currentHand || currentHand.status === 'COMPLETED' || !getHandPlayerBySeat(seatIndex)) && (
                               <button
                                 className="table-seat-stand-up-button"
                                 onClick={handleStandUpClick}
