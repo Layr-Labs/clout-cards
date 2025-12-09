@@ -271,6 +271,7 @@ function Admin() {
         navLinks={[
           { to: '/', label: 'Home' },
           { to: '/leaderboard', label: 'Leaderboard' },
+          { to: '/verify', label: 'Verify' },
           { href: '/docs/', label: 'Docs' },
         ]}
         actionButton={

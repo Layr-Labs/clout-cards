@@ -201,6 +201,229 @@ app.get('/api/accounting/solvency', requireAdminAuth({ addressSource: 'query' })
   }
 });
 
+// =============================================================================
+// Verify Endpoints (Public - for transparency and verification)
+// =============================================================================
+
+/**
+ * GET /api/verify/stats
+ *
+ * Returns platform-wide statistics for public verification.
+ * This is a public endpoint - no authentication required.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Response:
+ * - 200: {
+ *     handsPlayed: number,
+ *     totalBetVolumeGwei: string,
+ *     totalEscrowFundsGwei: string,
+ *     contractBalanceGwei: string,
+ *     teeRakeBalanceGwei: string
+ *   }
+ *
+ * Error model:
+ * - 500: { error: string; message: string } - Database or RPC error
+ */
+app.get('/api/verify/stats', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Get total completed hands count
+    const handsResult = await prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) as count FROM hands WHERE status = 'COMPLETED'
+    `;
+    const handsPlayed = Number(handsResult[0].count);
+
+    // Get total bet volume (sum of all betting actions)
+    const betVolumeResult = await prisma.$queryRaw<[{ total: bigint | null }]>`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM hand_actions
+      WHERE action IN ('POST_BLIND', 'CALL', 'RAISE', 'ALL_IN')
+    `;
+    const totalBetVolumeGwei = (betVolumeResult[0].total || 0n).toString();
+
+    // Get total escrow funds (escrow + table balances) using accounting service
+    const { getTotalEscrowBalance, getTotalTableBalance, getContractBalance } = await import('./services/accounting');
+    const { totalGwei: escrowGwei } = await getTotalEscrowBalance();
+    const { totalGwei: tableGwei } = await getTotalTableBalance();
+    const totalEscrowFundsGwei = (escrowGwei + tableGwei).toString();
+
+    // Get contract balance
+    const contractBalanceGwei = (await getContractBalance()).toString();
+
+    // Get TEE rake balance
+    const teeAddress = getTeePublicKey().toLowerCase();
+    const teeBalanceResult = await prisma.$queryRaw<[{ balance_gwei: bigint } | null]>`
+      SELECT balance_gwei FROM player_escrow_balances
+      WHERE LOWER(wallet_address) = ${teeAddress}
+    `;
+    const teeRakeBalanceGwei = teeBalanceResult[0]?.balance_gwei?.toString() || '0';
+
+    res.status(200).json({
+      handsPlayed,
+      totalBetVolumeGwei,
+      totalEscrowFundsGwei,
+      contractBalanceGwei,
+      teeRakeBalanceGwei,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to get verify stats');
+  }
+});
+
+/**
+ * GET /api/verify/activity
+ *
+ * Returns hourly activity data for the last 48 hours.
+ * Used for time-series graphs showing hands played and bet volume over time.
+ * This is a public endpoint - no authentication required.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Response:
+ * - 200: {
+ *     handsPerHour: Array<{ hour: string, count: number }>,
+ *     volumePerHour: Array<{ hour: string, volumeGwei: string }>
+ *   }
+ *
+ * Error model:
+ * - 500: { error: string; message: string } - Database error
+ */
+app.get('/api/verify/activity', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Get hands completed per hour for last 48 hours
+    const handsPerHourResult = await prisma.$queryRaw<Array<{ hour: Date; count: bigint }>>`
+      SELECT date_trunc('hour', completed_at) as hour, COUNT(*) as count
+      FROM hands
+      WHERE status = 'COMPLETED' AND completed_at > NOW() - INTERVAL '48 hours'
+      GROUP BY date_trunc('hour', completed_at)
+      ORDER BY hour ASC
+    `;
+
+    const handsPerHour = handsPerHourResult.map(row => ({
+      hour: row.hour.toISOString(),
+      count: Number(row.count),
+    }));
+
+    // Get bet volume per hour for last 48 hours
+    const volumePerHourResult = await prisma.$queryRaw<Array<{ hour: Date; volume: bigint }>>`
+      SELECT date_trunc('hour', timestamp) as hour, COALESCE(SUM(amount), 0) as volume
+      FROM hand_actions
+      WHERE action IN ('POST_BLIND', 'CALL', 'RAISE', 'ALL_IN')
+        AND timestamp > NOW() - INTERVAL '48 hours'
+      GROUP BY date_trunc('hour', timestamp)
+      ORDER BY hour ASC
+    `;
+
+    const volumePerHour = volumePerHourResult.map(row => ({
+      hour: row.hour.toISOString(),
+      volumeGwei: row.volume.toString(),
+    }));
+
+    res.status(200).json({
+      handsPerHour,
+      volumePerHour,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to get verify activity');
+  }
+});
+
+/**
+ * GET /api/verify/events
+ *
+ * Returns paginated events for public verification.
+ * Each event includes signature verification status.
+ * This is a public endpoint - no authentication required.
+ *
+ * Auth:
+ * - No authentication required (public endpoint)
+ *
+ * Request:
+ * - Query params:
+ *   - page: number (optional, default: 1) - Page number (1-indexed)
+ *   - limit: number (optional, default: 20, max: 100) - Items per page
+ *
+ * Response:
+ * - 200: {
+ *     events: Array<Event>,
+ *     totalCount: number,
+ *     page: number,
+ *     totalPages: number,
+ *     limit: number
+ *   }
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid query parameters
+ * - 500: { error: string; message: string } - Database error
+ */
+app.get('/api/verify/events', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Parse pagination params
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const countResult = await prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) as count FROM events
+    `;
+    const totalCount = Number(countResult[0].count);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get paginated events (newest first)
+    const events = await prisma.event.findMany({
+      orderBy: { eventId: 'desc' },
+      skip: offset,
+      take: limit,
+    });
+
+    // Convert BigInt fields to strings and verify signatures
+    const eventsJson = events.map((event) => {
+      // Verify signature
+      const isValid = verifyEventSignature(
+        event.kind,
+        event.payloadJson,
+        event.digest,
+        event.sigR,
+        event.sigS,
+        event.sigV,
+        event.teePubkey,
+        event.nonce || undefined
+      );
+
+      return {
+        eventId: event.eventId,
+        blockTs: event.blockTs.toISOString(),
+        player: event.player,
+        tableId: event.tableId,
+        kind: event.kind,
+        payloadJson: event.payloadJson,
+        digest: event.digest,
+        sigR: event.sigR,
+        sigS: event.sigS,
+        sigV: event.sigV,
+        nonce: event.nonce?.toString() || null,
+        teeVersion: event.teeVersion,
+        teePubkey: event.teePubkey,
+        ingestedAt: event.ingestedAt.toISOString(),
+        signatureValid: isValid,
+      };
+    });
+
+    res.status(200).json({
+      events: eventsJson,
+      totalCount,
+      page,
+      totalPages,
+      limit,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to get verify events');
+  }
+});
+
 /**
  * GET /sessionMessage
  *

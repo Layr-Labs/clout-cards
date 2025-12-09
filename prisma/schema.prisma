@@ -221,6 +221,7 @@ model Hand {
   @@index([tableId])
   @@index([status])
   @@index([startedAt])
+  @@index([completedAt]) // For time-series queries on completed hands
   @@map("hands")
 }
 
@@ -297,6 +298,7 @@ model HandAction {
   @@index([handId, round]) // Composite index for querying actions by hand and round
   @@index([seatNumber])
   @@index([timestamp])
+  @@index([action]) // For filtering by action type in bet volume aggregation
   @@map("hand_actions")
 }
 

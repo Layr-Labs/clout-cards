@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import './App.css'
 import { Header } from './components/Header'
+import { LoginDialog } from './components/LoginDialog'
 import { Card } from './components/Card'
 import './Cards.css'
 
@@ -10,6 +12,8 @@ import './Cards.css'
  * for iterating on card rendering design.
  */
 function Cards() {
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
+
   // Generate all 52 cards
   const suits = ['hearts', 'diamonds', 'clubs', 'spades'] as const
   const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const
@@ -26,7 +30,7 @@ function Cards() {
     <div className="app">
       {/* Header */}
       <Header
-        onLoginClick={() => {}}
+        onLoginClick={() => setIsLoginDialogOpen(true)}
       />
 
       {/* Main Content */}
@@ -73,6 +77,13 @@ function Cards() {
           ))}
         </div>
       </main>
+
+      {/* Login Dialog */}
+      <LoginDialog
+        isOpen={isLoginDialogOpen}
+        onClose={() => setIsLoginDialogOpen(false)}
+        onLoginSuccess={() => setIsLoginDialogOpen(false)}
+      />
     </div>
   )
 }

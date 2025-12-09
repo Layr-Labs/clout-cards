@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { SiX } from 'react-icons/si';
 import { useWallet } from './contexts/WalletContext';
 import { useTwitterUser } from './hooks/useTwitterUser';
@@ -8,6 +7,7 @@ import { useEscrowBalance } from './hooks/useEscrowBalance';
 import { formatAddress } from './utils/formatAddress';
 import { DepositDialog } from './components/DepositDialog';
 import { CashOutDialog } from './components/CashOutDialog';
+import { LoginDialog } from './components/LoginDialog';
 import { Header } from './components/Header';
 import { WalletAvatar } from './components/WalletAvatar';
 import { Tooltip } from './components/Tooltip';
@@ -29,6 +29,7 @@ export default function Profile() {
   const escrowBalanceState = useEscrowBalance();
   const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
   const [isCashOutDialogOpen, setIsCashOutDialogOpen] = useState(false);
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
 
   const isFullyLoggedIn = isLoggedIn && !!twitterUser && !!address;
 
@@ -79,10 +80,7 @@ export default function Profile() {
     <div className="app">
       {/* Header */}
       <Header
-        onLoginClick={() => {
-                // Redirect to play page to login
-                window.location.href = '/play';
-              }}
+        onLoginClick={() => setIsLoginDialogOpen(true)}
       />
 
       <div className="profile-container">
@@ -202,6 +200,12 @@ export default function Profile() {
           console.log('Cash out successful');
         }}
         escrowBalanceGwei={escrowBalanceGwei}
+      />
+
+      <LoginDialog
+        isOpen={isLoginDialogOpen}
+        onClose={() => setIsLoginDialogOpen(false)}
+        onLoginSuccess={() => setIsLoginDialogOpen(false)}
       />
     </div>
   );

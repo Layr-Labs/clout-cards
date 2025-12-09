@@ -9,6 +9,7 @@ import Profile from './Profile'
 import Table from './Table'
 import Cards from './Cards'
 import Leaderboard from './Leaderboard'
+import Verify from './Verify'
 import { Header } from './components/Header'
 
 /**
@@ -25,6 +26,7 @@ function LandingPage() {
         navLinks={[
           { to: '/', label: 'Home' },
           { to: '/leaderboard', label: 'Leaderboard' },
+          { to: '/verify', label: 'Verify' },
           { href: '/docs/', label: 'Docs' },
         ]}
         actionButton={
@@ -283,6 +285,7 @@ function App() {
         <Route path="/play" element={<Play />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/verify" element={<Verify />} />
         <Route path="/table/:id" element={<Table />} />
         <Route path="/cards" element={<Cards />} />
       </Routes>
