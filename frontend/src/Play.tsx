@@ -1,6 +1,6 @@
 import './App.css'
 import { useNavigate, Link } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWallet } from './contexts/WalletContext'
 import { getPokerTables, getTablePlayers, type PokerTable, type TablePlayer } from './services/tables'
 import { LoginDialog } from './components/LoginDialog'
@@ -11,7 +11,10 @@ import { TableCard } from './components/TableCard'
 import { AsyncState } from './components/AsyncState'
 import { useEthBalance } from './hooks/useEthBalance'
 import { useEscrowBalance } from './hooks/useEscrowBalance'
-import { FaTimes } from 'react-icons/fa'
+import { FaTimes, FaComments } from 'react-icons/fa'
+import { Chat } from './components/Chat'
+import { useLobbyEvents } from './hooks/useLobbyEvents'
+import { sendLobbyChatMessage, type ChatMessage } from './services/chat'
 
 /**
  * Play page component for CloutCards
@@ -21,7 +24,7 @@ import { FaTimes } from 'react-icons/fa'
  * Displays list of poker tables with Join/Log In buttons based on login status.
  */
 function Play() {
-  const { isLoggedIn, address, provider } = useWallet()
+  const { isLoggedIn, address, provider, signature } = useWallet()
   const twitterUser = useTwitterUser()
   const navigate = useNavigate()
   const [tables, setTables] = useState<PokerTable[]>([])
@@ -37,6 +40,39 @@ function Play() {
   // Dismissed notification state
   const [isFaucetBannerDismissed, setIsFaucetBannerDismissed] = useState(false)
   const [isDepositBannerDismissed, setIsDepositBannerDismissed] = useState(false)
+  
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
+  const isChatOpenRef = useRef(false)
+  
+  // Keep ref in sync with chat open state for use in event handler
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen
+  }, [isChatOpen])
+
+  // Reset unread count when chat opens
+  useEffect(() => {
+    if (isChatOpen) {
+      setUnreadChatCount(0)
+    }
+  }, [isChatOpen])
+
+  // Handle incoming chat messages from SSE
+  const handleChatMessage = useCallback((message: ChatMessage) => {
+    setChatMessages(prev => [...prev, message])
+    // Increment unread count if chat is closed
+    if (!isChatOpenRef.current) {
+      setUnreadChatCount(prev => prev + 1)
+    }
+  }, [])
+
+  // Subscribe to lobby events
+  useLobbyEvents({
+    onChatMessage: handleChatMessage,
+    enabled: true,
+  })
   
   // Determine if we should show banners
   const hasLowWalletBalance = ethBalance !== null && parseFloat(ethBalance) < 0.1
@@ -170,17 +206,55 @@ function Play() {
     navigate(`/table/${table.id}`)
   }
 
+  /**
+   * Handles sending a chat message to the lobby
+   */
+  async function handleSendChatMessage(message: string) {
+    if (!isFullyLoggedIn || !signature || !address) {
+      throw new Error('Must be logged in to send messages')
+    }
+
+    const twitterToken = localStorage.getItem('twitterAccessToken')
+    if (!twitterToken) {
+      throw new Error('Twitter authentication required')
+    }
+
+    await sendLobbyChatMessage(message, signature, twitterToken, address)
+  }
+
   return (
-    <div className="app">
+    <div className={`app ${isChatOpen ? 'chat-open' : ''}`}>
       {/* Header */}
       <Header
         onLoginClick={() => setIsLoginDialogOpen(true)}
       />
 
-      {/* Main Content */}
-      <main className="play-main">
+      {/* Background Video - fixed behind all content */}
+      <div className="play-video-background">
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="play-video"
+        >
+          <source src="/CloutCardsBackground.mp4" type="video/mp4" />
+        </video>
+        <div className="play-video-overlay" />
+      </div>
+
+      {/* Layout Wrapper - flex container for main content and chat */}
+      <div className="play-layout-wrapper">
+        {/* Main Content */}
+        <main className="play-main">
         <div className="play-container">
-          <h1 className="play-title">Play CloutCards</h1>
+          <div className="play-logo-container">
+            <img 
+              src="/clout-cards-title.png" 
+              alt="CloutCards" 
+              className="play-logo"
+            />
+          </div>
           <p className="play-description">
             Join a table and start playing!
           </p>
@@ -274,12 +348,37 @@ function Play() {
         </div>
       </main>
 
+      {/* Chat Panel - inside layout wrapper for desktop slide-out */}
+      <Chat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        messages={chatMessages}
+        onSendMessage={handleSendChatMessage}
+        isFullyLoggedIn={isFullyLoggedIn}
+        isTableActive={true}
+      />
+      </div>{/* End play-layout-wrapper */}
+
       {/* Login Dialog */}
       <LoginDialog
         isOpen={isLoginDialogOpen}
         onClose={() => setIsLoginDialogOpen(false)}
         onLoginSuccess={handleLoginSuccess}
       />
+
+      {/* Chat Toggle Button */}
+      <button
+        className="play-chat-toggle-button"
+        onClick={() => setIsChatOpen(!isChatOpen)}
+        aria-label={isChatOpen ? 'Close chat' : 'Open chat'}
+      >
+        <FaComments />
+        {unreadChatCount > 0 && (
+          <span className="play-chat-unread-badge">
+            {unreadChatCount > 99 ? '99+' : unreadChatCount}
+          </span>
+        )}
+      </button>
     </div>
   )
 }

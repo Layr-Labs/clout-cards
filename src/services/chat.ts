@@ -40,8 +40,15 @@ export interface ChatMessagePayload {
 const MAX_MESSAGE_LENGTH = 500;
 
 /**
+ * Special channel ID for lobby chat
+ * Uses 0 to avoid conflicts with real table IDs (which start at 1)
+ */
+export const LOBBY_CHANNEL_ID = 0;
+
+/**
  * In-memory storage for chat subscribers
- * Map<tableId, Set<Response>> - tracks active SSE connections per table
+ * Map<channelId, Set<Response>> - tracks active SSE connections per channel
+ * Channel can be a tableId or LOBBY_CHANNEL_ID (0) for lobby chat
  */
 const chatSubscribers = new Map<number, Set<Response>>();
 

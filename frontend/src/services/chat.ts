@@ -74,3 +74,40 @@ export async function sendChatMessage(
   });
 }
 
+/**
+ * Sends a chat message to the game lobby
+ *
+ * POST /api/lobby/chat
+ *
+ * Auth:
+ * - Requires Twitter authentication (fully logged in user)
+ * - Requires wallet signature
+ *
+ * @param message - The chat message text (max 500 characters)
+ * @param signature - Wallet signature for authentication
+ * @param twitterToken - Twitter access token
+ * @param walletAddress - Sender's wallet address
+ *
+ * @returns Promise that resolves to success response
+ * @throws {Error} If the request fails or validation fails
+ *
+ * @example
+ * ```typescript
+ * await sendLobbyChatMessage('Hello lobby!', signature, twitterToken, '0x123...');
+ * ```
+ */
+export async function sendLobbyChatMessage(
+  message: string,
+  signature: string,
+  twitterToken: string,
+  walletAddress: string
+): Promise<SendChatResponse> {
+  return apiClient<SendChatResponse>(`/api/lobby/chat?walletAddress=${walletAddress}`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+    requireAuth: true,
+    signature,
+    twitterToken,
+  });
+}
+

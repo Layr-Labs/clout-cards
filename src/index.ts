@@ -38,8 +38,9 @@ import { startActionTimeoutChecker } from './services/actionTimeoutChecker';
 import { startHandStartChecker } from './services/handStartChecker';
 import { runMigrations } from './utils/runMigrations';
 import { getLeaderboard, type LeaderboardSortBy } from './services/leaderboard';
-import { subscribeToChat, sendSystemMessage } from './services/chat';
+import { subscribeToChat, sendSystemMessage, LOBBY_CHANNEL_ID } from './services/chat';
 import chatRoutes from './routes/chat';
+import lobbyChatRoutes from './routes/lobbyChat';
 
 /**
  * Express application instance
@@ -72,6 +73,9 @@ app.use('/', twitterAuthRoutes);
 
 // Chat routes (real-time chat via SSE)
 app.use('/api/tables', chatRoutes);
+
+// Lobby chat routes (real-time chat for /play page)
+app.use('/api/lobby', lobbyChatRoutes);
 
 /**
  * Server port number
@@ -1567,6 +1571,76 @@ app.get('/api/tables/:tableId/events', async (req: Request, res: Response): Prom
     console.error('[SSE] Error setting up event stream:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Failed to set up event stream' });
+    } else {
+      res.end();
+    }
+  }
+});
+
+/**
+ * GET /lobby/events
+ *
+ * Server-Sent Events (SSE) stream for lobby chat.
+ * Streams chat messages for the game lobby (/play page) in real-time.
+ * Unlike table events, this only handles chat - no game events.
+ *
+ * Auth:
+ * - No authentication required (public endpoint for watching lobby chat)
+ *
+ * Response:
+ * - Content-Type: text/event-stream
+ * - Streams chat messages in SSE format:
+ *   - id: {messageId}\n
+ *   - data: {payloadJson}\n\n
+ *
+ * Side effects:
+ * - Registers connection for lobby chat broadcasts
+ * - Automatically unregisters on connection close
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ */
+app.get('/lobby/events', (req: Request, res: Response): void => {
+  try {
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering if using nginx
+
+    // Send initial connection message
+    res.write(': connected to lobby events\n\n');
+
+    console.log('[SSE] Client connected to lobby events stream');
+
+    // Register for lobby chat messages (in-memory pub/sub, no database)
+    const unsubscribeChat = subscribeToChat(LOBBY_CHANNEL_ID, res);
+
+    // Keep connection alive with periodic heartbeat
+    const heartbeatInterval = setInterval(() => {
+      if (!res.closed) {
+        try {
+          res.write(': heartbeat\n\n');
+        } catch (error) {
+          clearInterval(heartbeatInterval);
+          unsubscribeChat();
+        }
+      } else {
+        clearInterval(heartbeatInterval);
+        unsubscribeChat();
+      }
+    }, 30000); // Send heartbeat every 30 seconds
+
+    // Handle client disconnect - cleanup
+    req.on('close', () => {
+      clearInterval(heartbeatInterval);
+      unsubscribeChat();
+      console.log('[SSE] Client disconnected from lobby events stream');
+    });
+  } catch (error) {
+    console.error('[SSE] Error setting up lobby event stream:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to set up lobby event stream' });
     } else {
       res.end();
     }
