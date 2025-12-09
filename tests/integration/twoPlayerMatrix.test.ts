@@ -491,12 +491,22 @@ describe('2-Player Poker Test Matrix', () => {
     it('PF-003: Call Pre-Flop (No Raise)', async () => {
       const { prisma, hand, table } = await setupStandardTwoPlayerTest({ rakeBps: 0 });
 
-      // Small blind calls
-      const result = await callAction(prisma, table.id, PLAYER_0_WALLET);
+      // Small blind calls - BB still gets option
+      const callResult = await callAction(prisma, table.id, PLAYER_0_WALLET);
 
-      expect(result.success).toBe(true);
-      expect(result.handEnded).toBe(false);
-      expect(result.roundAdvanced).toBe(true);
+      expect(callResult.success).toBe(true);
+      expect(callResult.handEnded).toBe(false);
+      expect(callResult.roundAdvanced).toBe(false); // BB still needs to act
+
+      // Verify round is still PRE_FLOP (BB has option)
+      await assertHandRound(prisma, hand.id, 'PRE_FLOP');
+
+      // Big blind checks (exercises option)
+      const checkResult = await checkAction(prisma, table.id, PLAYER_1_WALLET);
+
+      expect(checkResult.success).toBe(true);
+      expect(checkResult.handEnded).toBe(false);
+      expect(checkResult.roundAdvanced).toBe(true);
 
       // Verify round advanced to FLOP
       await assertHandRound(prisma, hand.id, 'FLOP');
@@ -1082,8 +1092,9 @@ describe('2-Player Poker Test Matrix', () => {
     testWithRakeVariants('MR-003: Full Hand with All Checks', async ({ prisma, hand, table }, rakeBps) => {
       // setupStandardTwoPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
-      // PRE_FLOP: Call
+      // PRE_FLOP: SB calls, BB checks (BB gets option even when SB just calls)
       await callAction(prisma, table.id, PLAYER_0_WALLET);
+      await checkAction(prisma, table.id, PLAYER_1_WALLET); // BB exercises option
 
       // FLOP: Check-check
       await checkAction(prisma, table.id, PLAYER_0_WALLET);

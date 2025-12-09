@@ -277,8 +277,11 @@ describe('4-Player Poker Test Matrix', () => {
     utgSeat: number,
     targetRound: 'FLOP' | 'TURN' | 'RIVER' = 'FLOP'
   ): Promise<any> {
-    // Get current hand
-    let hand = await prisma.hand.findUnique({ where: { id: handId } });
+    // Get current hand with players included
+    let hand = await prisma.hand.findUnique({ 
+      where: { id: handId },
+      include: { players: true }
+    });
     if (!hand) {
       throw new Error(`Hand ${handId} not found`);
     }
@@ -296,10 +299,14 @@ describe('4-Player Poker Test Matrix', () => {
       
       if (hand.currentBet && hand.currentBet > 0n) {
         // There's a bet - check if player can afford to call
-        const chipsCommitted = BigInt(hand.players?.find((p: any) => p.seatNumber === hand.currentActionSeat)?.chipsCommitted || 0);
+        const handPlayer = hand.players?.find((p: any) => p.seatNumber === hand.currentActionSeat);
+        const chipsCommitted = BigInt(handPlayer?.chipsCommitted || 0);
         const callAmount = hand.currentBet - chipsCommitted;
         
-        if (seatSession && seatSession.tableBalanceGwei < callAmount) {
+        if (callAmount <= 0n) {
+          // Player has already matched the bet (e.g., BB option) - check
+          await checkAction(prisma, tableId, wallet);
+        } else if (seatSession && seatSession.tableBalanceGwei < callAmount) {
           // Player can't afford to call - go all-in instead
           await allInAction(prisma, tableId, wallet);
         } else {
@@ -310,7 +317,10 @@ describe('4-Player Poker Test Matrix', () => {
         // No bet - check
         await checkAction(prisma, tableId, wallet);
       }
-      hand = await prisma.hand.findUnique({ where: { id: handId } });
+      hand = await prisma.hand.findUnique({ 
+        where: { id: handId },
+        include: { players: true }
+      });
     }
 
     // Now loop: keep checking until we reach the target round
@@ -721,12 +731,22 @@ describe('4-Player Poker Test Matrix', () => {
       // Dealer calls (2M to match)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Small blind calls (1M to match)
-      const result = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      // Small blind calls (1M to match) - BB still gets option
+      const callResult = await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      expect(result.success).toBe(true);
-      expect(result.handEnded).toBe(false);
-      expect(result.roundAdvanced).toBe(true);
+      expect(callResult.success).toBe(true);
+      expect(callResult.handEnded).toBe(false);
+      expect(callResult.roundAdvanced).toBe(false); // BB still needs to act
+
+      // Verify round is still PRE_FLOP (BB has option)
+      await assertHandRound(prisma, hand.id, 'PRE_FLOP');
+
+      // Big blind checks (exercises option)
+      const checkResult = await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+
+      expect(checkResult.success).toBe(true);
+      expect(checkResult.handEnded).toBe(false);
+      expect(checkResult.roundAdvanced).toBe(true);
 
       // Verify round advanced to FLOP
       await assertHandRound(prisma, hand.id, 'FLOP');
@@ -2213,10 +2233,11 @@ describe('4-Player Poker Test Matrix', () => {
     testWithRakeVariants('MR-003: Full Hand with All Checks', async ({ prisma, hand, table }, rakeBps) => {
       // setupStandardFourPlayerTest already initialized the hand via startHand (includes POST_BLIND)
 
-      // PRE_FLOP: All call
+      // PRE_FLOP: UTG, Dealer, SB call; BB checks (exercises option)
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id)); // BB exercises option
 
       // FLOP: All check
       await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
@@ -2302,16 +2323,16 @@ describe('4-Player Poker Test Matrix', () => {
       // Small blind calls
       await callAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // FLOP: Big blind folds
-      await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
-
-      // Small blind checks
+      // Big blind checks (exercises option) to complete PRE_FLOP
       await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
-      // Dealer checks
-      await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
+      // FLOP: SB acts first (after dealer), then BB, then Dealer
+      // Action order post-flop: SB (1) → BB (2) → Dealer (0)
+      await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id)); // SB checks
+      await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id)); // BB folds
+      await checkAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id)); // Dealer checks
 
-      // TURN: Small blind folds, leaving only dealer
+      // TURN: SB (1) → Dealer (0). SB folds, leaving only dealer - hand ends
       const foldResult = await foldAction(prisma, table.id, await getCurrentActionWallet(prisma, hand.id));
 
       // When only one player remains, hand ends immediately (no showdown needed)

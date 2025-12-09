@@ -1110,7 +1110,9 @@ async function handleNextPlayerOrRoundComplete(
           // 1. All players have acted AND matched, OR
           // 2. Only the next player hasn't acted, they've matched, and all others have acted and matched
           //    (wrap-around scenario where next player can only check, so round completes)
-          if ((allActed && allMatched) || (onlyNextPlayerHaventActed && allMatched)) {
+          //    BUT NOT in PRE_FLOP - the big blind ALWAYS gets an option to check or raise,
+          //    even if they've already matched the bet by posting the blind.
+          if ((allActed && allMatched) || (onlyNextPlayerHaventActed && allMatched && currentRound !== 'PRE_FLOP')) {
             console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Round complete detected - RETURNING early with round completion`);
             console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - allActed=${allActed}, onlyNextPlayerHaventActed=${onlyNextPlayerHaventActed}, allMatched=${allMatched}, currentRound=${currentRound}, nextSeat=${nextSeat}`);
             console.log(`[DEBUG handleNextPlayerOrRoundComplete] Hand ${handId}: Context - allActivePlayers=${JSON.stringify(allActivePlayers.map((p: any) => ({ seat: p.seatNumber, chipsCommitted: p.chipsCommitted?.toString(), status: p.status })))}, actedSeats=${JSON.stringify(Array.from(actedSeats))}, roundActions found=${roundActions.length}`);
