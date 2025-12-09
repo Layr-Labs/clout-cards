@@ -2655,15 +2655,15 @@
   border: 1px solid rgba(100, 100, 100, 0.3);
 }
 
-/* Deposit Button - purple/violet when user can't afford buy-in */
+/* Deposit Button - purple casino glimmer style when user can't afford buy-in */
 .table-seat-deposit-button {
   position: absolute;
   top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%);
   color: #ffffff;
-  border: none;
+  border: 2px solid #8b5cf6;
   border-radius: 8px;
   padding: 10px 20px;
   font-size: 0.9rem;
@@ -2671,19 +2671,55 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5), 0 0 0 2px rgba(139, 92, 246, 0.3);
+  box-shadow: 
+    0 0 10px rgba(139, 92, 246, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: all 0.2s ease;
   white-space: nowrap;
   z-index: 10;
+  overflow: hidden;
+}
+
+.table-seat-deposit-button::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 70%
+  );
+  transform: rotate(45deg);
+  transition: all 0.5s ease;
+  opacity: 0;
+}
+
+.table-seat-deposit-button:hover::before {
+  opacity: 1;
+  animation: shimmer 1.5s infinite;
 }
 
 .table-seat-deposit-button:hover {
   transform: translateX(-50%) translateY(-2px);
-  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.7), 0 0 0 2px rgba(139, 92, 246, 0.5);
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 50%, #c4b5fd 100%);
+  box-shadow: 
+    0 0 20px rgba(139, 92, 246, 0.8),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: #a78bfa;
 }
 
 .table-seat-deposit-button:active {
   transform: translateX(-50%) translateY(0);
+  box-shadow: 
+    0 0 10px rgba(139, 92, 246, 0.5),
+    0 1px 4px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Make content container use flex column for alignment */
