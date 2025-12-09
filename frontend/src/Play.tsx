@@ -366,19 +366,21 @@ function Play() {
         onLoginSuccess={handleLoginSuccess}
       />
 
-      {/* Chat Toggle Button */}
-      <button
-        className="play-chat-toggle-button"
-        onClick={() => setIsChatOpen(!isChatOpen)}
-        aria-label={isChatOpen ? 'Close chat' : 'Open chat'}
-      >
-        <FaComments />
-        {unreadChatCount > 0 && (
-          <span className="play-chat-unread-badge">
-            {unreadChatCount > 99 ? '99+' : unreadChatCount}
-          </span>
-        )}
-      </button>
+      {/* Chat Toggle Button - Hidden when chat is open (similar to Table view) */}
+      {!isChatOpen && (
+        <button
+          className="play-chat-toggle-button"
+          onClick={() => setIsChatOpen(true)}
+          aria-label="Open chat"
+        >
+          <FaComments />
+          {unreadChatCount > 0 && (
+            <span className="play-chat-unread-badge">
+              {unreadChatCount > 99 ? '99+' : unreadChatCount}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   )
 }
