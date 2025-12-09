@@ -159,6 +159,10 @@
 }
 
 .cta-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   padding: 16px 40px;
   font-size: 1.1rem;
   font-weight: 700;
@@ -172,8 +176,8 @@
   text-transform: uppercase;
   letter-spacing: 1px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-  display: inline-block;
   text-decoration: none;
+  box-sizing: border-box;
 }
 
 .cta-button::before {
