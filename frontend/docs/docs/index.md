@@ -15,6 +15,7 @@ Clout Cards allows you to:
 
 - **[How To Play](how-to-play/index.md)** - Learn how to get started, deposit funds, join tables, and play poker.
 - **[Architecture](architecture/index.md)** - Understand the technical architecture including smart contracts, backend services, and real-time events.
+- **[GitHub Repository](https://github.com/Layr-Labs/clout-cards)** - View the source code, contribute, or report issues.
 
 ## Getting Started
 
@@ -26,5 +27,8 @@ Clout Cards allows you to:
 
 ## Need Help?
 
-If you have questions or run into issues, reach out to the team on Twitter or check the GitHub repository.
+If you have questions or run into issues:
+
+- **[GitHub Issues](https://github.com/Layr-Labs/clout-cards/issues)** - Report bugs or request features
+- **[GitHub Repository](https://github.com/Layr-Labs/clout-cards)** - View the full source code
 

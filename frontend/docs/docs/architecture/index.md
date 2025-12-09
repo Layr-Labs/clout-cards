@@ -68,3 +68,11 @@ Clout Cards is built with a modern, secure architecture that combines on-chain a
 - **Identity**: Twitter OAuth + wallet signature
 - **Events**: EIP-712 signed payloads
 
+## Open Source
+
+Clout Cards is fully open source. View the complete codebase on GitHub:
+
+- **[GitHub Repository](https://github.com/Layr-Labs/clout-cards)** - Full source code
+- **[Issues](https://github.com/Layr-Labs/clout-cards/issues)** - Report bugs or request features
+- **[Pull Requests](https://github.com/Layr-Labs/clout-cards/pulls)** - Contribute improvements
+

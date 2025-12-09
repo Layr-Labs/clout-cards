@@ -318,7 +318,7 @@ For complete verification:
 
 ### Level 4: Open Source
 
-The entire codebase is open source:
+The entire codebase is open source on **[GitHub](https://github.com/Layr-Labs/clout-cards)**:
 
 - Backend game logic
 - TEE signing code
