@@ -608,7 +608,7 @@ function Admin() {
                           <div className="admin-tab-header-left">
                             <h2 className="admin-tab-title">Accounting</h2>
                             <p className="admin-tab-description">
-                              Verify solvency by comparing escrow balances to contract balance
+                              Verify solvency by comparing total liabilities to contract balance
                             </p>
                           </div>
                           <button
@@ -655,15 +655,18 @@ function Admin() {
                                 )}
                               </div>
 
-                              {/* Balance Comparison */}
+                              {/* Balance Comparison - Primary: Liabilities vs Contract */}
                               <div className="admin-accounting-balances">
-                                <div className="admin-accounting-balance-card">
-                                  <div className="admin-accounting-balance-label">Total Escrow</div>
+                                <div className="admin-accounting-balance-card admin-accounting-balance-card-primary">
+                                  <div className="admin-accounting-balance-label">Total Liabilities</div>
                                   <div className="admin-accounting-balance-value">
-                                    {(Number(solvencyData.totalEscrowGwei) / 1e9).toFixed(9)} ETH
+                                    {(Number(solvencyData.totalLiabilitiesGwei) / 1e9).toFixed(9)} ETH
                                   </div>
                                   <div className="admin-accounting-balance-gwei">
-                                    {Number(solvencyData.totalEscrowGwei).toLocaleString()} gwei
+                                    {Number(solvencyData.totalLiabilitiesGwei).toLocaleString()} gwei
+                                  </div>
+                                  <div className="admin-accounting-balance-breakdown">
+                                    = Escrow ({(Number(solvencyData.totalEscrowGwei) / 1e9).toFixed(6)}) + Tables ({(Number(solvencyData.totalTableBalanceGwei) / 1e9).toFixed(6)})
                                   </div>
                                 </div>
                                 <div className="admin-accounting-balance-divider">vs</div>
@@ -678,12 +681,35 @@ function Admin() {
                                 </div>
                               </div>
 
-                              {/* Player Breakdown */}
+                              {/* Liabilities Breakdown Cards */}
+                              <div className="admin-accounting-liabilities-breakdown">
+                                <div className="admin-accounting-liability-card">
+                                  <div className="admin-accounting-liability-label">Escrow Balances</div>
+                                  <div className="admin-accounting-liability-value">
+                                    {(Number(solvencyData.totalEscrowGwei) / 1e9).toFixed(9)} ETH
+                                  </div>
+                                  <div className="admin-accounting-liability-count">
+                                    {solvencyData.escrowBreakdown.playerCount} players
+                                  </div>
+                                </div>
+                                <div className="admin-accounting-liability-plus">+</div>
+                                <div className="admin-accounting-liability-card">
+                                  <div className="admin-accounting-liability-label">Table Balances</div>
+                                  <div className="admin-accounting-liability-value">
+                                    {(Number(solvencyData.totalTableBalanceGwei) / 1e9).toFixed(9)} ETH
+                                  </div>
+                                  <div className="admin-accounting-liability-count">
+                                    {solvencyData.tableBreakdown.tableCount} tables
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Escrow Breakdown */}
                               <div className="admin-accounting-breakdown">
                                 <h3 className="admin-accounting-breakdown-title">
-                                  Player Escrow Balances ({solvencyData.breakdown.playerCount} players)
+                                  Escrow Balances ({solvencyData.escrowBreakdown.playerCount} players)
                                 </h3>
-                                {solvencyData.breakdown.players.length === 0 ? (
+                                {solvencyData.escrowBreakdown.players.length === 0 ? (
                                   <p className="admin-accounting-empty">No players with escrow balances.</p>
                                 ) : (
                                   <table className="admin-accounting-table">
@@ -695,7 +721,7 @@ function Admin() {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {solvencyData.breakdown.players.map((player) => (
+                                      {solvencyData.escrowBreakdown.players.map((player) => (
                                         <tr key={player.address}>
                                           <td className="admin-accounting-address">
                                             <code>{formatAddress(player.address)}</code>
@@ -710,6 +736,55 @@ function Admin() {
                                       ))}
                                     </tbody>
                                   </table>
+                                )}
+                              </div>
+
+                              {/* Table Breakdown */}
+                              <div className="admin-accounting-breakdown">
+                                <h3 className="admin-accounting-breakdown-title">
+                                  Table Balances ({solvencyData.tableBreakdown.tableCount} tables)
+                                </h3>
+                                {solvencyData.tableBreakdown.tables.length === 0 ? (
+                                  <p className="admin-accounting-empty">No players sitting at tables.</p>
+                                ) : (
+                                  solvencyData.tableBreakdown.tables.map((table) => (
+                                    <div key={table.tableId} className="admin-accounting-table-section">
+                                      <div className="admin-accounting-table-header">
+                                        <span className="admin-accounting-table-name">{table.tableName}</span>
+                                        <span className="admin-accounting-table-total">
+                                          {(Number(table.totalGwei) / 1e9).toFixed(6)} ETH
+                                        </span>
+                                      </div>
+                                      <table className="admin-accounting-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Seat</th>
+                                            <th>Address</th>
+                                            <th>Stack (ETH)</th>
+                                            <th>Stack (gwei)</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {table.players.map((player) => (
+                                            <tr key={`${table.tableId}-${player.seatNumber}`}>
+                                              <td className="admin-accounting-seat">
+                                                {player.seatNumber}
+                                              </td>
+                                              <td className="admin-accounting-address">
+                                                <code>{formatAddress(player.address)}</code>
+                                              </td>
+                                              <td className="admin-accounting-eth">
+                                                {(Number(player.balanceGwei) / 1e9).toFixed(9)}
+                                              </td>
+                                              <td className="admin-accounting-gwei">
+                                                {Number(player.balanceGwei).toLocaleString()}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ))
                                 )}
                               </div>
                             </div>

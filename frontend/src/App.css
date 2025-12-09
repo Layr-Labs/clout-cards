@@ -1279,6 +1279,111 @@
   color: #808080;
 }
 
+.admin-accounting-seat {
+  font-weight: 600;
+  color: #d4af37;
+  text-align: center;
+  width: 60px;
+}
+
+/* Primary balance card (Total Liabilities) */
+.admin-accounting-balance-card-primary {
+  border: 2px solid rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.05);
+}
+
+.admin-accounting-balance-breakdown {
+  font-size: 0.75rem;
+  color: #808080;
+  margin-top: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* Liabilities breakdown section */
+.admin-accounting-liabilities-breakdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.admin-accounting-liability-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 16px 24px;
+  text-align: center;
+  min-width: 160px;
+}
+
+.admin-accounting-liability-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a0a0a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.admin-accounting-liability-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.admin-accounting-liability-count {
+  font-size: 0.75rem;
+  color: #606060;
+  margin-top: 4px;
+}
+
+.admin-accounting-liability-plus {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #606060;
+}
+
+/* Table section within breakdown */
+.admin-accounting-table-section {
+  margin-bottom: 20px;
+}
+
+.admin-accounting-table-section:last-child {
+  margin-bottom: 0;
+}
+
+.admin-accounting-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(212, 175, 55, 0.1);
+  border-radius: 8px 8px 0 0;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-bottom: none;
+}
+
+.admin-accounting-table-name {
+  font-weight: 700;
+  color: #d4af37;
+  font-size: 0.95rem;
+}
+
+.admin-accounting-table-total {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 0.9rem;
+}
+
+.admin-accounting-table-section .admin-accounting-table {
+  border-radius: 0 0 8px 8px;
+  border-top: none;
+}
+
 @media (max-width: 768px) {
   .admin-accounting-balances {
     flex-direction: column;
@@ -1290,6 +1395,19 @@
   }
 
   .admin-accounting-balance-divider {
+    transform: rotate(90deg);
+  }
+
+  .admin-accounting-liabilities-breakdown {
+    flex-direction: column;
+  }
+
+  .admin-accounting-liability-card {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .admin-accounting-liability-plus {
     transform: rotate(90deg);
   }
 }

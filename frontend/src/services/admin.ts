@@ -89,23 +89,60 @@ export interface PlayerBalance {
 }
 
 /**
+ * Player balance at a specific table
+ */
+export interface TablePlayerBalance {
+  /** Wallet address */
+  address: string;
+  /** Seat number at the table */
+  seatNumber: number;
+  /** Balance in gwei */
+  balanceGwei: string;
+}
+
+/**
+ * Table balance breakdown
+ */
+export interface TableBalance {
+  /** Table ID */
+  tableId: number;
+  /** Table name */
+  tableName: string;
+  /** Players sitting at this table */
+  players: TablePlayerBalance[];
+  /** Total balance at this table in gwei */
+  totalGwei: string;
+}
+
+/**
  * Solvency check result from the backend
  */
 export interface SolvencyResult {
-  /** Total escrow balance across all players (in gwei) */
+  /** Total escrow balance across all players (in gwei) - funds not at tables */
   totalEscrowGwei: string;
+  /** Total table balance across all active sessions (in gwei) - funds at tables */
+  totalTableBalanceGwei: string;
+  /** Total liabilities = escrow + table balances (what contract must cover) */
+  totalLiabilitiesGwei: string;
   /** Contract ETH balance (in gwei) */
   contractBalanceGwei: string;
-  /** Whether the contract has sufficient funds to cover all escrow balances */
+  /** Whether the contract has sufficient funds to cover all liabilities */
   isSolvent: boolean;
   /** Shortfall amount in gwei if insolvent, null if solvent */
   shortfallGwei: string | null;
-  /** Breakdown of individual player balances */
-  breakdown: {
+  /** Breakdown of escrow balances */
+  escrowBreakdown: {
     /** Number of players with escrow balances */
     playerCount: number;
-    /** List of individual player balances */
+    /** List of individual escrow balances */
     players: PlayerBalance[];
+  };
+  /** Breakdown of table balances */
+  tableBreakdown: {
+    /** Number of tables with active sessions */
+    tableCount: number;
+    /** List of table balances */
+    tables: TableBalance[];
   };
 }
 
