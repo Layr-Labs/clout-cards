@@ -1332,6 +1332,134 @@
   margin: 0 0 48px 0;
 }
 
+/* Notification Banners */
+.play-notification-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.play-notification-faucet {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(167, 139, 250, 0.1) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+}
+
+.play-notification-deposit {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(255, 215, 0, 0.1) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+}
+
+.play-notification-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.play-notification-text {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
+.play-notification-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.play-notification-faucet .play-notification-button {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.play-notification-faucet .play-notification-button:hover {
+  background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.play-notification-deposit .play-notification-button {
+  background: linear-gradient(135deg, #d4af37 0%, #ffd700 100%);
+  color: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+}
+
+.play-notification-deposit .play-notification-button:hover {
+  background: linear-gradient(135deg, #e6c547 0%, #ffe44d 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
+}
+
+.play-notification-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.play-notification-dismiss:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+@media (max-width: 768px) {
+  .play-notification-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .play-notification-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .play-notification-button {
+    width: 100%;
+  }
+
+  .play-notification-dismiss {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .play-notification-banner {
+    position: relative;
+    padding-right: 48px;
+  }
+}
+
 /* Loading/empty states now handled by AsyncState component */
 
 .play-tables-list {

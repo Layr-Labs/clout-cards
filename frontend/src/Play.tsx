@@ -1,5 +1,5 @@
 import './App.css'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useWallet } from './contexts/WalletContext'
 import { getPokerTables, getTablePlayers, type PokerTable, type TablePlayer } from './services/tables'
@@ -9,6 +9,9 @@ import { useTwitterUser } from './hooks/useTwitterUser'
 import { getBackendUrl } from './config/env'
 import { TableCard } from './components/TableCard'
 import { AsyncState } from './components/AsyncState'
+import { useEthBalance } from './hooks/useEthBalance'
+import { useEscrowBalance } from './hooks/useEscrowBalance'
+import { FaTimes } from 'react-icons/fa'
 
 /**
  * Play page component for CloutCards
@@ -18,7 +21,7 @@ import { AsyncState } from './components/AsyncState'
  * Displays list of poker tables with Join/Log In buttons based on login status.
  */
 function Play() {
-  const { isLoggedIn } = useWallet()
+  const { isLoggedIn, address, provider } = useWallet()
   const twitterUser = useTwitterUser()
   const navigate = useNavigate()
   const [tables, setTables] = useState<PokerTable[]>([])
@@ -26,6 +29,20 @@ function Play() {
   const [isLoadingTables, setIsLoadingTables] = useState(false)
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
   const [isFullyLoggedIn, setIsFullyLoggedIn] = useState(false)
+  
+  // Balance hooks for notification banners
+  const ethBalance = useEthBalance(address, provider)
+  const escrowBalanceState = useEscrowBalance()
+  
+  // Dismissed notification state
+  const [isFaucetBannerDismissed, setIsFaucetBannerDismissed] = useState(false)
+  const [isDepositBannerDismissed, setIsDepositBannerDismissed] = useState(false)
+  
+  // Determine if we should show banners
+  const hasLowWalletBalance = ethBalance !== null && parseFloat(ethBalance) < 0.1
+  const hasZeroEscrowBalance = escrowBalanceState !== null && escrowBalanceState.balanceGwei === '0'
+  const showFaucetBanner = isLoggedIn && hasLowWalletBalance && !isFaucetBannerDismissed
+  const showDepositBanner = isLoggedIn && hasZeroEscrowBalance && !hasLowWalletBalance && !isDepositBannerDismissed
 
   /**
    * Updates fully logged in status when wallet or Twitter status changes
@@ -167,6 +184,55 @@ function Play() {
           <p className="play-description">
             Join a table and start playing!
           </p>
+
+          {/* Notification Banners */}
+          {showFaucetBanner && (
+            <div className="play-notification-banner play-notification-faucet">
+              <div className="play-notification-content">
+                <span className="play-notification-text">
+                  Your wallet balance is low. Get free testnet ETH to start playing!
+                </span>
+                <a
+                  href="https://www.alchemy.com/faucets/base-sepolia"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="play-notification-button"
+                >
+                  Get Funds
+                </a>
+              </div>
+              <button
+                className="play-notification-dismiss"
+                onClick={() => setIsFaucetBannerDismissed(true)}
+                aria-label="Dismiss notification"
+              >
+                <FaTimes />
+              </button>
+            </div>
+          )}
+
+          {showDepositBanner && (
+            <div className="play-notification-banner play-notification-deposit">
+              <div className="play-notification-content">
+                <span className="play-notification-text">
+                  Your escrow balance is empty. Deposit funds to join a table!
+                </span>
+                <Link
+                  to="/profile"
+                  className="play-notification-button"
+                >
+                  Deposit Funds
+                </Link>
+              </div>
+              <button
+                className="play-notification-dismiss"
+                onClick={() => setIsDepositBannerDismissed(true)}
+                aria-label="Dismiss notification"
+              >
+                <FaTimes />
+              </button>
+            </div>
+          )}
 
           {/* Tables List - only show active tables */}
           <AsyncState
