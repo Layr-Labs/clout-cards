@@ -9,8 +9,11 @@
  */
 
 import { prisma } from '../db/client';
-import { createRpcProvider } from '../utils/rpcProvider';
+import { createRpcProvider, getRpcUrl } from '../utils/rpcProvider';
 import { getContractAddress } from '../utils/contract';
+
+/** Timeout for RPC calls in milliseconds */
+const RPC_TIMEOUT_MS = 15000;
 
 /**
  * Individual player escrow balance
@@ -54,51 +57,103 @@ export async function getTotalEscrowBalance(): Promise<{
   totalGwei: bigint;
   players: PlayerBalance[];
 }> {
-  // Query all player escrow balances
-  const balances = await prisma.$queryRaw<Array<{
-    wallet_address: string;
-    balance_gwei: bigint;
-  }>>`
-    SELECT wallet_address, balance_gwei
-    FROM player_escrow_balances
-    WHERE balance_gwei > 0
-    ORDER BY balance_gwei DESC
-  `;
+  console.log('[Accounting] Querying escrow balances from database...');
+  
+  try {
+    // Query all player escrow balances
+    const balances = await prisma.$queryRaw<Array<{
+      wallet_address: string;
+      balance_gwei: bigint;
+    }>>`
+      SELECT wallet_address, balance_gwei
+      FROM player_escrow_balances
+      WHERE balance_gwei > 0
+      ORDER BY balance_gwei DESC
+    `;
 
-  // Calculate total
-  let totalGwei = 0n;
-  const players: PlayerBalance[] = [];
+    // Calculate total
+    let totalGwei = 0n;
+    const players: PlayerBalance[] = [];
 
-  for (const row of balances) {
-    totalGwei += row.balance_gwei;
-    players.push({
-      address: row.wallet_address,
-      balanceGwei: row.balance_gwei.toString(),
-    });
+    for (const row of balances) {
+      totalGwei += row.balance_gwei;
+      players.push({
+        address: row.wallet_address,
+        balanceGwei: row.balance_gwei.toString(),
+      });
+    }
+
+    console.log(`[Accounting] Found ${players.length} players with total escrow: ${totalGwei} gwei`);
+    return { totalGwei, players };
+  } catch (error) {
+    console.error('[Accounting] ❌ Failed to query escrow balances:', error);
+    throw error;
   }
-
-  return { totalGwei, players };
 }
 
 /**
- * Gets the contract's ETH balance
+ * Gets the contract's ETH balance with timeout
  *
  * Queries the blockchain for the current ETH balance held by the CloutCards contract.
+ * Includes a timeout to prevent hanging indefinitely on slow/unresponsive RPC endpoints.
  *
  * @returns Contract balance in gwei
- * @throws {Error} If contract address is not configured or RPC call fails
+ * @throws {Error} If contract address is not configured, RPC call fails, or timeout
  */
 export async function getContractBalance(): Promise<bigint> {
-  const contractAddress = getContractAddress();
+  console.log('[Accounting] Getting contract balance...');
+  
+  // Get contract address with logging
+  let contractAddress: string;
+  try {
+    contractAddress = getContractAddress();
+    console.log(`[Accounting] Contract address: ${contractAddress}`);
+  } catch (error) {
+    console.error('[Accounting] ❌ Failed to get contract address:', error);
+    throw error;
+  }
+
+  // Get RPC URL for logging (don't log full URL in case it contains API keys)
+  let rpcUrl: string;
+  try {
+    rpcUrl = getRpcUrl();
+    // Only log hostname, not full URL (may contain API keys)
+    const urlObj = new URL(rpcUrl);
+    console.log(`[Accounting] RPC endpoint: ${urlObj.hostname}`);
+  } catch (error) {
+    console.error('[Accounting] ❌ Failed to get RPC URL:', error);
+    throw error;
+  }
+
+  // Create provider
   const provider = createRpcProvider();
+  console.log(`[Accounting] Fetching balance from RPC (timeout: ${RPC_TIMEOUT_MS}ms)...`);
 
-  // Get balance in wei
-  const balanceWei = await provider.getBalance(contractAddress);
+  // Create timeout promise
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`RPC request timed out after ${RPC_TIMEOUT_MS}ms. Check RPC_URL configuration.`));
+    }, RPC_TIMEOUT_MS);
+  });
 
-  // Convert to gwei (divide by 10^9)
-  const balanceGwei = balanceWei / BigInt(10 ** 9);
+  try {
+    // Race between the actual RPC call and timeout
+    const startTime = Date.now();
+    const balanceWei = await Promise.race([
+      provider.getBalance(contractAddress),
+      timeoutPromise
+    ]);
+    const elapsed = Date.now() - startTime;
 
-  return balanceGwei;
+    // Convert to gwei (divide by 10^9)
+    const balanceGwei = balanceWei / BigInt(10 ** 9);
+
+    console.log(`[Accounting] ✅ Contract balance: ${balanceGwei} gwei (${elapsed}ms)`);
+    return balanceGwei;
+  } catch (error) {
+    console.error('[Accounting] ❌ Failed to fetch contract balance:', error);
+    throw error;
+  }
 }
 
 /**
@@ -111,25 +166,43 @@ export async function getContractBalance(): Promise<bigint> {
  * @throws {Error} If contract address is not configured or RPC call fails
  */
 export async function checkSolvency(): Promise<SolvencyResult> {
-  // Get escrow balances from database
-  const { totalGwei: totalEscrowGwei, players } = await getTotalEscrowBalance();
+  console.log('[Accounting] ========== Starting solvency check ==========');
+  const startTime = Date.now();
 
-  // Get contract balance from blockchain
-  const contractBalanceGwei = await getContractBalance();
+  try {
+    // Get escrow balances from database
+    const { totalGwei: totalEscrowGwei, players } = await getTotalEscrowBalance();
 
-  // Check solvency
-  const isSolvent = contractBalanceGwei >= totalEscrowGwei;
-  const shortfallGwei = isSolvent ? null : (totalEscrowGwei - contractBalanceGwei).toString();
+    // Get contract balance from blockchain
+    const contractBalanceGwei = await getContractBalance();
 
-  return {
-    totalEscrowGwei: totalEscrowGwei.toString(),
-    contractBalanceGwei: contractBalanceGwei.toString(),
-    isSolvent,
-    shortfallGwei,
-    breakdown: {
-      playerCount: players.length,
-      players,
-    },
-  };
+    // Check solvency
+    const isSolvent = contractBalanceGwei >= totalEscrowGwei;
+    const shortfallGwei = isSolvent ? null : (totalEscrowGwei - contractBalanceGwei).toString();
+
+    const elapsed = Date.now() - startTime;
+    
+    if (isSolvent) {
+      console.log(`[Accounting] ✅ SOLVENT - Escrow: ${totalEscrowGwei} gwei, Contract: ${contractBalanceGwei} gwei (${elapsed}ms)`);
+    } else {
+      console.log(`[Accounting] ⚠️  INSOLVENT - Escrow: ${totalEscrowGwei} gwei, Contract: ${contractBalanceGwei} gwei, Shortfall: ${shortfallGwei} gwei (${elapsed}ms)`);
+    }
+    console.log('[Accounting] ========== Solvency check complete ==========');
+
+    return {
+      totalEscrowGwei: totalEscrowGwei.toString(),
+      contractBalanceGwei: contractBalanceGwei.toString(),
+      isSolvent,
+      shortfallGwei,
+      breakdown: {
+        playerCount: players.length,
+        players,
+      },
+    };
+  } catch (error) {
+    const elapsed = Date.now() - startTime;
+    console.error(`[Accounting] ❌ Solvency check failed after ${elapsed}ms:`, error);
+    console.log('[Accounting] ========== Solvency check failed ==========');
+    throw error;
+  }
 }
-
