@@ -1,0 +1,62 @@
+/**
+ * Custom CSS for Clout Cards Documentation
+ * Adds "Secured with EigenCloud" branding to the header
+ */
+
+/* EigenCloud Badge in Header */
+.md-header__inner {
+  position: relative;
+}
+
+.eigencloud-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  margin-right: 16px;
+}
+
+.eigencloud-badge:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.eigencloud-badge-text {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
+.eigencloud-badge-logo {
+  height: 16px;
+  width: auto;
+}
+
+/* Position the badge in the header nav */
+.md-header__button.md-logo ~ .eigencloud-badge {
+  order: -1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 76.1875em) {
+  .eigencloud-badge-text {
+    display: none;
+  }
+  
+  .eigencloud-badge {
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .eigencloud-badge {
+    display: none;
+  }
+}
+

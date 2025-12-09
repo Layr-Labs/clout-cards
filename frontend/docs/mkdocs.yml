@@ -49,3 +49,9 @@ markdown_extensions:
 plugins:
   - search
 
+extra_css:
+  - assets/css/custom.css
+
+extra_javascript:
+  - assets/js/eigencloud-badge.js
+

@@ -6,6 +6,9 @@ import { useTwitterUser } from '../hooks/useTwitterUser'
 import { useWallet } from '../contexts/WalletContext'
 import './Header.css'
 
+/** EigenCloud developer docs URL with UTM tracking */
+const EIGENCLOUD_URL = 'https://developers.eigencloud.xyz?utm_source=clout-cards'
+
 /**
  * Props for the Header component
  */
@@ -87,6 +90,22 @@ export function Header({ onLoginClick, navLinks, actionButton }: HeaderProps) {
   return (
     <header className="header">
       <nav className="header-nav">
+        {/* Secured with EigenCloud branding */}
+        <a 
+          href={EIGENCLOUD_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="header-eigencloud-badge"
+          title="Learn more about EigenCloud"
+        >
+          <span className="header-eigencloud-text">Secured with</span>
+          <img 
+            src="/eigencloud-logo.png" 
+            alt="EigenCloud" 
+            className="header-eigencloud-logo"
+          />
+        </a>
+
         {/* Mobile hamburger button */}
         <button
           className="header-mobile-toggle"
@@ -97,37 +116,40 @@ export function Header({ onLoginClick, navLinks, actionButton }: HeaderProps) {
           {isMobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
         </button>
 
-        {/* Desktop navigation */}
-        <div className="header-nav-desktop">
-          {links.map((link, index) => (
-            <div key={index}>
-              {link.to ? (
-                <Link to={link.to} className="nav-link" onClick={closeMobileMenu}>
-                  {link.label}
-                </Link>
-              ) : (
-                <a href={link.href} className="nav-link" onClick={closeMobileMenu}>
-                  {link.label}
-                </a>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Desktop navigation and action wrapper */}
+        <div className="header-right">
+          {/* Desktop navigation */}
+          <div className="header-nav-desktop">
+            {links.map((link, index) => (
+              <div key={index}>
+                {link.to ? (
+                  <Link to={link.to} className="nav-link" onClick={closeMobileMenu}>
+                    {link.label}
+                  </Link>
+                ) : (
+                  <a href={link.href} className="nav-link" onClick={closeMobileMenu}>
+                    {link.label}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
 
-        {/* Desktop action area */}
-        <div className="header-action-desktop">
-          {actionButton || (
-            isFullyLoggedIn && twitterUser && address ? (
-              <UserProfileDropdown twitterUser={twitterUser} address={address} />
-            ) : (
-              <button
-                className="header-login-button"
-                onClick={handleLoginClick}
-              >
-                Log In
-              </button>
-            )
-          )}
+          {/* Desktop action area */}
+          <div className="header-action-desktop">
+            {actionButton || (
+              isFullyLoggedIn && twitterUser && address ? (
+                <UserProfileDropdown twitterUser={twitterUser} address={address} />
+              ) : (
+                <button
+                  className="header-login-button"
+                  onClick={handleLoginClick}
+                >
+                  Log In
+                </button>
+              )
+            )}
+          </div>
         </div>
 
         {/* Mobile menu overlay */}

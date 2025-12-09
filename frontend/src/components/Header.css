@@ -1,3 +1,42 @@
+/* EigenCloud Badge */
+.header-eigencloud-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.header-eigencloud-badge:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.header-eigencloud-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+}
+
+.header-eigencloud-logo {
+  height: 18px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Header Right Wrapper (nav + action) */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
 /* Header Mobile Toggle Button */
 .header-mobile-toggle {
   display: none;
@@ -106,6 +145,10 @@
     display: none;
   }
 
+  .header-right {
+    display: none;
+  }
+
   .header-mobile-overlay {
     display: block;
   }
@@ -121,6 +164,19 @@
   /* Ensure header has proper padding on mobile */
   .header {
     padding: 12px 16px;
+  }
+
+  /* Mobile EigenCloud badge */
+  .header-eigencloud-badge {
+    padding: 4px 8px;
+  }
+
+  .header-eigencloud-text {
+    font-size: 0.65rem;
+  }
+
+  .header-eigencloud-logo {
+    height: 14px;
   }
 }
 
