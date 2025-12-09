@@ -167,6 +167,8 @@ function Table() {
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isBetRaiseDialogOpen, setIsBetRaiseDialogOpen] = useState(false)
+  const [isRefreshingActionState, setIsRefreshingActionState] = useState(false)
+  const lastRefreshedActionSeatRef = useRef<number | null>(null)
   const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string; animateFromZero?: boolean } | null>(null)
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
   const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
@@ -505,6 +507,91 @@ function Table() {
       }
     }
   }, [])
+
+  /**
+   * Refresh hand state when it becomes user's turn
+   *
+   * This prevents race conditions where SSE events arrive with stale currentBet
+   * or chipsCommitted values. By re-fetching from the API when it's our turn,
+   * we ensure the action panel always shows accurate check/call options.
+   */
+  useEffect(() => {
+    // Only run if we have a hand and it might be our turn
+    if (!currentHand || !address || !signature || !tableId) return
+
+    const userHandPlayer = currentHand.players.find(
+      p => p.walletAddress.toLowerCase() === address.toLowerCase()
+    )
+    if (!userHandPlayer) return
+
+    const isOurTurn = currentHand.currentActionSeat === userHandPlayer.seatNumber && 
+                      userHandPlayer.status === 'ACTIVE'
+
+    // If it's not our turn, reset the ref so we refresh next time it is
+    if (!isOurTurn) {
+      lastRefreshedActionSeatRef.current = null
+      return
+    }
+
+    // If we already refreshed for this action seat, don't refresh again
+    if (lastRefreshedActionSeatRef.current === currentHand.currentActionSeat) {
+      return
+    }
+
+    // Mark that we're refreshing for this action seat
+    lastRefreshedActionSeatRef.current = currentHand.currentActionSeat
+
+    // Fetch fresh hand state from API
+    async function refreshActionState() {
+      setIsRefreshingActionState(true)
+      try {
+        console.log('[Table] refreshActionState: fetching fresh hand state for action panel')
+        const freshHand = await getCurrentHand(tableId!, address!, signature!)
+        
+        console.log('[Table] refreshActionState: received fresh state', {
+          handId: freshHand.handId,
+          currentBet: freshHand.currentBet,
+          currentActionSeat: freshHand.currentActionSeat,
+          userChipsCommitted: freshHand.players.find(
+            p => p.walletAddress.toLowerCase() === address!.toLowerCase()
+          )?.chipsCommitted,
+        })
+
+        // Merge fresh action-critical fields into current hand state
+        // Preserve Twitter info and other UI state from existing hand
+        setCurrentHand(prev => {
+          if (!prev) return freshHand
+
+          // Merge players - use fresh chipsCommitted but preserve Twitter info
+          const mergedPlayers = freshHand.players.map(freshPlayer => {
+            const prevPlayer = prev.players.find(p => p.seatNumber === freshPlayer.seatNumber)
+            return {
+              ...freshPlayer,
+              twitterHandle: prevPlayer?.twitterHandle || freshPlayer.twitterHandle,
+              twitterAvatarUrl: prevPlayer?.twitterAvatarUrl || freshPlayer.twitterAvatarUrl,
+            }
+          })
+
+          return {
+            ...prev,
+            currentBet: freshHand.currentBet,
+            lastRaiseAmount: freshHand.lastRaiseAmount,
+            currentActionSeat: freshHand.currentActionSeat,
+            players: mergedPlayers,
+            // Keep other fields from prev (communityCards, pots, etc.) 
+            // unless fresh has newer data
+          }
+        })
+      } catch (err) {
+        console.error('[Table] refreshActionState: failed to refresh', err)
+        // Don't block - SSE state is probably good enough
+      } finally {
+        setIsRefreshingActionState(false)
+      }
+    }
+
+    refreshActionState()
+  }, [currentHand?.currentActionSeat, currentHand?.handId, address, signature, tableId])
 
   /**
    * Unified handler for updating player balances from event payloads
@@ -1936,11 +2023,31 @@ function Table() {
               <button
                 className="table-action-button table-action-button-fold"
                 onClick={handleFoldClick}
-                disabled={isProcessingAction}
+                disabled={isProcessingAction || isRefreshingActionState}
               >
                 {isProcessingAction ? 'Processing...' : 'Fold'}
               </button>
               {(() => {
+                // While refreshing, show loading state to prevent stale check/call display
+                if (isRefreshingActionState) {
+                  return (
+                    <>
+                      <button
+                        className="table-action-button table-action-button-check-call"
+                        disabled={true}
+                      >
+                        Loading...
+                      </button>
+                      <button
+                        className="table-action-button table-action-button-raise"
+                        disabled={true}
+                      >
+                        ...
+                      </button>
+                    </>
+                  )
+                }
+
                 // Check if user can afford to call
                 const callAmount = getCallAmount()
                 const userPlayer = players.find(p => 
@@ -1982,7 +2089,7 @@ function Table() {
               <button
                 className="table-action-button table-action-button-all-in"
                 onClick={handleAllInClick}
-                disabled={isProcessingAction}
+                disabled={isProcessingAction || isRefreshingActionState}
               >
                 All-in
               </button>
