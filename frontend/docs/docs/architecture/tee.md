@@ -2,6 +2,9 @@
 
 Clout Cards runs inside a **Trusted Execution Environment (TEE)** to provide cryptographic guarantees that the game logic is executed correctly and cannot be tampered with.
 
+!!! tip "Build on EigenCloud"
+    Want to build your own verifiable application with TEE security? EigenCloud makes it easy to deploy trustless backends with cryptographic guarantees. Get started at the [EigenCloud Developer Docs](https://developers.eigencloud.xyz?utm_source=clout-cards).
+
 ## What is a TEE?
 
 A Trusted Execution Environment is a secure, isolated area of a processor that guarantees:

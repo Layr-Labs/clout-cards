@@ -2,6 +2,9 @@
 
 Welcome to the Clout Cards documentation! Clout Cards is a crypto poker platform that combines on-chain asset management with Twitter social identity.
 
+!!! tip "Build on EigenCloud"
+    Clout Cards is powered by **EigenCloud** — a platform for building verifiable, trustless applications with TEE security. Want to build your own? Check out the [EigenCloud Developer Docs](https://developers.eigencloud.xyz?utm_source=clout-cards).
+
 ## What is Clout Cards?
 
 Clout Cards allows you to:

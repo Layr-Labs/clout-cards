@@ -1472,6 +1472,10 @@
 
 <h1 id="verifiability">Verifiability<a class="headerlink" href="#verifiability" title="Permanent link">&para;</a></h1>
 <p>Clout Cards implements a <strong>cryptographically verifiable audit trail</strong> that allows anyone to prove game integrity—even though all data is stored in a traditional PostgreSQL database. The key insight is that <strong>the data is signed by tamper-proof code running inside a TEE</strong>, making it impossible for anyone (including the operator) to modify historical events without detection.</p>
+<div class="admonition tip">
+<p class="admonition-title">Build on EigenCloud</p>
+<p>The verification architecture described here is powered by <strong>EigenCloud</strong>. Build your own verifiable applications with TEE-backed cryptographic guarantees. Learn more at the <a href="https://developers.eigencloud.xyz?utm_source=clout-cards">EigenCloud Developer Docs</a>.</p>
+</div>
 <h2 id="the-trust-model">The Trust Model<a class="headerlink" href="#the-trust-model" title="Permanent link">&para;</a></h2>
 <p>Traditional online poker requires trusting the operator not to cheat. Clout Cards inverts this model:</p>
 <table>
