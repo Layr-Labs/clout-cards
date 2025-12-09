@@ -78,9 +78,19 @@ async function checkExpiredTimers(): Promise<void> {
         // Log error but continue checking other hands
         console.error(`[ActionTimeoutChecker] Hand ${hand.id}: Failed to auto-fold seat ${hand.currentActionSeat}:`, error);
         
-        // If the error is because it's no longer the player's turn (race condition),
-        // clear the timeout to prevent repeated attempts
-        if (error.message?.includes('turn') || error.message?.includes('not the player')) {
+        // If the error is due to a race condition (hand already completed, not player's turn, etc.),
+        // clear the timeout to prevent repeated attempts. These are expected when:
+        // - Another action (manual or timeout) already settled the hand
+        // - The player already acted before the timeout was processed
+        // - The hand was completed by another concurrent action
+        const isRaceCondition = 
+          error.message?.includes('turn') || 
+          error.message?.includes('not the player') ||
+          error.message?.includes('already completed') ||
+          error.message?.includes('No active hand');
+          
+        if (isRaceCondition) {
+          console.log(`[ActionTimeoutChecker] Hand ${hand.id}: Race condition detected, clearing timeout`);
           await (prisma as any).hand.update({
             where: { id: hand.id },
             data: {

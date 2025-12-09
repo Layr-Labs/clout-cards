@@ -1191,13 +1191,20 @@ async function handleNextPlayerOrRoundComplete(
 }
 
 /**
- * Gets and validates table and active hand for a player action
+ * Gets and validates table and active hand with row-level locking
+ *
+ * This function acquires a database row lock on the hand to prevent race conditions
+ * where multiple concurrent actions (e.g., timeout + manual fold) could both settle
+ * the same hand and distribute the pot twice.
+ *
+ * The FOR UPDATE lock causes concurrent transactions to wait until this transaction
+ * commits, at which point they'll see the updated hand status and fail appropriately.
  *
  * @param tableId - Table ID
  * @param tx - Prisma transaction client
  * @param includePots - Whether to include pots in hand query (default: false)
  * @returns Object containing validated table and hand
- * @throws {Error} If table or hand not found or invalid
+ * @throws {Error} If table or hand not found, hand already completed, or invalid state
  */
 async function getTableAndHand(
   tableId: number,
@@ -1213,28 +1220,48 @@ async function getTableAndHand(
     throw new Error(`Table with id ${tableId} not found`);
   }
 
-  // Get active hand
-  const hand = await (tx as any).hand.findFirst({
-    where: {
-      tableId,
-      status: {
-        not: 'COMPLETED',
-      },
-    },
+  // CRITICAL: Acquire row-level lock on the hand to prevent race conditions
+  // This prevents concurrent actions (e.g., timeout + manual action) from both
+  // processing the same hand and potentially distributing the pot twice.
+  // The lock is held until the transaction commits.
+  const lockedHands = await tx.$queryRaw<Array<{ hand_id: number; status: string }>>`
+    SELECT hand_id, status 
+    FROM hands 
+    WHERE table_id = ${tableId} AND status != 'COMPLETED'
+    ORDER BY hand_id DESC
+    LIMIT 1
+    FOR UPDATE
+  `;
+
+  // Check if we found and locked an active hand
+  if (lockedHands.length === 0) {
+    // Only check table active status if there's no active hand
+    if (!table.isActive) {
+      throw new Error(`Table ${table.name} is not active`);
+    }
+    throw new Error(`No active hand found for table ${tableId}`);
+  }
+
+  const lockedHand = lockedHands[0];
+
+  // Double-check status after acquiring lock (defensive - the WHERE clause should handle this)
+  if (lockedHand.status === 'COMPLETED') {
+    throw new Error(`Hand ${lockedHand.hand_id} is already completed`);
+  }
+
+  // Now fetch the full hand data with players (and optionally pots)
+  // The row is already locked, so this is safe
+  const hand = await (tx as any).hand.findUnique({
+    where: { id: lockedHand.hand_id },
     include: {
       players: true,
+      table: true,
       ...(includePots ? { pots: true } : {}),
     },
   });
 
-  // Only check table active status if there's no active hand
-  // If there IS an active hand, players should be able to finish it even if the table was deactivated
-  if (!table.isActive && !hand) {
-    throw new Error(`Table ${table.name} is not active`);
-  }
-
   if (!hand) {
-    throw new Error(`No active hand found for table ${tableId}`);
+    throw new Error(`Hand ${lockedHand.hand_id} not found after lock acquisition`);
   }
 
   return { table, hand };
