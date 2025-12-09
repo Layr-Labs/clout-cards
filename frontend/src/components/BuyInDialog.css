@@ -1,105 +1,11 @@
 /**
- * Buy In Dialog styles
- *
+ * BuyInDialog component styles
+ * 
+ * Extends base dialog styles from styles/dialog.css.
  * Casino-style dialog for selecting buy-in amount when joining a poker table.
  */
 
-.buy-in-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.buy-in-dialog {
-  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-  border: 2px solid #d4af37;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.2);
-  width: 90%;
-  max-width: 500px;
-  padding: 0;
-  animation: slideUp 0.3s ease-out;
-  position: relative;
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.buy-in-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24px 24px 20px;
-  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
-}
-
-.buy-in-dialog-header h2 {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #d4af37;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.buy-in-dialog-close {
-  background: none;
-  border: none;
-  color: #d4af37;
-  font-size: 2rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.buy-in-dialog-close:hover:not(:disabled) {
-  background: rgba(212, 175, 55, 0.1);
-  transform: scale(1.1);
-}
-
-.buy-in-dialog-close:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.buy-in-dialog-content {
-  padding: 24px;
-}
-
+/* BuyInDialog-specific styles only */
 .buy-in-dialog-error {
   text-align: center;
   padding: 20px 0;
@@ -332,10 +238,6 @@
     max-width: none;
   }
   
-  .buy-in-dialog-header h2 {
-    font-size: 1.5rem;
-  }
-  
   .buy-in-dialog-input {
     font-size: 1.25rem;
   }
@@ -345,4 +247,3 @@
     font-size: 0.9rem;
   }
 }
-

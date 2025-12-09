@@ -35,8 +35,7 @@ import {
   FaFileContract,
   FaPercentage,
 } from 'react-icons/fa';
-import { Header } from './components/Header';
-import { LoginDialog } from './components/LoginDialog';
+import { PageLayout } from './components/PageLayout';
 import { formatEth } from './utils/formatEth';
 import { formatAddress } from './utils/formatAddress';
 import {
@@ -220,9 +219,6 @@ function Verify() {
   const [currentPage, setCurrentPage] = useState(1);
   const eventsPerPage = 20;
 
-  // State for login dialog
-  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
-
   // Fetch stats on mount
   useEffect(() => {
     async function fetchStats() {
@@ -286,9 +282,7 @@ function Verify() {
   })) || [];
 
   return (
-    <div className="verify-page">
-      <Header onLoginClick={() => setIsLoginDialogOpen(true)} />
-      
+    <PageLayout containerClassName="verify-page">
       <main className="verify-main">
         <div className="verify-header">
           <div className="verify-header-icon">
@@ -513,14 +507,7 @@ function Verify() {
           ) : null}
         </section>
       </main>
-
-      {/* Login Dialog */}
-      <LoginDialog
-        isOpen={isLoginDialogOpen}
-        onClose={() => setIsLoginDialogOpen(false)}
-        onLoginSuccess={() => setIsLoginDialogOpen(false)}
-      />
-    </div>
+    </PageLayout>
   );
 }
 

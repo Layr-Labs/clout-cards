@@ -1,65 +1,47 @@
-/* Cash Out Dialog Styles */
-.cash-out-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
+/**
+ * CashOutDialog component styles
+ * 
+ * Extends base dialog styles from styles/dialog.css.
+ * Uses purple theme to distinguish from deposit (gold theme).
+ */
 
+/* Override: Purple theme for cash out */
 .cash-out-dialog {
   background: #1a1a1a;
   border: 2px solid #8b5cf6;
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
   box-shadow: 0 8px 32px rgba(139, 92, 246, 0.3);
+  padding: 24px;
 }
 
+/* Override: Non-bordered header style */
 .cash-out-dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 24px;
+  padding: 0;
+  border-bottom: none;
 }
 
+/* Override: White title color */
 .cash-out-dialog-header h2 {
-  margin: 0;
   color: #fff;
   font-size: 24px;
 }
 
+/* Override: White close button */
 .cash-out-dialog-close {
-  background: none;
-  border: none;
   color: #fff;
-  font-size: 32px;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
 }
 
 .cash-out-dialog-close:hover {
   color: #8b5cf6;
+  background: none;
 }
 
+/* CashOut-specific styles */
 .cash-out-dialog-content {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  padding: 0;
 }
 
 .cash-out-balance-info {
@@ -270,4 +252,3 @@
 .cash-out-button-submit:hover:not(:disabled) {
   background: #7c3aed;
 }
-

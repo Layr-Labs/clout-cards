@@ -7,8 +7,7 @@ import { useEscrowBalance } from './hooks/useEscrowBalance';
 import { formatAddress } from './utils/formatAddress';
 import { DepositDialog } from './components/DepositDialog';
 import { CashOutDialog } from './components/CashOutDialog';
-import { LoginDialog } from './components/LoginDialog';
-import { Header } from './components/Header';
+import { PageLayout } from './components/PageLayout';
 import { WalletAvatar } from './components/WalletAvatar';
 import { Tooltip } from './components/Tooltip';
 import './Profile.css';
@@ -29,7 +28,6 @@ export default function Profile() {
   const escrowBalanceState = useEscrowBalance();
   const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
   const [isCashOutDialogOpen, setIsCashOutDialogOpen] = useState(false);
-  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
 
   const isFullyLoggedIn = isLoggedIn && !!twitterUser && !!address;
 
@@ -77,12 +75,7 @@ export default function Profile() {
   const twitterUrl = twitterUser ? `https://twitter.com/${twitterUser.username}` : '';
 
   return (
-    <div className="app">
-      {/* Header */}
-      <Header
-        onLoginClick={() => setIsLoginDialogOpen(true)}
-      />
-
+    <PageLayout>
       <div className="profile-container">
         {!isFullyLoggedIn || !twitterUser || !address ? (
           <div className="profile-content">
@@ -201,13 +194,7 @@ export default function Profile() {
         }}
         escrowBalanceGwei={escrowBalanceGwei}
       />
-
-      <LoginDialog
-        isOpen={isLoginDialogOpen}
-        onClose={() => setIsLoginDialogOpen(false)}
-        onLoginSuccess={() => setIsLoginDialogOpen(false)}
-      />
-    </div>
+    </PageLayout>
   );
 }
 

@@ -139,12 +139,12 @@ export function BuyInDialog({
   const isAtMaximum = buyInGwei === effectiveMaxGwei;
   
   return (
-    <div className="buy-in-dialog-overlay" onClick={onClose}>
-      <div className="buy-in-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="buy-in-dialog-header">
-          <h2>Buy In</h2>
+    <div className="dialog-overlay-base buy-in-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base buy-in-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base buy-in-dialog-header">
+          <h2 className="dialog-title-base">Buy In</h2>
           <button 
-            className="buy-in-dialog-close"
+            className="dialog-close-base buy-in-dialog-close"
             onClick={onClose}
             disabled={isLoading}
             aria-label="Close dialog"
@@ -153,7 +153,7 @@ export function BuyInDialog({
           </button>
         </div>
         
-        <div className="buy-in-dialog-content">
+        <div className="dialog-content-area-base buy-in-dialog-content">
           {!canAfford ? (
             <div className="buy-in-dialog-error">
               <p>Insufficient escrow balance</p>

@@ -1,3 +1,11 @@
+/**
+ * BetRaiseDialog component styles
+ * 
+ * Uses base dialog styles from styles/dialog.css for overlay, container,
+ * header, and close button. Component-specific styles below.
+ */
+
+/* Override: Higher z-index for betting dialog */
 .bet-raise-dialog-overlay {
   position: fixed;
   top: 0;

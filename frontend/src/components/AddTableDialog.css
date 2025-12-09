@@ -1,67 +1,23 @@
-.dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
+/**
+ * AddTableDialog component styles
+ * 
+ * Extends base dialog styles from styles/dialog.css.
+ * These are component-specific overrides only.
+ */
 
-.dialog-content {
+/* Override: Different gradient and wider max-width for form */
+.add-table-dialog {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border-radius: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  width: 100%;
   max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
 }
 
-.dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24px;
+/* Override: Subtle border color */
+.add-table-dialog-header {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.dialog-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0;
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  color: #b0b0b0;
-  font-size: 2rem;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.3s linear;
-}
-
-.dialog-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-}
-
-.dialog-form {
+/* AddTableDialog-specific form styles */
+.add-table-dialog-form {
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -125,61 +81,15 @@
   margin-top: -4px;
 }
 
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+/* Override: Actions with border-top for form separation */
+.add-table-dialog-actions {
   padding-top: 8px;
   margin-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.dialog-button-cancel,
-.dialog-button-submit {
-  padding: 12px 24px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s linear;
-  font-family: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.dialog-button-cancel {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e0e0e0;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-}
-
-.dialog-button-cancel:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-}
-
-.dialog-button-submit {
-  background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 50%, #fbbf24 100%);
-  color: #1a1a1a;
-  border: 2px solid #fcd34d;
-  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
-}
-
-.dialog-button-submit:hover:not(:disabled) {
-  background: linear-gradient(135deg, #fcd34d 0%, #fde047 50%, #fcd34d 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.5);
-}
-
-.dialog-button-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
 @media (max-width: 768px) {
-  .dialog-content {
+  .add-table-dialog {
     max-width: 100%;
     max-height: 95vh;
   }
@@ -188,13 +98,7 @@
     grid-template-columns: 1fr;
   }
 
-  .dialog-actions {
+  .add-table-dialog-actions {
     flex-direction: column-reverse;
   }
-
-  .dialog-button-cancel,
-  .dialog-button-submit {
-    width: 100%;
-  }
 }
-

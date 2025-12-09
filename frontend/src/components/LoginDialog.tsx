@@ -80,16 +80,16 @@ export function LoginDialog({
   const bothConnected = isLoggedIn && twitterUser
 
   return (
-    <div className="login-dialog-overlay" onClick={onClose}>
-      <div className="login-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="login-dialog-header">
-          <h2 className="login-dialog-title">Sign In</h2>
-          <button className="login-dialog-close" onClick={onClose} aria-label="Close">
+    <div className="dialog-overlay-base login-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base login-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base login-dialog-header">
+          <h2 className="dialog-title-base login-dialog-title">Sign In</h2>
+          <button className="dialog-close-base login-dialog-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
 
-        <div className="login-dialog-content">
+        <div className="dialog-content-area-base login-dialog-content">
           {/* Wallet Connection */}
           <div className="login-connection-section">
             <h3 className="login-connection-title">Connect Wallet</h3>

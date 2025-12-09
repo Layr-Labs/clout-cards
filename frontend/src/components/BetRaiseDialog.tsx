@@ -178,16 +178,16 @@ export function BetRaiseDialog({
   })
 
   return (
-    <div className="bet-raise-dialog-overlay" onClick={onClose}>
-      <div className="bet-raise-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="bet-raise-dialog-header">
-          <h2>{isBetting ? 'Bet' : 'Raise'}</h2>
-          <button className="bet-raise-dialog-close" onClick={onClose} aria-label="Close dialog">
+    <div className="dialog-overlay-base bet-raise-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base bet-raise-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base bet-raise-dialog-header">
+          <h2 className="dialog-title-base">{isBetting ? 'Bet' : 'Raise'}</h2>
+          <button className="dialog-close-base bet-raise-dialog-close" onClick={onClose} aria-label="Close dialog">
             ×
           </button>
         </div>
 
-        <div className="bet-raise-dialog-content">
+        <div className="dialog-content-area-base bet-raise-dialog-content">
           {error && <div className="bet-raise-error">{error}</div>}
 
           <div className="bet-raise-amount-section">

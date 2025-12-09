@@ -1,9 +1,13 @@
 /**
- * Table Sessions Dialog styles
+ * TableSessionsDialog component styles
  *
+ * Uses base dialog styles from styles/dialog.css for overlay, container,
+ * header, and close button. Component-specific styles below.
+ * 
  * Dialog component for displaying all player sessions for a poker table.
  */
 
+/* Override: Animations for table sessions dialog */
 .table-sessions-dialog-overlay {
   position: fixed;
   top: 0;

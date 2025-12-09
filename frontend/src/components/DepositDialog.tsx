@@ -255,16 +255,16 @@ export function DepositDialog({
   const sliderValue = maxBalance > 0 ? (depositAmountNum / maxBalance) * 100 : 0;
 
   return (
-    <div className="deposit-dialog-overlay" onClick={onClose}>
-      <div className="deposit-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="deposit-dialog-header">
-          <h2>Deposit ETH</h2>
-          <button className="deposit-dialog-close" onClick={onClose} aria-label="Close">
+    <div className="dialog-overlay-base deposit-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base deposit-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base deposit-dialog-header">
+          <h2 className="dialog-title-base">Deposit ETH</h2>
+          <button className="dialog-close-base deposit-dialog-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
 
-        <div className="deposit-dialog-content">
+        <div className="dialog-content-area-base deposit-dialog-content">
           {!txHash && (
             <>
               <div className="deposit-balance-info">

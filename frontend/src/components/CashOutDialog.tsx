@@ -258,16 +258,16 @@ export function CashOutDialog({
   return (
     <>
       {isOpen && (
-        <div className="cash-out-dialog-overlay" onClick={onClose}>
-          <div className="cash-out-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="cash-out-dialog-header">
-              <h2>Cash Out</h2>
-              <button className="cash-out-dialog-close" onClick={onClose}>
+        <div className="dialog-overlay-base cash-out-dialog-overlay" onClick={onClose}>
+          <div className="dialog-content-base cash-out-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-header-base cash-out-dialog-header">
+              <h2 className="dialog-title-base">Cash Out</h2>
+              <button className="dialog-close-base cash-out-dialog-close" onClick={onClose}>
                 ×
               </button>
             </div>
 
-            <div className="cash-out-dialog-content">
+            <div className="dialog-content-area-base cash-out-dialog-content">
               {!txHash && (
                 <>
                   <div className="cash-out-balance-info">

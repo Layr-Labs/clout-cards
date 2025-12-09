@@ -1,70 +1,46 @@
+/**
+ * DepositDialog component styles
+ * 
+ * Extends base dialog styles from styles/dialog.css.
+ * These are component-specific overrides only.
+ */
+
+/* Override: Higher z-index for deposit dialog */
 .deposit-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 2000;
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.8);
 }
 
+/* Override: Deposit dialog with padding inside container */
 .deposit-dialog {
-  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-  border-radius: 16px;
   padding: 32px;
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-  border: 2px solid rgba(212, 175, 55, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
+/* Override: Margin for header instead of padding (since container has padding) */
 .deposit-dialog-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
-}
-
-.deposit-dialog-header h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #d4af37;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.deposit-dialog-close {
-  background: none;
-  border: none;
-  color: #ffffff;
-  font-size: 2rem;
-  cursor: pointer;
   padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  border-bottom: none;
+}
+
+/* Override: Close button style */
+.deposit-dialog-close {
+  color: #ffffff;
 }
 
 .deposit-dialog-close:hover {
-  background: rgba(255, 255, 255, 0.1);
   color: #d4af37;
 }
 
+/* Deposit-specific styles (not duplicated from base) */
 .deposit-dialog-content {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding: 0;
 }
 
 .deposit-balance-info {
@@ -386,4 +362,3 @@
   font-weight: 600;
   font-size: 1rem;
 }
-

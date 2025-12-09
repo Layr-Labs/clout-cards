@@ -273,16 +273,16 @@ export function AddTableDialog({
   if (!isOpen) return null
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
-          <h2 className="dialog-title">Add New Table</h2>
-          <button className="dialog-close" onClick={onClose} aria-label="Close dialog">
+    <div className="dialog-overlay-base add-table-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base add-table-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base add-table-dialog-header">
+          <h2 className="dialog-title-base">Add New Table</h2>
+          <button className="dialog-close-base" onClick={onClose} aria-label="Close dialog">
             ×
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="dialog-form">
+        <form onSubmit={handleSubmit} className="add-table-dialog-form">
           <div className="form-group">
             <label htmlFor="name" className="form-label">
               Table Name *
@@ -406,13 +406,13 @@ export function AddTableDialog({
             </div>
           </div>
 
-          <div className="dialog-actions">
-            <button type="button" className="dialog-button-cancel" onClick={onClose}>
+          <div className="dialog-actions-base add-table-dialog-actions">
+            <button type="button" className="dialog-button-base dialog-button-cancel-base" onClick={onClose}>
               Cancel
             </button>
             <button
               type="submit"
-              className="dialog-button-submit"
+              className="dialog-button-base dialog-button-confirm-base"
               disabled={!isFormValid() || isSubmitting}
             >
               {isSubmitting ? 'Creating...' : 'Create Table'}

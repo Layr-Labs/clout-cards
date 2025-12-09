@@ -1,61 +1,38 @@
+/**
+ * LoginDialog component styles
+ * 
+ * Extends base dialog styles from styles/dialog.css.
+ * These are component-specific overrides only.
+ */
+
+/* Override: Higher z-index for login dialog */
 .login-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 10000;
-  backdrop-filter: blur(4px);
 }
 
+/* Override: Login dialog uses different gradient/border */
 .login-dialog {
   background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
+/* Override: Subtle border for login header */
 .login-dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Override: Login title uses gradient text */
 .login-dialog-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0;
   background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  color: transparent;
 }
 
+/* Override: Login close button color */
 .login-dialog-close {
-  background: none;
-  border: none;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 2rem;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s linear;
 }
 
 .login-dialog-close:hover {
@@ -63,10 +40,7 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
-.login-dialog-content {
-  padding: 24px;
-}
-
+/* Login-specific styles (not duplicated from base) */
 .login-connection-section {
   margin-bottom: 32px;
 }
@@ -251,13 +225,4 @@
     width: 95%;
     max-height: 95vh;
   }
-
-  .login-dialog-header {
-    padding: 20px;
-  }
-
-  .login-dialog-content {
-    padding: 20px;
-  }
 }
-

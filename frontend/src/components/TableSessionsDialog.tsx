@@ -90,12 +90,12 @@ export function TableSessionsDialog({
   }
 
   return (
-    <div className="table-sessions-dialog-overlay" onClick={onClose}>
-      <div className="table-sessions-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="table-sessions-dialog-header">
-          <h2>Table Sessions: {tableName}</h2>
+    <div className="dialog-overlay-base table-sessions-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base table-sessions-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base table-sessions-dialog-header">
+          <h2 className="dialog-title-base">Table Sessions: {tableName}</h2>
           <button
-            className="table-sessions-dialog-close"
+            className="dialog-close-base table-sessions-dialog-close"
             onClick={onClose}
             aria-label="Close dialog"
           >
@@ -103,7 +103,7 @@ export function TableSessionsDialog({
           </button>
         </div>
 
-        <div className="table-sessions-dialog-content">
+        <div className="dialog-content-area-base table-sessions-dialog-content">
           <AsyncState
             isLoading={isLoading}
             error={error}

@@ -36,12 +36,12 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="confirm-dialog-overlay" onClick={onClose}>
-      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="confirm-dialog-header">
-          <h2>{title}</h2>
+    <div className="dialog-overlay-base confirm-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base confirm-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base confirm-dialog-header">
+          <h2 className="dialog-title-base">{title}</h2>
           <button
-            className="confirm-dialog-close"
+            className="dialog-close-base confirm-dialog-close"
             onClick={onClose}
             disabled={isLoading}
             aria-label="Close dialog"
@@ -50,20 +50,20 @@ export function ConfirmDialog({
           </button>
         </div>
 
-        <div className="confirm-dialog-content">
+        <div className="dialog-content-area-base confirm-dialog-content">
           <p>{message}</p>
         </div>
 
-        <div className="confirm-dialog-actions">
+        <div className="dialog-actions-base confirm-dialog-actions">
           <button
-            className="confirm-dialog-button confirm-dialog-button-cancel"
+            className="dialog-button-base dialog-button-cancel-base confirm-dialog-button-cancel"
             onClick={onClose}
             disabled={isLoading}
           >
             {cancelText}
           </button>
           <button
-            className="confirm-dialog-button confirm-dialog-button-confirm"
+            className="dialog-button-base dialog-button-confirm-base confirm-dialog-button-confirm"
             onClick={onConfirm}
             disabled={isLoading}
           >

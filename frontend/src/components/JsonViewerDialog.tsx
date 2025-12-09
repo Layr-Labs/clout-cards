@@ -44,10 +44,10 @@ export function JsonViewerDialog({
   }
 
   return (
-    <div className="json-dialog-overlay" onClick={onClose}>
-      <div className="json-dialog-content" onClick={(e) => e.stopPropagation()}>
-        <div className="json-dialog-header">
-          <h2 className="json-dialog-title">{title}</h2>
+    <div className="dialog-overlay-base json-dialog-overlay" onClick={onClose}>
+      <div className="dialog-content-base json-dialog-content" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-header-base json-dialog-header">
+          <h2 className="dialog-title-base json-dialog-title">{title}</h2>
           <div className="json-dialog-actions-header">
             <button 
               className={`json-dialog-copy ${copyFeedback ? 'copied' : ''}`} 
@@ -56,13 +56,13 @@ export function JsonViewerDialog({
             >
               {copyFeedback ? 'Copied!' : 'Copy'}
             </button>
-            <button className="json-dialog-close" onClick={onClose} aria-label="Close dialog">
+            <button className="dialog-close-base json-dialog-close" onClick={onClose} aria-label="Close dialog">
               ×
             </button>
           </div>
         </div>
 
-        <div className="json-dialog-body">
+        <div className="dialog-content-area-base json-dialog-body">
           {parseError && (
             <div className="json-dialog-error">
               <p>Parse Error: {parseError}</p>

@@ -1,7 +1,6 @@
 import './App.css'
 import { useState, useEffect } from 'react'
-import { Header } from './components/Header'
-import { LoginDialog } from './components/LoginDialog'
+import { PageLayout } from './components/PageLayout'
 import { getLeaderboard, type LeaderboardEntry, type LeaderboardSortBy } from './services/leaderboard'
 import { formatEth } from './utils/formatEth'
 import { AsyncState } from './components/AsyncState'
@@ -19,7 +18,6 @@ function Leaderboard() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
 
   /**
    * Fetches leaderboard data when tab changes
@@ -49,8 +47,7 @@ function Leaderboard() {
   ]
 
   return (
-    <div className="app-container">
-      <Header onLoginClick={() => setIsLoginDialogOpen(true)} />
+    <PageLayout containerClassName="app-container">
       <div className="content-container">
         <div className="leaderboard-container">
           <h1>Leaderboard</h1>
@@ -128,14 +125,7 @@ function Leaderboard() {
           </AsyncState>
         </div>
       </div>
-
-      {/* Login Dialog */}
-      <LoginDialog
-        isOpen={isLoginDialogOpen}
-        onClose={() => setIsLoginDialogOpen(false)}
-        onLoginSuccess={() => setIsLoginDialogOpen(false)}
-      />
-    </div>
+    </PageLayout>
   )
 }
 
