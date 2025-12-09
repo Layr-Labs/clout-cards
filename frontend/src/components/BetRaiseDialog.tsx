@@ -108,11 +108,15 @@ export function BetRaiseDialog({
         return
       }
 
-      // Check if amount is in increments of big blind
-      const remainder = incrementalAmount % bigBlindNum
-      if (remainder !== 0n) {
-        setError(`Amount must be in increments of ${formatEth(bigBlindNum)} (big blind)`)
-        return
+      // Check if amount is in increments of big blind (skip for all-in)
+      // All-in is exempt because player's balance may not be a perfect multiple of big blind
+      const isAllIn = incrementalAmount === maxIncrementalAmount
+      if (!isAllIn) {
+        const remainder = incrementalAmount % bigBlindNum
+        if (remainder !== 0n) {
+          setError(`Amount must be in increments of ${formatEth(bigBlindNum)} (big blind)`)
+          return
+        }
       }
 
       setError(null)
