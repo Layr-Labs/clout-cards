@@ -1688,11 +1688,13 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
     // Map service errors to appropriate HTTP status codes
     if (error instanceof Error && !(error instanceof AppError)) {
       if (error.message.includes('already pending')) {
-        throw new ConflictError(error.message);
+        sendErrorResponse(res, new ConflictError(error.message), 'Withdrawal already pending');
+        return;
       }
       
       if (error.message.includes('exceeds escrow balance')) {
-        throw new ValidationError(error.message);
+        sendErrorResponse(res, new ValidationError(error.message), 'Invalid withdrawal amount');
+        return;
       }
     }
     
