@@ -135,6 +135,17 @@
   color: #ff4444;
 }
 
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 768px) {
   .user-profile-button {
     padding: 6px 12px;
@@ -156,9 +167,23 @@
   }
 
   .user-profile-menu {
+    /* Position above the button instead of below */
+    top: auto;
+    bottom: calc(100% + 8px);
     right: 0;
     left: auto;
     min-width: 160px;
+    animation: slideUp 0.2s ease-out;
+  }
+
+  .user-profile-chevron.open {
+    /* Point up when open since menu is above */
+    transform: rotate(0deg);
+  }
+
+  .user-profile-chevron {
+    /* Point down when closed to indicate menu opens upward */
+    transform: rotate(180deg);
   }
 }
 
