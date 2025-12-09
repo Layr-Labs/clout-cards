@@ -1,0 +1,1938 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for Clout Cards - Crypto Poker with Twitter Integration">
+      
+      
+      
+        <link rel="canonical" href="https://docs.cloutcards.fun/architecture/verifiability/">
+      
+      
+        <link rel="prev" href="../tee/">
+      
+      
+        <link rel="next" href="../smart-contracts/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Verifiability - Clout Cards Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#verifiability" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Clout Cards Documentation" class="md-header__button md-logo" aria-label="Clout Cards Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Clout Cards Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Verifiability
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Clout Cards Documentation" class="md-nav__button md-logo" aria-label="Clout Cards Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Clout Cards Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How To Play
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How To Play
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-play/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-play/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-play/depositing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Depositing Funds
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-play/joining-table/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Joining a Table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-play/playing-poker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Playing Poker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to-play/withdrawing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Withdrawing Funds
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tee/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    EigenCloud TEE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verifiability
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Verifiability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-trust-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Trust Model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#event-chain-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event Chain Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-digests-are-computed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Digests Are Computed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How Digests Are Computed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#eip-712-domain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EIP-712 Domain
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#payload-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Payload Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#digest-computation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Digest Computation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-signatures-are-verified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Signatures Are Verified
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How Signatures Are Verified">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#verification-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification Steps
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deck-commitment-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deck Commitment Verification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deck Commitment Verification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#at-hand-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At Hand Start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#during-the-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        During the Hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#at-hand-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At Hand End
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-history-explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The History Explorer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The History Explorer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hand-history-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hand History List
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hand-detail-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hand Detail View
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-gets-verified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Gets Verified
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expandable-event-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expandable Event Details
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-centralized-storage-doesnt-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Centralized Storage Doesn't Matter
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why Centralized Storage Doesn&#39;t Matter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-operator-cannot-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the Operator Cannot Do
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-the-operator-could-do-but-its-obvious" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the Operator Could Do (But It's Obvious)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-database-as-a-verifiable-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Database as a Verifiable Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification-without-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification Without Trust
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verification Without Trust">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#level-1-ui-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 1: UI Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#level-2-manual-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 2: Manual Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#level-3-full-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 3: Full Audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#level-4-open-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 4: Open Source
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../smart-contracts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smart Contracts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Real-time Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-trust-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Trust Model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#event-chain-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event Chain Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-digests-are-computed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Digests Are Computed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How Digests Are Computed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#eip-712-domain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EIP-712 Domain
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#payload-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Payload Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#digest-computation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Digest Computation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-signatures-are-verified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Signatures Are Verified
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How Signatures Are Verified">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#verification-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification Steps
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deck-commitment-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deck Commitment Verification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deck Commitment Verification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#at-hand-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At Hand Start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#during-the-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        During the Hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#at-hand-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At Hand End
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-history-explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The History Explorer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The History Explorer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hand-history-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hand History List
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hand-detail-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hand Detail View
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-gets-verified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Gets Verified
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expandable-event-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expandable Event Details
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-centralized-storage-doesnt-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why Centralized Storage Doesn't Matter
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why Centralized Storage Doesn&#39;t Matter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-operator-cannot-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the Operator Cannot Do
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-the-operator-could-do-but-its-obvious" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the Operator Could Do (But It's Obvious)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-database-as-a-verifiable-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Database as a Verifiable Cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification-without-trust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification Without Trust
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verification Without Trust">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#level-1-ui-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 1: UI Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#level-2-manual-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 2: Manual Verification
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#level-3-full-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 3: Full Audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#level-4-open-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Level 4: Open Source
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="verifiability">Verifiability<a class="headerlink" href="#verifiability" title="Permanent link">&para;</a></h1>
+<p>Clout Cards implements a <strong>cryptographically verifiable audit trail</strong> that allows anyone to prove game integrity—even though all data is stored in a traditional PostgreSQL database. The key insight is that <strong>the data is signed by tamper-proof code running inside a TEE</strong>, making it impossible for anyone (including the operator) to modify historical events without detection.</p>
+<h2 id="the-trust-model">The Trust Model<a class="headerlink" href="#the-trust-model" title="Permanent link">&para;</a></h2>
+<p>Traditional online poker requires trusting the operator not to cheat. Clout Cards inverts this model:</p>
+<table>
+<thead>
+<tr>
+<th>Traditional Poker</th>
+<th>Clout Cards</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Trust the operator</td>
+<td>Trust math and hardware</td>
+</tr>
+<tr>
+<td>Audit by regulation</td>
+<td>Audit by cryptography</td>
+</tr>
+<tr>
+<td>Opaque game logic</td>
+<td>Verifiable signatures</td>
+</tr>
+<tr>
+<td>Database is source of truth</td>
+<td>Database is verifiable cache</td>
+</tr>
+</tbody>
+</table>
+<h2 id="event-chain-architecture">Event Chain Architecture<a class="headerlink" href="#event-chain-architecture" title="Permanent link">&para;</a></h2>
+<p>Every state-changing operation in Clout Cards creates an <strong>immutable, signed event</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────────────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│                    TEE (Trusted Execution Environment)          │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│                                                                 │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│   RPC Call ──► Process Logic ──► Create Event ──► Sign Event   │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│                     │                                │          │
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│                     ▼                                ▼          │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│              Update Cache Tables           EIP-712 Signature    │
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│                                                                 │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└─────────────────────────────────────────────────────────────────┘
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>                              │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>                              ▼
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>┌─────────────────────────────────────────────────────────────────┐
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│                    PostgreSQL Database                          │
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│                                                                 │
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│   Events Table (Source of Truth):                               │
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>│   - event_id, kind, payload_json                                │
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│   - digest, sig_r, sig_s, sig_v                                 │
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│   - tee_pubkey, tee_version                                     │
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│                                                                 │
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│   Cache Tables (Derived State):                                 │
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│   - player_escrow_balances, hands, pots, etc.                   │
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>│                                                                 │
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>└─────────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p>The <strong>Events Table</strong> is the cryptographic source of truth. All other tables are caches that can be reconstructed by replaying the event log.</p>
+<h2 id="how-digests-are-computed">How Digests Are Computed<a class="headerlink" href="#how-digests-are-computed" title="Permanent link">&para;</a></h2>
+<p>Every event is signed using <strong>EIP-712 typed data signatures</strong>, the same standard used for signing Ethereum transactions. This provides:</p>
+<ul>
+<li><strong>Structured data</strong> - Not just raw bytes, but typed fields</li>
+<li><strong>Domain separation</strong> - Signatures are bound to a specific chain and application</li>
+<li><strong>Human readability</strong> - Wallets can display what's being signed</li>
+</ul>
+<h3 id="eip-712-domain">EIP-712 Domain<a class="headerlink" href="#eip-712-domain" title="Permanent link">&para;</a></h3>
+<p>All Clout Cards events share this domain:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;CloutCardsEvents&#39;</span><span class="p">,</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nx">version</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;1&#39;</span><span class="p">,</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nx">chainId</span><span class="o">:</span><span class="w"> </span><span class="o">&lt;</span><span class="nx">network_chain_id</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nx">verifyingContract</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;0x0000000000000000000000000000000000000000&#39;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="payload-structure">Payload Structure<a class="headerlink" href="#payload-structure" title="Permanent link">&para;</a></h3>
+<p>Events are signed as <code>RPCPayload</code> typed data:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">PAYLOAD_TYPES</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nx">RPCPayload</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;kind&#39;</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="w"> </span><span class="p">},</span><span class="w">      </span><span class="c1">// Event type</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;payload&#39;</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="w"> </span><span class="p">},</span><span class="w">   </span><span class="c1">// Canonical JSON</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;nonce&#39;</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;uint256&#39;</span><span class="w"> </span><span class="p">},</span><span class="w">    </span><span class="c1">// For replay protection</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="p">],</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">};</span>
+</code></pre></div>
+<h3 id="digest-computation">Digest Computation<a class="headerlink" href="#digest-computation" title="Permanent link">&para;</a></h3>
+<p>The digest (hash) is computed using the standard EIP-712 algorithm:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nx">digest</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">keccak256</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="s2">&quot;\x19\x01&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nx">domainSeparator</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nx">hashStruct</span><span class="p">(</span><span class="nx">RPCPayload</span><span class="p">)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">)</span>
+</code></pre></div>
+<p>This produces a 32-byte hash that uniquely represents the event payload within the domain context.</p>
+<h2 id="how-signatures-are-verified">How Signatures Are Verified<a class="headerlink" href="#how-signatures-are-verified" title="Permanent link">&para;</a></h2>
+<p>Each event stored in the database contains:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>payloadJson</code></td>
+<td>The canonical JSON of the game action</td>
+</tr>
+<tr>
+<td><code>digest</code></td>
+<td>The EIP-712 hash of the payload</td>
+</tr>
+<tr>
+<td><code>sigR</code>, <code>sigS</code>, <code>sigV</code></td>
+<td>ECDSA signature components</td>
+</tr>
+<tr>
+<td><code>teePubkey</code></td>
+<td>The TEE's Ethereum address</td>
+</tr>
+</tbody>
+</table>
+<h3 id="verification-steps">Verification Steps<a class="headerlink" href="#verification-steps" title="Permanent link">&para;</a></h3>
+<p>To verify any event:</p>
+<ol>
+<li><strong>Recompute the digest</strong> from <code>payloadJson</code> using EIP-712</li>
+<li><strong>Verify digest matches</strong> the stored <code>digest</code> field</li>
+<li><strong>Recover the signer</strong> from the signature using ECDSA recovery</li>
+<li><strong>Compare addresses</strong> - recovered address must match <code>teePubkey</code></li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1">// Client-side verification (simplified)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">message</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nx">kind</span><span class="o">:</span><span class="w"> </span><span class="kt">event.kind</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nx">payload</span><span class="o">:</span><span class="w"> </span><span class="kt">event.payloadJson</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nx">nonce</span><span class="o">:</span><span class="w"> </span><span class="kt">BigInt</span><span class="p">(</span><span class="mf">0</span><span class="p">),</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">};</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1">// Recompute digest</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="kd">const</span><span class="w"> </span><span class="nx">computedDigest</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ethers</span><span class="p">.</span><span class="nx">TypedDataEncoder</span><span class="p">.</span><span class="nx">hash</span><span class="p">(</span><span class="nx">domain</span><span class="p">,</span><span class="w"> </span><span class="nx">PAYLOAD_TYPES</span><span class="p">,</span><span class="w"> </span><span class="nx">message</span><span class="p">);</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="c1">// Recover signer from signature</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="kd">const</span><span class="w"> </span><span class="nx">recoveredAddress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ethers</span><span class="p">.</span><span class="nx">recoverAddress</span><span class="p">(</span><span class="nx">computedDigest</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span><span class="nx">r</span><span class="o">:</span><span class="w"> </span><span class="kt">event.sigR</span><span class="p">,</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span><span class="nx">s</span><span class="o">:</span><span class="w"> </span><span class="kt">event.sigS</span><span class="p">,</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">  </span><span class="nx">v</span><span class="o">:</span><span class="w"> </span><span class="kt">event.sigV</span><span class="p">,</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="p">});</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1">// Verify signer matches TEE</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="kd">const</span><span class="w"> </span><span class="nx">isValid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">recoveredAddress</span><span class="p">.</span><span class="nx">toLowerCase</span><span class="p">()</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">teePubkey</span><span class="p">.</span><span class="nx">toLowerCase</span><span class="p">();</span>
+</code></pre></div>
+<p>If verification succeeds, you have <strong>mathematical proof</strong> that:
+- The payload has not been modified since signing
+- The signature was created by the holder of the TEE private key
+- The TEE private key never leaves the secure enclave</p>
+<h2 id="deck-commitment-verification">Deck Commitment Verification<a class="headerlink" href="#deck-commitment-verification" title="Permanent link">&para;</a></h2>
+<p>For poker, the deck shuffle must be provably fair. Clout Cards uses a <strong>commit-reveal scheme</strong>:</p>
+<h3 id="at-hand-start">At Hand Start<a class="headerlink" href="#at-hand-start" title="Permanent link">&para;</a></h3>
+<ol>
+<li>TEE generates a <strong>random 256-bit nonce</strong></li>
+<li>TEE shuffles the deck using secure randomness</li>
+<li>TEE computes commitment: <code>hash = keccak256(JSON.stringify(deck) + nonce)</code></li>
+<li>Only the <code>shuffleSeedHash</code> is published in the <code>hand_start</code> event</li>
+</ol>
+<h3 id="during-the-hand">During the Hand<a class="headerlink" href="#during-the-hand" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Players cannot reverse-engineer the deck from the hash</li>
+<li>The nonce makes brute-forcing computationally infeasible</li>
+<li>Cards are dealt according to the pre-committed deck order</li>
+</ul>
+<h3 id="at-hand-end">At Hand End<a class="headerlink" href="#at-hand-end" title="Permanent link">&para;</a></h3>
+<ol>
+<li>TEE reveals the full <code>deck</code> array and the <code>nonce</code></li>
+<li>Anyone can verify: <code>keccak256(deck + nonce) === shuffleSeedHash</code></li>
+<li>If they match, the deck was committed at the start and never modified</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1">// Deck verification</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">deckJson</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">deck</span><span class="p">);</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">computedHash</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ethers</span><span class="p">.</span><span class="nx">keccak256</span><span class="p">(</span><span class="nx">ethers</span><span class="p">.</span><span class="nx">toUtf8Bytes</span><span class="p">(</span><span class="nx">deckJson</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">nonce</span><span class="p">));</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">isValid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">computedHash</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="nx">shuffleSeedHash</span><span class="p">;</span>
+</code></pre></div>
+<p>This proves that the TEE could not have changed the deck during the hand—for example, to deal favorable cards to a particular player.</p>
+<h2 id="the-history-explorer">The History Explorer<a class="headerlink" href="#the-history-explorer" title="Permanent link">&para;</a></h2>
+<p>Clout Cards includes a built-in <strong>History Explorer</strong> that makes verification accessible to all users. It's available through the "Hand History" panel at any table.</p>
+<h3 id="hand-history-list">Hand History List<a class="headerlink" href="#hand-history-list" title="Permanent link">&para;</a></h3>
+<p>The panel shows all completed hands with:</p>
+<ul>
+<li>Hand number and timestamp</li>
+<li>Community cards dealt</li>
+<li>Total pot size</li>
+<li>Winner(s)</li>
+</ul>
+<h3 id="hand-detail-view">Hand Detail View<a class="headerlink" href="#hand-detail-view" title="Permanent link">&para;</a></h3>
+<p>Clicking a hand opens the detailed verification view:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>┌─────────────────────────────────────────────────────────────────┐
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>│  ← Back                                        Hand #142    ✕   │
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>├─────────────────────────────────────────────────────────────────┤
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>│                                                                 │
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>│  ┌───────────────────────────────────────────────────────────┐  │
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>│  │ 🛡️ TEE Signature Verification              ✓ All Valid    │  │
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>│  │                                                           │  │
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>│  │ 5/5 events verified                                       │  │
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>│  │ ▼ Show events                                             │  │
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>│  │                                                           │  │
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>│  │   Event #234: hand_start     ✓ Valid                      │  │
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>│  │   Event #235: hand_action    ✓ Valid                      │  │
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>│  │   Event #236: community_cards ✓ Valid                     │  │
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>│  │   Event #237: hand_action    ✓ Valid                      │  │
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>│  │   Event #238: hand_end       ✓ Valid                      │  │
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>│  │                                                           │  │
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>│  │   TEE Address: 0x7B2e...F3a9                              │  │
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>│  └───────────────────────────────────────────────────────────┘  │
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>│                                                                 │
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>│  ┌───────────────────────────────────────────────────────────┐  │
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>│  │ 🔒 Deck Commitment                         ✓ Verified      │  │
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>│  │                                                           │  │
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>│  │ Committed Hash: 0x8f3a...2e1b                             │  │
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>│  │ Computed Hash:  0x8f3a...2e1b                             │  │
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>│  │                                                           │  │
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>│  │ 👁️ View Full Deck                                         │  │
+<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>│  └───────────────────────────────────────────────────────────┘  │
+<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>│                                                                 │
+<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a>│  Community Cards: [A♠] [K♠] [Q♠] [J♠] [10♠]                    │
+<a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a>│                                                                 │
+<a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a>│  Pot: 0.05 ETH                                                 │
+<a id="__codelineno-6-32" name="__codelineno-6-32" href="#__codelineno-6-32"></a>│  Winner: Seat 3 (Royal Flush)                                  │
+<a id="__codelineno-6-33" name="__codelineno-6-33" href="#__codelineno-6-33"></a>│                                                                 │
+<a id="__codelineno-6-34" name="__codelineno-6-34" href="#__codelineno-6-34"></a>└─────────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<h3 id="what-gets-verified">What Gets Verified<a class="headerlink" href="#what-gets-verified" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>What It Proves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Signature verification</strong></td>
+<td>Event was created by the TEE and not modified</td>
+</tr>
+<tr>
+<td><strong>Digest match</strong></td>
+<td>Stored hash matches recomputed hash from payload</td>
+</tr>
+<tr>
+<td><strong>TEE address match</strong></td>
+<td>Signature recovers to the expected TEE address</td>
+</tr>
+<tr>
+<td><strong>Deck commitment</strong></td>
+<td>Cards dealt match the committed deck at hand start</td>
+</tr>
+</tbody>
+</table>
+<h3 id="expandable-event-details">Expandable Event Details<a class="headerlink" href="#expandable-event-details" title="Permanent link">&para;</a></h3>
+<p>Each event can be expanded to show:</p>
+<ul>
+<li>Full JSON payload</li>
+<li>EIP-712 digest</li>
+<li>Signature components (r, s, v)</li>
+<li>TEE version that signed it</li>
+</ul>
+<h2 id="why-centralized-storage-doesnt-matter">Why Centralized Storage Doesn't Matter<a class="headerlink" href="#why-centralized-storage-doesnt-matter" title="Permanent link">&para;</a></h2>
+<p>A common objection: "If the database is centralized, can't the operator just change the data?"</p>
+<p>The answer is <strong>no</strong>, because of how cryptographic signatures work:</p>
+<h3 id="what-the-operator-cannot-do">What the Operator Cannot Do<a class="headerlink" href="#what-the-operator-cannot-do" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Attack</th>
+<th>Why It Fails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Modify an event payload</td>
+<td>Signature verification fails</td>
+</tr>
+<tr>
+<td>Change player balances</td>
+<td>Events that set balances are signed</td>
+</tr>
+<tr>
+<td>Alter deck after commit</td>
+<td>Hash verification fails</td>
+</tr>
+<tr>
+<td>Forge new events</td>
+<td>Would need TEE private key</td>
+</tr>
+<tr>
+<td>Sign with different key</td>
+<td>TEE pubkey is verifiable via attestation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-the-operator-could-do-but-its-obvious">What the Operator Could Do (But It's Obvious)<a class="headerlink" href="#what-the-operator-could-do-but-its-obvious" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Attack</th>
+<th>Detection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Delete events</td>
+<td>Event ID gaps are visible</td>
+</tr>
+<tr>
+<td>Withhold events</td>
+<td>Players notice missing hands</td>
+</tr>
+<tr>
+<td>Stop the service</td>
+<td>Players can withdraw via smart contract</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-database-as-a-verifiable-cache">The Database as a Verifiable Cache<a class="headerlink" href="#the-database-as-a-verifiable-cache" title="Permanent link">&para;</a></h3>
+<p>Think of the database as a <strong>signed append-only log</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Event 1: { action: &quot;deposit&quot;, amount: &quot;0.1 ETH&quot;, sig: &quot;...&quot; }
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Event 2: { action: &quot;hand_start&quot;, players: [...], sig: &quot;...&quot; }
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Event 3: { action: &quot;hand_action&quot;, type: &quot;RAISE&quot;, sig: &quot;...&quot; }
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>Event 4: { action: &quot;hand_end&quot;, winners: [...], sig: &quot;...&quot; }
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>...
+</code></pre></div>
+<ul>
+<li>Any modification invalidates signatures</li>
+<li>Any deletion creates visible gaps</li>
+<li>The TEE private key is the only way to create valid signatures</li>
+<li>The TEE private key cannot be extracted (hardware guarantee)</li>
+</ul>
+<h2 id="verification-without-trust">Verification Without Trust<a class="headerlink" href="#verification-without-trust" title="Permanent link">&para;</a></h2>
+<p>The verification system enables multiple levels of assurance:</p>
+<h3 id="level-1-ui-verification">Level 1: UI Verification<a class="headerlink" href="#level-1-ui-verification" title="Permanent link">&para;</a></h3>
+<p>Users can verify hands directly in the app through the History Explorer. Green checkmarks indicate valid signatures and deck commitments.</p>
+<h3 id="level-2-manual-verification">Level 2: Manual Verification<a class="headerlink" href="#level-2-manual-verification" title="Permanent link">&para;</a></h3>
+<p>Developers can export event data and verify signatures using standard Ethereum libraries:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Export events</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>psql<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT * FROM events WHERE kind = &#39;hand_end&#39;&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>events.json
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Verify with ethers.js, web3.js, or any EIP-712 library</span>
+</code></pre></div>
+<h3 id="level-3-full-audit">Level 3: Full Audit<a class="headerlink" href="#level-3-full-audit" title="Permanent link">&para;</a></h3>
+<p>For complete verification:</p>
+<ol>
+<li>Get the TEE attestation from EigenCloud</li>
+<li>Verify the attestation proves specific code is running</li>
+<li>Verify the TEE public key matches the attestation</li>
+<li>Verify all event signatures against that public key</li>
+<li>Replay events to reconstruct all derived state</li>
+<li>Compare derived state with database state</li>
+</ol>
+<h3 id="level-4-open-source">Level 4: Open Source<a class="headerlink" href="#level-4-open-source" title="Permanent link">&para;</a></h3>
+<p>The entire codebase is open source:</p>
+<ul>
+<li>Backend game logic</li>
+<li>TEE signing code</li>
+<li>Frontend verification utilities</li>
+<li>Smart contracts</li>
+</ul>
+<p>Anyone can audit the code that runs inside the TEE.</p>
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<p>Clout Cards achieves <strong>trustless verification</strong> through:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TEE</strong></td>
+<td>Ensures code integrity and key isolation</td>
+</tr>
+<tr>
+<td><strong>EIP-712 signatures</strong></td>
+<td>Cryptographically binds events to TEE</td>
+</tr>
+<tr>
+<td><strong>Deck commitments</strong></td>
+<td>Proves fair dealing without revealing cards</td>
+</tr>
+<tr>
+<td><strong>Event chain</strong></td>
+<td>Creates immutable audit trail</td>
+</tr>
+<tr>
+<td><strong>History Explorer</strong></td>
+<td>Makes verification accessible to all users</td>
+</tr>
+</tbody>
+</table>
+<p>The result is a poker game where:</p>
+<ul>
+<li>✅ You don't need to trust the operator</li>
+<li>✅ Every hand can be verified independently</li>
+<li>✅ Cheating is mathematically impossible (with correct TEE)</li>
+<li>✅ The database is just a signed cache, not the source of truth</li>
+<li>✅ Even the operator cannot forge valid signatures</li>
+</ul>
+<p>This architecture proves that <strong>centralized infrastructure can provide decentralized guarantees</strong> when combined with trusted execution and cryptographic verification.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>

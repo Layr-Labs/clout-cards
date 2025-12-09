@@ -1,55 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://cloutcards.fun/docs/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/architecture/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/architecture/backend/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/backend/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/architecture/events/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/events/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/architecture/frontend/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/frontend/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/architecture/smart-contracts/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/smart-contracts/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/architecture/tee/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/tee/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/how-to-play/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/architecture/verifiability/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/how-to-play/depositing/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/how-to-play/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/how-to-play/getting-started/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/how-to-play/depositing/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/how-to-play/joining-table/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/how-to-play/getting-started/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/how-to-play/playing-poker/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/how-to-play/joining-table/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
     <url>
-         <loc>https://cloutcards.fun/docs/how-to-play/withdrawing/</loc>
-         <lastmod>2025-12-05</lastmod>
+         <loc>https://docs.cloutcards.fun/how-to-play/playing-poker/</loc>
+         <lastmod>2025-12-09</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.cloutcards.fun/how-to-play/withdrawing/</loc>
+         <lastmod>2025-12-09</lastmod>
     </url>
 </urlset>
