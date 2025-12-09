@@ -192,7 +192,7 @@ app.get('/admins', (req: Request, res: Response): void => {
  * @param {Request} req - Express request object
  * @param {Response} res - Express response object
  */
-app.get('/api/accounting/solvency', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+app.get('/api/accounting/solvency', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
   try {
     const solvency = await checkSolvency();
     res.status(200).json(solvency);
