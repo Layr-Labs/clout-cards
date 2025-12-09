@@ -2823,6 +2823,7 @@
 @media (max-width: 768px) {
   .table-layout-wrapper {
     padding-top: 60px;
+    padding-bottom: 100px; /* Space for fixed action bar */
   }
 
   .table-main {
@@ -2839,47 +2840,176 @@
     padding: 12px 16px;
   }
 
+  /* Action buttons - fixed bottom bar on mobile */
+  .table-action-buttons {
+    position: fixed;
+    bottom: 16px;
+    top: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 400px;
+    padding: 12px 16px;
+    border-radius: 16px;
+  }
+
+  .table-action-info {
+    font-size: 0.8rem;
+  }
+
+  .table-action-buttons-row {
+    width: 100%;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .table-action-button {
+    flex: 1;
+    padding: 14px 8px;
+    font-size: 0.85rem;
+    min-width: auto;
+  }
+
+  /* Community cards container - shift up slightly on mobile */
+  .table-community-cards {
+    top: 45%;
+  }
+
   .table-seat-avatar {
-    width: 50px;
+    width: 44px;
   }
 
   .table-seat-avatar-circle {
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
   }
 
   .table-seat-badges {
-    top: -6px; /* Adjusted for smaller 50px circle (radius 25px) */
-    right: -6px; /* Adjusted for smaller 50px circle */
+    top: -5px;
+    right: -5px;
+  }
+
+  .table-seat-badge {
+    width: 18px;
+    height: 18px;
+    font-size: 0.55rem;
   }
 
   .table-seat-player-info {
-    left: 0px; /* Start at left edge so avatar covers rounded corners */
-    top: 0px; /* Align top with circle apex */
-    height: 50px; /* Match circle height exactly for mobile */
-    border-radius: 25px 6px 6px 25px; /* Top-left and bottom-left rounded to match circle radius (25px), right side rounded (6px) */
-    font-size: 0.75rem;
-    padding: 6px 16px 6px 62px; /* Increased left padding (62px) for more spacing, reduced vertical padding to fit 50px height */
-    min-width: 110px;
-    justify-content: center; /* Center content vertically within 50px height */
+    left: 0px;
+    top: 0px;
+    height: 44px;
+    border-radius: 22px 5px 5px 22px;
+    font-size: 0.65rem;
+    padding: 4px 10px 4px 52px;
+    min-width: 85px;
+    justify-content: center;
   }
 
   .table-seat-player-info-right {
     left: auto;
-    right: 0px; /* Start at right edge so avatar covers rounded corners */
-    top: 0px; /* Align top with circle apex */
-    height: 50px; /* Match circle height exactly for mobile */
-    border-radius: 6px 25px 25px 6px; /* Top-right and bottom-right rounded to match circle radius (25px), left side rounded (6px) */
-    padding: 6px 62px 6px 16px; /* Increased right padding (62px) for more spacing, reduced vertical padding to fit 50px height */
-    justify-content: center; /* Center content vertically within 50px height */
+    right: 0px;
+    top: 0px;
+    height: 44px;
+    border-radius: 5px 22px 22px 5px;
+    padding: 4px 52px 4px 10px;
+    justify-content: center;
   }
 
   .table-seat-twitter-handle {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
+    max-width: 55px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .table-seat-stack {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
+  }
+
+  /* Seat cards smaller on mobile */
+  .table-seat-cards {
+    gap: 2px;
+    margin-top: 4px;
+  }
+
+  /* Pots display - compact on mobile */
+  .table-pots {
+    top: calc(45% - 90px); /* Shifted up, closer to community cards */
+    gap: 6px;
+  }
+
+  .table-pot {
+    padding: 4px 8px;
+    border-radius: 6px;
+    gap: 2px;
+  }
+
+  .table-pot-top-row {
+    gap: 4px;
+  }
+
+  .table-pot-amount {
+    font-size: 0.75rem;
+  }
+
+  .table-pot-hand-rank {
+    font-size: 0.65rem;
+  }
+
+  .table-pot-avatar {
+    width: 16px;
+    height: 16px;
+    margin-left: -4px;
+    border-width: 1px;
+  }
+
+  /* Action overlays - smaller on mobile */
+  .table-action-overlay-content {
+    padding: 16px 24px;
+    border-radius: 12px;
+  }
+
+  .table-action-overlay-action {
+    font-size: 1.25rem;
+    letter-spacing: 1px;
+  }
+
+  .table-action-overlay-amount {
+    font-size: 1rem;
+  }
+
+  /* Player action animation - smaller on mobile */
+  .table-player-action-animation-content {
+    padding: 12px 20px;
+    min-width: 120px;
+  }
+
+  .table-player-action-animation-action {
+    font-size: 0.85rem;
+  }
+
+  .table-player-action-animation-amount {
+    font-size: 0.75rem;
+  }
+
+  .table-player-action-animation-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Stand up button - smaller on mobile */
+  .table-seat-stand-up-button {
+    padding: 5px 12px;
+    font-size: 0.65rem;
+    border-radius: 5px;
+    min-height: 28px;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+  }
+
+  .table-seat-avatar-with-standup .table-seat-player-info-content {
+    padding-top: 45px;
   }
 }
 

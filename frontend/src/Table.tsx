@@ -196,6 +196,23 @@ function Table() {
   
   // Hand history state
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  
+  // Mobile detection state
+  const [isMobile, setIsMobile] = useState(false)
+  
+  // Track window size for mobile layout
+  useEffect(() => {
+    function checkMobile() {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    // Check on mount
+    checkMobile()
+    
+    // Listen for resize
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const { address, signature, isLoggedIn } = useWallet()
   const twitterUser = useTwitterUser()
@@ -220,6 +237,9 @@ function Table() {
   /**
    * Calculates seat positions around an oval table
    * 
+   * Uses tighter radii on mobile to prevent overlap and ensure all seats
+   * fit within the viewport.
+   * 
    * @param seatCount - Number of seats around the table
    * @returns Array of {x, y} positions as percentages (0-100)
    */
@@ -227,14 +247,15 @@ function Table() {
     const positions: Array<{ x: number; y: number }> = []
     
     // Oval table dimensions (as percentages of container)
-    // Using an ellipse with horizontal radius ~45% and vertical radius ~35%
-    const radiusX = 45 // horizontal radius
-    const radiusY = 35 // vertical radius
+    // Use tighter radii on mobile to prevent overlap
+    const radiusX = isMobile ? 38 : 45 // horizontal radius
+    const radiusY = isMobile ? 30 : 35 // vertical radius
     const centerX = 50
-    const centerY = 50
+    const centerY = isMobile ? 45 : 50 // Shift up slightly on mobile for action bar
     
     // For corner positions (diagonal), extend radius further out
-    const cornerRadiusMultiplier = 1.15 // 15% further out for corners
+    // Use smaller multiplier on mobile
+    const cornerRadiusMultiplier = isMobile ? 1.08 : 1.15
     
     for (let i = 0; i < seatCount; i++) {
       // Calculate angle for each seat (evenly distributed)

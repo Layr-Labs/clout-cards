@@ -3761,7 +3761,25 @@ export async function allInAction(
  *
  * @param tableId - Table ID
  */
-export async function startNewHandIfPossible(tableId: number): Promise<void> {
+/**
+ * Result of attempting to start a new hand
+ */
+export interface StartHandResult {
+  /** Whether a new hand was started */
+  started: boolean;
+  /** Reason why a hand was not started (if started is false) */
+  reason?: 'hand_in_progress' | 'table_inactive' | 'not_enough_players';
+  /** Number of eligible players (only set when reason is 'not_enough_players') */
+  eligiblePlayerCount?: number;
+}
+
+/**
+ * Attempts to start a new hand on a table if conditions are met
+ *
+ * @param tableId - The table ID to start a hand on
+ * @returns Result indicating whether a hand was started and why not if it wasn't
+ */
+export async function startNewHandIfPossible(tableId: number): Promise<StartHandResult> {
   // Check if there's already an active hand
   const existingHand = await (prisma as any).hand.findFirst({
     where: {
@@ -3773,7 +3791,7 @@ export async function startNewHandIfPossible(tableId: number): Promise<void> {
   });
 
   if (existingHand) {
-    return; // Hand already in progress
+    return { started: false, reason: 'hand_in_progress' };
   }
 
   // Get table
@@ -3782,7 +3800,7 @@ export async function startNewHandIfPossible(tableId: number): Promise<void> {
   });
 
   if (!table || !table.isActive) {
-    return; // Table doesn't exist or is inactive
+    return { started: false, reason: 'table_inactive' };
   }
 
   // Get active players
@@ -3804,6 +3822,13 @@ export async function startNewHandIfPossible(tableId: number): Promise<void> {
   // Need at least 2 eligible players
   if (eligiblePlayers.length >= 2) {
     await startHand(tableId);
+    return { started: true };
   }
+
+  return { 
+    started: false, 
+    reason: 'not_enough_players',
+    eligiblePlayerCount: eligiblePlayers.length,
+  };
 }
 

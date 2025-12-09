@@ -74,13 +74,13 @@ async function checkHandStarts(): Promise<void> {
       // If no completed hand exists, this is the first hand - start immediately
       if (!lastCompletedHand || !lastCompletedHand.completedAt) {
         try {
-          await startNewHandIfPossible(table.id);
-        } catch (error: any) {
-          // Log error but continue checking other tables
-          // startNewHandIfPossible will handle validation and may throw if conditions aren't met
-          if (!error.message?.includes('Need at least 2 players')) {
-            console.error(`[HandStartChecker] Table ${table.id}: Failed to start hand:`, error);
+          const result = await startNewHandIfPossible(table.id);
+          if (result.started) {
+            console.log(`[HandStartChecker] Table ${table.id}: Started first hand`);
           }
+          // Don't log anything if hand wasn't started - avoid spam
+        } catch (error: any) {
+          console.error(`[HandStartChecker] Table ${table.id}: Failed to start hand:`, error);
         }
         continue;
       }
@@ -91,17 +91,14 @@ async function checkHandStarts(): Promise<void> {
       const timeSinceLastHand = now.getTime() - lastCompletedAt.getTime();
 
       if (timeSinceLastHand >= delayMs) {
-        console.log(`[HandStartChecker] Table ${table.id}: Delay expired (${Math.floor(timeSinceLastHand / 1000)}s >= ${delayMs / 1000}s), attempting to start hand`);
-        
         try {
-          await startNewHandIfPossible(table.id);
-          console.log(`[HandStartChecker] Table ${table.id}: Successfully started new hand`);
-        } catch (error: any) {
-          // Log error but continue checking other tables
-          // startNewHandIfPossible will handle validation and may throw if conditions aren't met
-          if (!error.message?.includes('Need at least 2 players')) {
-            console.error(`[HandStartChecker] Table ${table.id}: Failed to start hand:`, error);
+          const result = await startNewHandIfPossible(table.id);
+          if (result.started) {
+            console.log(`[HandStartChecker] Table ${table.id}: Successfully started new hand (after ${Math.floor(timeSinceLastHand / 1000)}s delay)`);
           }
+          // Don't log "attempting" or failures for not_enough_players - avoid spam
+        } catch (error: any) {
+          console.error(`[HandStartChecker] Table ${table.id}: Failed to start hand:`, error);
         }
       }
     }

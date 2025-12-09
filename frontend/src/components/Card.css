@@ -217,6 +217,46 @@
     font-size: 2rem;
   }
 
+  /* Community cards on mobile - scaled to fit 5 cards in ~320px */
+  .table-community-cards .card {
+    width: 56px;
+    height: 78px;
+    border-radius: 6px;
+  }
+
+  .table-community-cards .card-front {
+    padding: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  .table-community-cards .card-corner {
+    font-size: 0.5rem;
+    line-height: 1;
+  }
+
+  .table-community-cards .card-suit {
+    font-size: 0.65rem;
+    line-height: 1;
+  }
+
+  .table-community-cards .card-center {
+    padding: 2px;
+  }
+
+  .table-community-cards .card-rank-center {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .table-community-cards .card-back {
+    border: 1px solid rgba(212, 175, 55, 0.3);
+  }
+
+  .table-community-cards .card-back-logo {
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+  }
+
   /* Smaller cards for table seats on mobile - scale by ~0.42x (50/120) */
   .table-seat-cards .card {
     width: 50px;
