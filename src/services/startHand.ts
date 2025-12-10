@@ -98,16 +98,41 @@ export async function startHand(tableId: number, prismaClient?: PrismaClient): P
       throw new Error(`Hand ${existingHand.id} is already in progress`);
     }
 
-    // Get all active players at this table
-    const activeSessions = await tx.tableSeatSession.findMany({
-      where: {
-        tableId,
-        isActive: true,
-      },
-      orderBy: {
-        seatNumber: 'asc',
-      },
-    });
+    // Get all active players at this table with row-level locking
+    // FOR UPDATE prevents race conditions with standUp - if a player is standing up,
+    // we'll wait for their transaction to complete before proceeding
+    const activeSessionsRaw = await tx.$queryRaw<Array<{
+      table_seat_session_id: number;
+      table_id: number;
+      wallet_address: string;
+      seat_number: number;
+      table_balance_gwei: bigint;
+      twitter_handle: string | null;
+      twitter_avatar_url: string | null;
+      joined_at: Date;
+      left_at: Date | null;
+      is_active: boolean;
+    }>>`
+      SELECT *
+      FROM table_seat_sessions
+      WHERE table_id = ${tableId} AND is_active = true
+      ORDER BY seat_number ASC
+      FOR UPDATE
+    `;
+
+    // Map raw results to expected format
+    const activeSessions = activeSessionsRaw.map(row => ({
+      id: row.table_seat_session_id,
+      tableId: row.table_id,
+      walletAddress: row.wallet_address,
+      seatNumber: row.seat_number,
+      tableBalanceGwei: row.table_balance_gwei,
+      twitterHandle: row.twitter_handle,
+      twitterAvatarUrl: row.twitter_avatar_url,
+      joinedAt: row.joined_at,
+      leftAt: row.left_at,
+      isActive: row.is_active,
+    }));
 
     // Filter players who can afford big blind
     const eligiblePlayers = activeSessions.filter(

@@ -49,36 +49,70 @@ export async function standUp(
 
   // Atomic transaction: validate session, move balance, create event, update session
   return await prisma.$transaction(async (tx) => {
-    // 1. Find active session for this player at this table
-    const session = await tx.tableSeatSession.findFirst({
-      where: {
-        walletAddress: normalizedAddress,
-        tableId: input.tableId,
-        isActive: true,
-      },
-      include: {
-        table: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
+    // 1. Find active session for this player at this table with row-level locking
+    // FOR UPDATE prevents race conditions with startHand - if a hand is being created,
+    // we'll wait for that transaction to complete before proceeding
+    const sessionsRaw = await tx.$queryRaw<Array<{
+      table_seat_session_id: number;
+      table_id: number;
+      wallet_address: string;
+      seat_number: number;
+      table_balance_gwei: bigint;
+      twitter_handle: string | null;
+      twitter_avatar_url: string | null;
+      joined_at: Date;
+      left_at: Date | null;
+      is_active: boolean;
+      table_name: string;
+    }>>`
+      SELECT tss.*, pt.name as table_name
+      FROM table_seat_sessions tss
+      JOIN poker_tables pt ON pt.id = tss.table_id
+      WHERE LOWER(tss.wallet_address) = LOWER(${normalizedAddress})
+        AND tss.table_id = ${input.tableId}
+        AND tss.is_active = true
+      LIMIT 1
+      FOR UPDATE OF tss
+    `;
 
-    if (!session) {
+    if (sessionsRaw.length === 0) {
       throw new Error(`No active session found for player at table ${input.tableId}`);
     }
 
-    // 2. Check if there's an active hand on the table
-    const activeHand = await (tx as any).hand.findFirst({
-      where: {
-        tableId: input.tableId,
-        status: {
-          not: 'COMPLETED',
-        },
+    const sessionRow = sessionsRaw[0];
+    const session = {
+      id: sessionRow.table_seat_session_id,
+      tableId: sessionRow.table_id,
+      walletAddress: sessionRow.wallet_address,
+      seatNumber: sessionRow.seat_number,
+      tableBalanceGwei: sessionRow.table_balance_gwei,
+      twitterHandle: sessionRow.twitter_handle,
+      twitterAvatarUrl: sessionRow.twitter_avatar_url,
+      joinedAt: sessionRow.joined_at,
+      leftAt: sessionRow.left_at,
+      isActive: sessionRow.is_active,
+      table: {
+        id: sessionRow.table_id,
+        name: sessionRow.table_name,
       },
-    });
+    };
+
+    // 2. Check if there's an active hand on the table with row-level locking
+    // FOR UPDATE ensures that if startHand is creating a hand right now, we wait
+    // for it to complete before checking if we're in that hand
+    const activeHandsRaw = await tx.$queryRaw<Array<{
+      hand_id: number;
+      status: string;
+    }>>`
+      SELECT hand_id, status
+      FROM hands
+      WHERE table_id = ${input.tableId} AND status != 'COMPLETED'
+      ORDER BY hand_id DESC
+      LIMIT 1
+      FOR UPDATE
+    `;
+
+    const activeHand = activeHandsRaw.length > 0 ? { id: activeHandsRaw[0].hand_id, status: activeHandsRaw[0].status } : null;
 
     // 3. If there's an active hand, verify player has folded
     if (activeHand) {
@@ -97,10 +131,21 @@ export async function standUp(
       }
     }
 
-    // 4. Get current table balance
+    // 4. Revalidate session is still active (defensive check after all locks acquired)
+    // This catches any edge cases where the session state might have changed
+    const revalidatedSession = await tx.tableSeatSession.findUnique({
+      where: { id: session.id },
+      select: { isActive: true },
+    });
+
+    if (!revalidatedSession || !revalidatedSession.isActive) {
+      throw new Error(`Session is no longer active. Stand up may have already been processed.`);
+    }
+
+    // 5. Get current table balance
     const tableBalanceGwei = session.tableBalanceGwei;
 
-    // 5. Add balance back to escrow
+    // 6. Add balance back to escrow
     const existingBalances = await tx.$queryRaw<Array<{ wallet_address: string; balance_gwei: bigint }>>`
       SELECT wallet_address, balance_gwei
       FROM player_escrow_balances
@@ -129,7 +174,7 @@ export async function standUp(
       });
     }
 
-    // 6. Create canonical JSON payload for event
+    // 7. Create canonical JSON payload for event
     const payload = {
       kind: 'leave_table',
       player: normalizedAddress,
@@ -144,10 +189,10 @@ export async function standUp(
     };
     const payloadJson = JSON.stringify(payload);
 
-    // 7. Create "leave_table" event
+    // 8. Create "leave_table" event
     await createEventInTransaction(tx, EventKind.LEAVE_TABLE, payloadJson, normalizedAddress, null);
 
-    // 8. Update session to inactive
+    // 9. Update session to inactive
     const updatedSession = await tx.tableSeatSession.update({
       where: { id: session.id },
       data: {
