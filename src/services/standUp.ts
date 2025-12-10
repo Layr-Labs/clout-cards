@@ -67,7 +67,7 @@ export async function standUp(
     }>>`
       SELECT tss.*, pt.name as table_name
       FROM table_seat_sessions tss
-      JOIN poker_tables pt ON pt.id = tss.table_id
+      JOIN poker_tables pt ON pt.poker_table_id = tss.table_id
       WHERE LOWER(tss.wallet_address) = LOWER(${normalizedAddress})
         AND tss.table_id = ${input.tableId}
         AND tss.is_active = true
