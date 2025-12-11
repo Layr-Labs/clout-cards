@@ -27,6 +27,7 @@
 
 /* Modal container - also pointer-events: none so clicks pass through */
 .hand-settlement-modal {
+  position: relative;
   background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f0f1a 100%);
   border: 2px solid #d4af37;
   border-radius: 16px;
@@ -40,6 +41,38 @@
     0 20px 60px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   pointer-events: none; /* Allow clicks to pass through to table elements */
+}
+
+/* Dismiss button - positioned in upper right corner */
+.hand-settlement-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  pointer-events: auto; /* Make clickable despite parent being pointer-events: none */
+  z-index: 10;
+}
+
+.hand-settlement-dismiss:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+  transform: scale(1.1);
+}
+
+.hand-settlement-dismiss:active {
+  transform: scale(0.95);
 }
 
 /* Title */
@@ -269,6 +302,14 @@
     min-width: unset;
     width: 95vw;
     padding: 16px 20px;
+  }
+
+  .hand-settlement-dismiss {
+    width: 24px;
+    height: 24px;
+    font-size: 1.2rem;
+    top: 6px;
+    right: 6px;
   }
 
   .hand-settlement-title {

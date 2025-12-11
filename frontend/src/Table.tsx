@@ -1,7 +1,7 @@
 import './App.css'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getPokerTables, getTablePlayers, joinTable, standUp, getCurrentHand, watchCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
+import { getPokerTables, getTablePlayers, joinTable, standUp, rebuy, getCurrentHand, watchCurrentHand, playerAction, type PokerTable, type TablePlayer, type CurrentHand } from './services/tables'
 import { Header } from './components/Header'
 import { LoginDialog } from './components/LoginDialog'
 import { BuyInDialog } from './components/BuyInDialog'
@@ -17,7 +17,7 @@ import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
 import type { JoinTableEventPayload, LeaveTableEventPayload } from './utils/animations'
 import { AnimatePresence, motion } from 'framer-motion'
-import { FaComments, FaHistory, FaSignOutAlt } from 'react-icons/fa'
+import { FaComments, FaHistory, FaSignOutAlt, FaPlus, FaWallet } from 'react-icons/fa'
 import { sendChatMessage, type ChatMessage } from './services/chat'
 import { HandHistory } from './components/HandHistory'
 import { HandSettlementModal, type WinnerInfo } from './components/HandSettlementModal'
@@ -167,6 +167,8 @@ function Table() {
   const [isJoining, setIsJoining] = useState(false)
   const [isStandUpConfirmOpen, setIsStandUpConfirmOpen] = useState(false)
   const [isStandingUp, setIsStandingUp] = useState(false)
+  const [isRebuyDialogOpen, setIsRebuyDialogOpen] = useState(false)
+  const [isRebuying, setIsRebuying] = useState(false)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isBetRaiseDialogOpen, setIsBetRaiseDialogOpen] = useState(false)
@@ -1467,6 +1469,58 @@ function Table() {
   }
 
   /**
+   * Checks if the current user needs a rebuy (table balance < big blind)
+   * 
+   * @returns True if the user is seated and their table balance is below the big blind
+   */
+  function needsRebuy(): boolean {
+    const userPlayer = getUserPlayer()
+    if (!userPlayer || !table) {
+      return false
+    }
+    const tableBalance = BigInt(userPlayer.tableBalanceGwei)
+    const bigBlind = BigInt(table.bigBlind)
+    return tableBalance < bigBlind
+  }
+
+  /**
+   * Checks if the current user can afford to rebuy (escrow >= minimum buy-in)
+   * 
+   * @returns True if the user has sufficient escrow balance for a rebuy
+   */
+  function canAffordRebuy(): boolean {
+    if (!table || !escrowBalanceState) {
+      return false
+    }
+    // For rebuy, we only need at least 1 gwei (or whatever minimum makes sense)
+    // The dialog will enforce the actual min/max limits
+    const balanceGwei = BigInt(escrowBalanceGwei)
+    return balanceGwei > 0n
+  }
+
+  /**
+   * Checks if rebuy button should be visible
+   * Player can rebuy when:
+   * - No current hand exists, OR
+   * - Current hand is COMPLETED, OR
+   * - Player is not participating in the current hand, OR
+   * - Player has FOLDED in the current hand
+   * 
+   * @param seatNumber - The seat number to check
+   * @returns True if rebuy button should be visible
+   */
+  function canShowRebuyButton(seatNumber: number): boolean {
+    if (!currentHand) return true
+    if (currentHand.status === 'COMPLETED') return true
+    
+    const handPlayer = getHandPlayerBySeat(seatNumber)
+    if (!handPlayer) return true // Not in the hand
+    if (handPlayer.status === 'FOLDED') return true
+    
+    return false
+  }
+
+  /**
    * Checks if it's the current user's turn to act
    */
   function isUserTurn(): boolean {
@@ -1750,6 +1804,46 @@ function Table() {
     }
   }
 
+  /**
+   * Handles rebuy button click - opens rebuy dialog
+   */
+  function handleRebuyClick() {
+    setIsRebuyDialogOpen(true)
+  }
+
+  /**
+   * Handles rebuy confirmation
+   * 
+   * @param rebuyAmountGwei - The amount to rebuy in gwei (as string)
+   */
+  async function handleRebuyConfirm(rebuyAmountGwei: string) {
+    if (!tableId || !address || !signature) {
+      return
+    }
+
+    setIsRebuying(true)
+
+    try {
+      await rebuy(
+        { tableId, rebuyAmountGwei },
+        address,
+        signature
+      )
+
+      // Close dialog
+      setIsRebuyDialogOpen(false)
+
+      // Refresh escrow balance (will be updated by the hook automatically on next interval,
+      // but we can also trigger it here if needed)
+      // The join_table SSE event will update the player's table balance
+    } catch (error) {
+      console.error('Failed to rebuy:', error)
+      alert(error instanceof Error ? error.message : 'Failed to rebuy. Please try again.')
+    } finally {
+      setIsRebuying(false)
+    }
+  }
+
   return (
     <div className={`app ${isChatOpen ? 'chat-open' : ''}`}>
       {/* Header */}
@@ -1852,6 +1946,7 @@ function Table() {
             communityCards={settlementCommunityCards}
             countdown={handStartCountdown}
             isVisible={showSettlementModal}
+            onDismiss={() => setShowSettlementModal(false)}
           />
 
           {/* Table Closed Overlay - Shown when table is deactivated after hand ends */}
@@ -2032,10 +2127,33 @@ function Table() {
                                 className={`table-seat-stand-up-button ${position.x > 50 ? 'table-seat-stand-up-left' : 'table-seat-stand-up-right'}`}
                                 onClick={handleStandUpClick}
                                 disabled={isStandingUp}
-                                title="Stand up from the table"
+                                title="Stand Up"
                               >
                                 <FaSignOutAlt />
                               </button>
+                            )}
+                          {/* Rebuy Button - show when player needs rebuy and can rebuy */}
+                          {/* Show when: player needs rebuy, can afford it, and is not in an active hand */}
+                          {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && 
+                            needsRebuy() && canShowRebuyButton(seatIndex) && (
+                              canAffordRebuy() ? (
+                                <button
+                                  className={`table-seat-rebuy-button ${position.x > 50 ? 'table-seat-rebuy-left' : 'table-seat-rebuy-right'}`}
+                                  onClick={handleRebuyClick}
+                                  disabled={isRebuying}
+                                  title="Add Chips"
+                                >
+                                  <FaPlus />
+                                </button>
+                              ) : (
+                                <button
+                                  className={`table-seat-deposit-button-seated ${position.x > 50 ? 'table-seat-deposit-left' : 'table-seat-deposit-right'}`}
+                                  onClick={() => navigate('/profile')}
+                                  title="Deposit"
+                                >
+                                  <FaWallet />
+                                </button>
+                              )
                             )}
                           <div className="table-seat-player-info-content">
                             <a
@@ -2248,6 +2366,36 @@ function Table() {
           isLoading={isJoining}
         />
       )}
+
+      {/* Rebuy Dialog */}
+      {table && isUserSeated() && (() => {
+        const userPlayer = getUserPlayer()
+        if (!userPlayer) return null
+        
+        // Calculate maximum rebuy: table max - current balance
+        const currentBalance = BigInt(userPlayer.tableBalanceGwei)
+        const maxBuyIn = BigInt(table.maximumBuyIn)
+        const maxRebuyGwei = (maxBuyIn - currentBalance).toString()
+        
+        // Minimum rebuy: at least 1 gwei (the dialog will handle validation)
+        // Use 1 gwei as minimum since any amount helps
+        const minRebuyGwei = '1'
+        
+        return (
+          <BuyInDialog
+            isOpen={isRebuyDialogOpen}
+            onClose={() => setIsRebuyDialogOpen(false)}
+            onConfirm={handleRebuyConfirm}
+            minimumBuyInGwei={minRebuyGwei}
+            maximumBuyInGwei={maxRebuyGwei}
+            escrowBalanceGwei={escrowBalanceGwei}
+            isLoading={isRebuying}
+            title="Rebuy"
+            confirmButtonText="Add Chips"
+            mode="rebuy"
+          />
+        )
+      })()}
 
       {/* Stand Up Confirmation Dialog */}
       {table && (

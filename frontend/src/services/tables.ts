@@ -527,3 +527,70 @@ export async function updateTableStatus(
   });
 }
 
+/**
+ * Input for rebuying at a table
+ */
+export interface RebuyInput {
+  tableId: number;
+  rebuyAmountGwei: string; // BigInt as string
+}
+
+/**
+ * Response from rebuying at a table
+ */
+export interface RebuyResponse {
+  id: number;
+  tableId: number;
+  walletAddress: string;
+  seatNumber: number;
+  tableBalanceGwei: string;
+  twitterHandle: string | null;
+  twitterAvatarUrl: string | null;
+  joinedAt: string;
+}
+
+/**
+ * Rebuy at a poker table (add more chips from escrow)
+ *
+ * POST /rebuy
+ *
+ * Auth:
+ * - Requires wallet signature authentication
+ *
+ * Request:
+ * - Body: { tableId, rebuyAmountGwei }
+ * - Query params: walletAddress
+ * - Headers: Authorization (signature)
+ *
+ * Response:
+ * - 200: RebuyResponse
+ * - 400: { error: string; message: string } - Invalid request
+ * - 401: { error: string; message: string } - Unauthorized
+ * - 404: { error: string; message: string } - No active session found
+ * - 409: { error: string; message: string } - Conflict (pending withdrawal, active hand)
+ *
+ * Side effects:
+ * - Deducts rebuy amount from player's escrow balance
+ * - Updates table seat session balance
+ * - Creates join_table event (with isRebuy flag)
+ *
+ * @param input - Rebuy parameters
+ * @param walletAddress - User's wallet address
+ * @param signature - Session signature
+ * @returns Promise that resolves to the updated session
+ * @throws {Error} If the request fails
+ */
+export async function rebuy(
+  input: RebuyInput,
+  walletAddress: string,
+  signature: string
+): Promise<RebuyResponse> {
+  return apiClient<RebuyResponse>('/rebuy', {
+    method: 'POST',
+    requireAuth: true,
+    signature,
+    walletAddress,
+    body: JSON.stringify(input),
+  });
+}
+

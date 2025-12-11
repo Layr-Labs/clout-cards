@@ -28,6 +28,7 @@ import { startContractListener } from './services/contractListener';
 import { prisma } from './db/client';
 import { joinTable } from './services/joinTable';
 import { standUp } from './services/standUp';
+import { rebuy } from './services/rebuy';
 import { foldAction, callAction, checkAction, betAction, raiseAction, allInAction } from './services/playerAction';
 import { getCurrentHandResponse } from './services/currentHand';
 import { sendErrorResponse, ValidationError, ConflictError, NotFoundError, AppError } from './utils/errorHandler';
@@ -1180,6 +1181,116 @@ app.post('/standUp', requireWalletAuth({ addressSource: 'query' }), async (req: 
     res.status(200).json(serializeTableSeatSession(session));
   } catch (error) {
     sendErrorResponse(res, error, 'Failed to stand up');
+  }
+});
+
+/**
+ * POST /rebuy
+ *
+ * Allows a seated player to add more chips to their table balance from escrow.
+ *
+ * Auth:
+ * - Requires wallet signature authentication via requireWalletAuth middleware
+ *
+ * Request:
+ * - Body: {
+ *     tableId: number,        // Table ID where player is seated
+ *     rebuyAmountGwei: string // Amount to add in gwei
+ *   }
+ * - Query params:
+ *   - walletAddress: string (Ethereum address - must match connected wallet)
+ * - Headers:
+ *   - Authorization: Bearer <signature> (session signature)
+ *
+ * Response:
+ * - 200: {
+ *     id: number,
+ *     tableId: number,
+ *     walletAddress: string,
+ *     seatNumber: number,
+ *     tableBalanceGwei: string,
+ *     twitterHandle: string | null,
+ *     twitterAvatarUrl: string | null,
+ *     joinedAt: string
+ *   }
+ *
+ * Error model:
+ * - 400: { error: "Invalid request"; message: string } - Invalid parameters or validation failure
+ * - 401: { error: "Unauthorized"; message: string } - Invalid or missing authentication
+ * - 404: { error: "Not found"; message: string } - No active session or table not found
+ * - 409: { error: "Conflict"; message: string } - Pending withdrawal or active hand participation
+ * - 500: { error: "Failed to rebuy"; message: string } - Server error
+ *
+ * Side effects:
+ * - Creates a join_table event in the database (with isRebuy flag)
+ * - Deducts rebuy amount from player's escrow balance
+ * - Updates table seat session balance (atomic transaction)
+ * - Fails if user has pending withdrawal
+ * - Fails if user is participating in an active hand
+ *
+ * @param {Request} req - Express request object with walletAddress attached
+ * @param {Response} res - Express response object
+ *
+ * @returns {void} Sends response directly via res.json()
+ */
+app.post('/rebuy', requireWalletAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const walletAddress = (req as Request & { walletAddress: string }).walletAddress;
+    const { tableId, rebuyAmountGwei } = req.body;
+
+    // Validate request body
+    if (tableId === undefined || !rebuyAmountGwei) {
+      throw new ValidationError('tableId and rebuyAmountGwei are required');
+    }
+
+    // Validate types
+    const tableIdNum = validateTableId(tableId);
+    const rebuyAmountGweiBigInt = BigInt(rebuyAmountGwei);
+
+    if (rebuyAmountGweiBigInt <= 0n) {
+      throw new ValidationError('rebuyAmountGwei must be greater than 0');
+    }
+
+    // Process the rebuy
+    const session = await rebuy(walletAddress, {
+      tableId: tableIdNum,
+      rebuyAmountGwei: rebuyAmountGweiBigInt,
+    });
+
+    res.status(200).json({
+      id: session.id,
+      tableId: session.tableId,
+      walletAddress: session.walletAddress,
+      seatNumber: session.seatNumber,
+      tableBalanceGwei: session.tableBalanceGwei.toString(),
+      twitterHandle: session.twitterHandle,
+      twitterAvatarUrl: session.twitterAvatarUrl,
+      joinedAt: session.joinedAt.toISOString(),
+    });
+  } catch (error) {
+    // Map service errors to appropriate HTTP status codes
+    if (error instanceof Error && !(error instanceof AppError)) {
+      if (error.message.includes('pending withdrawal') ||
+          error.message.includes('active hand')) {
+        sendErrorResponse(res, new ConflictError(error.message), 'Failed to rebuy');
+        return;
+      }
+      
+      if (error.message.includes('Insufficient escrow') ||
+          error.message.includes('exceeds maximum')) {
+        sendErrorResponse(res, new ValidationError(error.message), 'Failed to rebuy');
+        return;
+      }
+      
+      if (error.message.includes('No active session') ||
+          error.message.includes('not found') ||
+          error.message.includes('not active')) {
+        sendErrorResponse(res, new NotFoundError(error.message), 'Failed to rebuy');
+        return;
+      }
+    }
+    
+    sendErrorResponse(res, error, 'Failed to rebuy');
   }
 });
 

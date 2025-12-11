@@ -2840,6 +2840,198 @@
   display: none;
 }
 
+/* Rebuy Button - compact icon button positioned opposite of stand up button */
+.table-seat-rebuy-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 50%, #4ade80 100%);
+  color: #ffffff;
+  border: 2px solid #22c55e;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 
+    0 0 10px rgba(34, 197, 94, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  animation: rebuyButtonFadeIn 1s ease-in forwards;
+  z-index: 10;
+}
+
+/* Position rebuy button outside the stand up button (further from info box) */
+/* For left-side seats (info extends right): stand up is on RIGHT, rebuy is even further RIGHT */
+.table-seat-rebuy-button.table-seat-rebuy-right {
+  right: -52px; /* 16px (stand up offset) + 32px (stand up width) + 4px (gap) */
+  left: auto;
+}
+
+/* For right-side seats (info extends left): stand up is on LEFT, rebuy is even further LEFT */
+.table-seat-rebuy-button.table-seat-rebuy-left {
+  left: -52px; /* 16px (stand up offset) + 32px (stand up width) + 4px (gap) */
+  right: auto;
+}
+
+@keyframes rebuyButtonFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.table-seat-rebuy-button::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 70%
+  );
+  transform: rotate(45deg);
+  transition: all 0.5s ease;
+  opacity: 0;
+}
+
+.table-seat-rebuy-button:hover:not(:disabled)::before {
+  opacity: 1;
+  animation: shimmer 1.5s infinite;
+}
+
+.table-seat-rebuy-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #22c55e 0%, #4ade80 50%, #86efac 100%);
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 
+    0 0 20px rgba(34, 197, 94, 0.8),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: #4ade80;
+}
+
+.table-seat-rebuy-button:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.95);
+  box-shadow: 
+    0 0 10px rgba(34, 197, 94, 0.5),
+    0 1px 4px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.table-seat-rebuy-button:disabled {
+  background: rgba(100, 100, 100, 0.3);
+  color: rgba(200, 200, 200, 0.5);
+  cursor: not-allowed;
+  box-shadow: none;
+  border: 1px solid rgba(100, 100, 100, 0.3);
+  transform: none;
+  text-shadow: none;
+}
+
+.table-seat-rebuy-button:disabled::before {
+  display: none;
+}
+
+/* Deposit Button (for seated players who need to rebuy but can't afford it) */
+.table-seat-deposit-button-seated {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, #ca8a04 0%, #eab308 50%, #facc15 100%);
+  color: #ffffff;
+  border: 2px solid #eab308;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 
+    0 0 10px rgba(234, 179, 8, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  animation: depositButtonFadeIn 1s ease-in forwards;
+  z-index: 10;
+}
+
+/* Position deposit button same as rebuy button (outside the stand up button) */
+.table-seat-deposit-button-seated.table-seat-deposit-right {
+  right: -52px; /* Same as rebuy button */
+  left: auto;
+}
+
+.table-seat-deposit-button-seated.table-seat-deposit-left {
+  left: -52px; /* Same as rebuy button */
+  right: auto;
+}
+
+@keyframes depositButtonFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.table-seat-deposit-button-seated::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 70%
+  );
+  transform: rotate(45deg);
+  transition: all 0.5s ease;
+  opacity: 0;
+}
+
+.table-seat-deposit-button-seated:hover::before {
+  opacity: 1;
+  animation: shimmer 1.5s infinite;
+}
+
+.table-seat-deposit-button-seated:hover {
+  background: linear-gradient(135deg, #eab308 0%, #facc15 50%, #fde047 100%);
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 
+    0 0 20px rgba(234, 179, 8, 0.8),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-color: #facc15;
+}
+
+.table-seat-deposit-button-seated:active {
+  transform: translateY(-50%) scale(0.95);
+  box-shadow: 
+    0 0 10px rgba(234, 179, 8, 0.5),
+    0 1px 4px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
 
 /* Community Cards - Center of Table */
 .table-community-cards {
@@ -3559,6 +3751,36 @@
 
   .table-seat-stand-up-button.table-seat-stand-up-left {
     left: -13px;
+  }
+
+  /* Rebuy button - smaller on mobile */
+  .table-seat-rebuy-button {
+    width: 26px;
+    height: 26px;
+    font-size: 0.7rem;
+  }
+
+  .table-seat-rebuy-button.table-seat-rebuy-right {
+    right: -43px; /* 13px (stand up offset) + 26px (stand up width) + 4px (gap) */
+  }
+
+  .table-seat-rebuy-button.table-seat-rebuy-left {
+    left: -43px; /* 13px (stand up offset) + 26px (stand up width) + 4px (gap) */
+  }
+
+  /* Deposit button (seated) - smaller on mobile */
+  .table-seat-deposit-button-seated {
+    width: 26px;
+    height: 26px;
+    font-size: 0.7rem;
+  }
+
+  .table-seat-deposit-button-seated.table-seat-deposit-right {
+    right: -43px; /* Same as rebuy button */
+  }
+
+  .table-seat-deposit-button-seated.table-seat-deposit-left {
+    left: -43px; /* Same as rebuy button */
   }
 }
 

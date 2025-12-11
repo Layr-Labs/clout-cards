@@ -9,6 +9,13 @@ import { useState, useEffect } from 'react';
 import './BuyInDialog.css';
 
 /**
+ * Mode of operation for the dialog
+ * - 'buyin': Initial buy-in when joining a table
+ * - 'rebuy': Adding more chips while already seated
+ */
+export type BuyInDialogMode = 'buyin' | 'rebuy';
+
+/**
  * Props for BuyInDialog component
  */
 export interface BuyInDialogProps {
@@ -41,6 +48,18 @@ export interface BuyInDialogProps {
    * Whether the buy-in action is in progress
    */
   isLoading?: boolean;
+  /**
+   * Dialog title (default: "Buy In")
+   */
+  title?: string;
+  /**
+   * Confirm button text (default: "Join Table" for buyin, "Add Chips" for rebuy)
+   */
+  confirmButtonText?: string;
+  /**
+   * Mode of operation (default: 'buyin')
+   */
+  mode?: BuyInDialogMode;
 }
 
 /**
@@ -58,6 +77,9 @@ export function BuyInDialog({
   maximumBuyInGwei,
   escrowBalanceGwei,
   isLoading = false,
+  title,
+  confirmButtonText,
+  mode = 'buyin',
 }: BuyInDialogProps) {
   const minGwei = BigInt(minimumBuyInGwei);
   const maxGwei = BigInt(maximumBuyInGwei);
@@ -138,11 +160,16 @@ export function BuyInDialog({
   const isAtMinimum = buyInGwei === minGwei;
   const isAtMaximum = buyInGwei === effectiveMaxGwei;
   
+  // Determine display text based on mode
+  const displayTitle = title || (mode === 'rebuy' ? 'Rebuy' : 'Buy In');
+  const displayConfirmText = confirmButtonText || (mode === 'rebuy' ? 'Add Chips' : 'Join Table');
+  const loadingText = mode === 'rebuy' ? 'Adding...' : 'Joining...';
+  
   return (
     <div className="dialog-overlay-base buy-in-dialog-overlay" onClick={onClose}>
       <div className="dialog-content-base buy-in-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header-base buy-in-dialog-header">
-          <h2 className="dialog-title-base">Buy In</h2>
+          <h2 className="dialog-title-base">{displayTitle}</h2>
           <button 
             className="dialog-close-base buy-in-dialog-close"
             onClick={onClose}
@@ -234,7 +261,7 @@ export function BuyInDialog({
             onClick={handleConfirm}
             disabled={isLoading || !canAfford}
           >
-            {isLoading ? 'Joining...' : 'Join Table'}
+            {isLoading ? loadingText : displayConfirmText}
           </button>
         </div>
       </div>

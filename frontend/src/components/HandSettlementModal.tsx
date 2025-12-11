@@ -59,6 +59,8 @@ export interface HandSettlementModalProps {
   countdown: number | null
   /** Whether the modal is visible */
   isVisible: boolean
+  /** Optional callback to dismiss the modal early */
+  onDismiss?: () => void
 }
 
 /**
@@ -75,6 +77,7 @@ export function HandSettlementModal({
   communityCards,
   countdown,
   isVisible,
+  onDismiss,
 }: HandSettlementModalProps) {
   // Group winners by pot number for display
   const mainPotWinners = winners.filter((w) => w.potNumber === 0)
@@ -105,6 +108,17 @@ export function HandSettlementModal({
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
           >
+            {/* Dismiss Button */}
+            {onDismiss && (
+              <button
+                className="hand-settlement-dismiss"
+                onClick={onDismiss}
+                aria-label="Dismiss modal"
+              >
+                ×
+              </button>
+            )}
+
             {/* Title */}
             <div className="hand-settlement-title">{getTitle()}</div>
 
