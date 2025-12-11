@@ -2728,43 +2728,43 @@
   flex-direction: column;
 }
 
-/* Stand Up Button - red casino glimmer style */
+/* Stand Up Button - compact icon button positioned at far edge of info box */
 .table-seat-stand-up-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   background: linear-gradient(135deg, #dc2626 0%, #ef4444 50%, #f87171 100%);
   color: #ffffff;
   border: 2px solid #ef4444;
-  border-radius: 8px;
-  padding: 8px 20px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0.85rem;
   cursor: pointer;
-  white-space: nowrap;
-  min-height: 36px;
   box-shadow: 
     0 0 10px rgba(239, 68, 68, 0.5),
     0 2px 8px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  margin-top: 20px;
-  margin-left: auto; /* Push to right edge by default (left-side seats) */
-  margin-right: -20px; /* Negative margin to align with info box right edge */
-  position: relative;
   overflow: hidden;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1.2;
   opacity: 0;
   animation: standUpButtonFadeIn 1s ease-in forwards;
-  z-index: 5; /* Above hole cards (z-index: 3) */
+  z-index: 10; /* Above info box and settlement modal */
 }
 
-/* Left-align for right-side seats (info box extends left) */
-.table-seat-player-info-right .table-seat-stand-up-button {
-  margin-left: -20px; /* Negative margin to align with info box left edge */
-  margin-right: auto; /* Push to left edge */
+/* Position at the RIGHT edge of info box (for left-side seats where info extends right) */
+.table-seat-stand-up-button.table-seat-stand-up-right {
+  right: -16px; /* Half button width outside the info box right edge */
+  left: auto;
+}
+
+/* Position at the LEFT edge of info box (for right-side seats where info extends left) */
+.table-seat-stand-up-button.table-seat-stand-up-left {
+  left: -16px; /* Half button width outside the info box left edge */
+  right: auto;
 }
 
 @keyframes standUpButtonFadeIn {
@@ -2810,7 +2810,7 @@
 
 .table-seat-stand-up-button:hover:not(:disabled) {
   background: linear-gradient(135deg, #ef4444 0%, #f87171 50%, #fca5a5 100%);
-  transform: translateY(-2px);
+  transform: translateY(-50%) scale(1.1); /* Keep centered, scale up slightly */
   box-shadow: 
     0 0 20px rgba(239, 68, 68, 0.8),
     0 4px 12px rgba(0, 0, 0, 0.4),
@@ -2819,7 +2819,7 @@
 }
 
 .table-seat-stand-up-button:active:not(:disabled) {
-  transform: translateY(0);
+  transform: translateY(-50%) scale(0.95); /* Keep centered, scale down slightly */
   box-shadow: 
     0 0 10px rgba(239, 68, 68, 0.5),
     0 1px 4px rgba(0, 0, 0, 0.3),
@@ -3142,6 +3142,48 @@
   }
   100% {
     opacity: 1;
+  }
+}
+
+/* Card fold/toss animation - cards fly toward center and fade out */
+.table-seat-cards-folding {
+  animation: cardsFoldToss 0.6s ease-in forwards;
+  pointer-events: none; /* Prevent interaction during animation */
+}
+
+/* Override the base card animation for folding cards - must be visible to animate out */
+.table-seat-cards-folding .card {
+  opacity: 1 !important; /* Override base opacity: 0 */
+  animation: cardFoldSpin 0.6s ease-in forwards !important; /* Override cardFadeIn */
+}
+
+.table-seat-cards-folding .card:nth-child(2) {
+  animation-delay: 0.05s !important;
+}
+
+@keyframes cardsFoldToss {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  40% {
+    opacity: 0.9;
+    transform: translateX(-50%) translateY(-20px) scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-50px) scale(0.6);
+  }
+}
+
+@keyframes cardFoldSpin {
+  0% {
+    opacity: 1;
+    transform: rotate(0deg) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-20deg) translateY(-30px);
   }
 }
 
@@ -3506,16 +3548,17 @@
 
   /* Stand up button - smaller on mobile */
   .table-seat-stand-up-button {
-    padding: 5px 12px;
-    font-size: 0.65rem;
-    border-radius: 5px;
-    min-height: 28px;
-    margin-top: 12px;
-    letter-spacing: 0.5px;
+    width: 26px;
+    height: 26px;
+    font-size: 0.7rem;
   }
 
-  .table-seat-avatar-with-standup .table-seat-player-info-content {
-    padding-top: 45px;
+  .table-seat-stand-up-button.table-seat-stand-up-right {
+    right: -13px;
+  }
+
+  .table-seat-stand-up-button.table-seat-stand-up-left {
+    left: -13px;
   }
 }
 

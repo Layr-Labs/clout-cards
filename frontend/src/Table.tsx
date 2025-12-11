@@ -17,9 +17,11 @@ import { useTableEvents } from './hooks/useTableEvents'
 import type { TableEvent } from './utils/eventQueue'
 import type { JoinTableEventPayload, LeaveTableEventPayload } from './utils/animations'
 import { AnimatePresence, motion } from 'framer-motion'
-import { FaComments, FaHistory } from 'react-icons/fa'
+import { FaComments, FaHistory, FaSignOutAlt } from 'react-icons/fa'
 import { sendChatMessage, type ChatMessage } from './services/chat'
 import { HandHistory } from './components/HandHistory'
+import { HandSettlementModal, type WinnerInfo } from './components/HandSettlementModal'
+import type { Card as CardType } from './services/tables'
 
 /**
  * Balance display component with count-up animation
@@ -173,6 +175,7 @@ function Table() {
   const [animatingBalance, setAnimatingBalance] = useState<{ seatNumber: number; targetAmount: string; animateFromZero?: boolean } | null>(null)
   const [joiningSeats, setJoiningSeats] = useState<Set<number>>(new Set())
   const [leavingSeats, setLeavingSeats] = useState<Set<number>>(new Set())
+  const [foldingSeats, setFoldingSeats] = useState<Set<number>>(new Set())
   const [actionAnimation, setActionAnimation] = useState<{
     actionType: 'BET' | 'RAISE' | 'CALL' | 'ALL_IN' | 'CHECK' | 'FOLD'
     playerAvatarUrl: string | null
@@ -190,6 +193,12 @@ function Table() {
   const [winnerSeats, setWinnerSeats] = useState<Set<number>>(new Set())
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const countdownDisplayTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Settlement modal state - shows winner info after hand completes
+  const [showSettlementModal, setShowSettlementModal] = useState(false)
+  const [settlementWinners, setSettlementWinners] = useState<WinnerInfo[]>([])
+  const [settlementCommunityCards, setSettlementCommunityCards] = useState<CardType[]>([])
+  const settlementModalTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -320,17 +329,20 @@ function Table() {
               if (remaining > 0) {
                 console.log('[Table] loadTableData: starting countdown from initial load', { remaining, delaySeconds })
                 
-                // Set up countdown (same logic as hand_end handler)
+                // Set up countdown for the settlement modal
+                // Note: On page reload, we don't have winner data, so we show the modal
+                // with just the countdown (no winner details). This is acceptable since
+                // reloading mid-settlement is an edge case.
                 setHandStartCountdown(remaining)
-                
-                // Show countdown immediately since this is a page reload
-                setShowCountdown(true)
                 setShowTableClosed(false)
                 
                 // Clear any existing interval
                 if (countdownIntervalRef.current) {
                   clearInterval(countdownIntervalRef.current)
                 }
+                
+                // Show settlement modal immediately (will only have countdown, no winner data)
+                setShowSettlementModal(true)
                 
                 // Update countdown every second
                 countdownIntervalRef.current = setInterval(() => {
@@ -343,13 +355,7 @@ function Table() {
                       clearInterval(countdownIntervalRef.current)
                       countdownIntervalRef.current = null
                     }
-                    // Trigger exit animation
-                    setCountdownExiting(true)
-                    setTimeout(() => {
-                      setHandStartCountdown(null)
-                      setShowCountdown(false)
-                      setCountdownExiting(false)
-                    }, 500)
+                    // Don't hide immediately - hand_start will dismiss the modal
                   }
                 }, 1000) as any
               }
@@ -495,7 +501,7 @@ function Table() {
     }
   }, [currentHand?.pots])
 
-  // Cleanup countdown interval and timeout on unmount
+  // Cleanup countdown interval, timeout, and settlement modal timeout on unmount
   useEffect(() => {
     return () => {
       if (countdownIntervalRef.current) {
@@ -505,6 +511,10 @@ function Table() {
       if (countdownDisplayTimeoutRef.current) {
         clearTimeout(countdownDisplayTimeoutRef.current)
         countdownDisplayTimeoutRef.current = null
+      }
+      if (settlementModalTimeoutRef.current) {
+        clearTimeout(settlementModalTimeoutRef.current)
+        settlementModalTimeoutRef.current = null
       }
     }
   }, [])
@@ -683,6 +693,15 @@ function Table() {
           if (countdownDisplayTimeoutRef.current) {
             clearTimeout(countdownDisplayTimeoutRef.current)
             countdownDisplayTimeoutRef.current = null
+          }
+          
+          // Dismiss settlement modal
+          setShowSettlementModal(false)
+          setSettlementWinners([])
+          setSettlementCommunityCards([])
+          if (settlementModalTimeoutRef.current) {
+            clearTimeout(settlementModalTimeoutRef.current)
+            settlementModalTimeoutRef.current = null
           }
           
           // Show "NEW HAND" message animation
@@ -893,6 +912,21 @@ function Table() {
             setTimeout(() => {
               setActionAnimation(null)
             }, 1500)
+            
+            // Trigger card fold/toss animation for FOLD actions
+            if (actionType === 'FOLD' && actionData?.seatNumber !== undefined) {
+              const foldingSeatNumber = actionData.seatNumber as number
+              setFoldingSeats((prev) => new Set(prev).add(foldingSeatNumber))
+              
+              // Clear folding state after animation completes (~600ms)
+              setTimeout(() => {
+                setFoldingSeats((prev) => {
+                  const next = new Set(prev)
+                  next.delete(foldingSeatNumber)
+                  return next
+                })
+              }, 600)
+            }
           }
           
           // Update table balances using standardized playerBalances field
@@ -907,11 +941,17 @@ function Table() {
             if (!prev) return prev
 
             // Update player status and chips committed
+            // For FOLD actions, explicitly set status to FOLDED (in case actionData.status is missing)
             const updatedPlayers = prev.players.map((p) => {
               if (p.walletAddress.toLowerCase() === playerWalletAddress) {
+                // Determine the new status - use FOLDED for fold actions explicitly
+                const newStatus = actionType === 'FOLD' 
+                  ? 'FOLDED' 
+                  : (actionData?.status || p.status)
+                
                 return {
                   ...p,
-                  status: actionData?.status || p.status,
+                  status: newStatus as 'ACTIVE' | 'FOLDED' | 'ALL_IN',
                   chipsCommitted: actionData?.chipsCommitted?.toString() || p.chipsCommitted,
                 }
               }
@@ -981,6 +1021,50 @@ function Table() {
           })
           setWinnerSeats(allWinnerSeats)
 
+          // Build settlement modal data - winners with their info
+          // We need to look up twitter info from the existing players state (seat sessions)
+          // since the event payload doesn't include twitter info
+          setPlayers((currentPlayers) => {
+            const winners: WinnerInfo[] = []
+            potsData.forEach((pot: any) => {
+              const winnerSeatNumbers = pot.winnerSeatNumbers || pot.eligibleSeatNumbers || []
+              const potAmount = pot.amount?.toString() || '0'
+              // Split pot amount evenly among winners of this pot
+              const amountPerWinner = winnerSeatNumbers.length > 0 
+                ? (BigInt(potAmount) / BigInt(winnerSeatNumbers.length)).toString()
+                : potAmount
+              
+              winnerSeatNumbers.forEach((seatNum: number) => {
+                // Get hand data from event payload (hole cards, hand rank)
+                const payloadPlayer = playersData.find((p: any) => p.seatNumber === seatNum)
+                // Get twitter info from existing players state (seat sessions)
+                const seatPlayer = currentPlayers.find((p) => p.seatNumber === seatNum)
+                
+                if (payloadPlayer) {
+                  winners.push({
+                    seatNumber: seatNum,
+                    twitterHandle: seatPlayer?.twitterHandle || null,
+                    twitterAvatarUrl: seatPlayer?.twitterAvatarUrl || null,
+                    holeCards: payloadPlayer.holeCards || [],
+                    handRankName: payloadPlayer.handRankName || null,
+                    amountWon: formatEth(amountPerWinner),
+                    potNumber: pot.potNumber,
+                  })
+                }
+              })
+            })
+            setSettlementWinners(winners)
+            return currentPlayers // Don't modify players state
+          })
+          
+          // Store community cards for settlement modal (get from current hand state)
+          setCurrentHand((prev) => {
+            if (prev) {
+              setSettlementCommunityCards(prev.communityCards || [])
+            }
+            return prev
+          })
+
           // Clear any existing interval and timeout
           if (countdownIntervalRef.current) {
             clearInterval(countdownIntervalRef.current)
@@ -989,6 +1073,10 @@ function Table() {
           if (countdownDisplayTimeoutRef.current) {
             clearTimeout(countdownDisplayTimeoutRef.current)
             countdownDisplayTimeoutRef.current = null
+          }
+          if (settlementModalTimeoutRef.current) {
+            clearTimeout(settlementModalTimeoutRef.current)
+            settlementModalTimeoutRef.current = null
           }
 
           // Refetch table data to get latest isActive status (in case table was deactivated during the hand)
@@ -1018,11 +1106,11 @@ function Table() {
                   : 30 // Default 30 seconds
                 const targetTime = completedAt.getTime() + (delaySeconds * 1000)
                 
-                // Hide countdown initially
+                // Hide old countdown overlay (we use the settlement modal now)
                 setShowCountdown(false)
                 setShowTableClosed(false)
                 
-                // Update countdown immediately (but don't show yet)
+                // Update countdown immediately (passed to settlement modal)
                 const updateCountdown = () => {
                   const now = Date.now()
                   const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000))
@@ -1033,14 +1121,7 @@ function Table() {
                       clearInterval(countdownIntervalRef.current)
                       countdownIntervalRef.current = null
                     }
-                    // Trigger exit animation
-                    setCountdownExiting(true)
-                    // Hide after animation completes (0.5s)
-                    setTimeout(() => {
-                      setHandStartCountdown(null)
-                      setShowCountdown(false)
-                      setCountdownExiting(false)
-                    }, 500)
+                    // Don't hide immediately - hand_start will dismiss the modal
                   }
                 }
                 
@@ -1049,15 +1130,15 @@ function Table() {
                 // Update every second
                 countdownIntervalRef.current = setInterval(updateCountdown, 1000) as any
                 
-                // Delay showing the countdown overlay by 3 seconds
-                countdownDisplayTimeoutRef.current = setTimeout(() => {
-                  setShowCountdown(true)
-                }, 3000) as any
+                // Show settlement modal after 1.5s (to let cards reveal first)
+                settlementModalTimeoutRef.current = setTimeout(() => {
+                  setShowSettlementModal(true)
+                }, 1500) as any
               }
             }
           }).catch((error) => {
             console.error('[Table] Failed to refetch table data after hand_end:', error)
-            // Fall back to showing countdown with existing table data
+            // Fall back to showing settlement modal with existing table data
             if (handData?.completedAt) {
               const completedAt = new Date(handData.completedAt)
               const delaySeconds = (tableData?.handStartDelaySeconds && tableData.handStartDelaySeconds > 0)
@@ -1078,20 +1159,16 @@ function Table() {
                     clearInterval(countdownIntervalRef.current)
                     countdownIntervalRef.current = null
                   }
-                  setCountdownExiting(true)
-                  setTimeout(() => {
-                    setHandStartCountdown(null)
-                    setShowCountdown(false)
-                    setCountdownExiting(false)
-                  }, 500)
+                  // Don't hide immediately - hand_start will dismiss the modal
                 }
               }
               
               updateCountdown()
               countdownIntervalRef.current = setInterval(updateCountdown, 1000) as any
-              countdownDisplayTimeoutRef.current = setTimeout(() => {
-                setShowCountdown(true)
-              }, 3000) as any
+              // Show settlement modal after 1.5s
+              settlementModalTimeoutRef.current = setTimeout(() => {
+                setShowSettlementModal(true)
+              }, 1500) as any
             }
           })
 
@@ -1769,19 +1846,13 @@ function Table() {
             </div>
           )}
 
-          {/* Hand Start Countdown Overlay - Centered over Community Cards */}
-          {showCountdown && handStartCountdown !== null && (
-            <div className={`table-action-overlay countdown-overlay ${countdownExiting ? 'countdown-exiting' : ''}`}>
-              <div className="table-action-overlay-content">
-                <div className="table-action-overlay-action">
-                  NEW HAND IN
-                </div>
-                <div className="table-action-overlay-amount">
-                  {handStartCountdown > 0 ? `${handStartCountdown}s` : '0s'}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Hand Settlement Modal - Shows winner info and countdown after hand ends */}
+          <HandSettlementModal
+            winners={settlementWinners}
+            communityCards={settlementCommunityCards}
+            countdown={handStartCountdown}
+            isVisible={showSettlementModal}
+          />
 
           {/* Table Closed Overlay - Shown when table is deactivated after hand ends */}
           {showTableClosed && (
@@ -1817,7 +1888,7 @@ function Table() {
                         seatRefs.current.delete(seatIndex)
                       }
                     }}
-                      className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''} ${isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && (!currentHand || currentHand.status === 'COMPLETED' || !getHandPlayerBySeat(seatIndex)) ? 'table-seat-avatar-with-standup' : ''}`}
+                      className={`table-seat-avatar ${joiningSeats.has(seatIndex) ? 'joining' : ''} ${leavingSeats.has(seatIndex) ? 'leaving' : ''}`}
                     style={{
                       left: `${position.x}%`,
                       top: `${position.y}%`,
@@ -1880,8 +1951,33 @@ function Table() {
                           const handPlayer = getHandPlayerBySeat(seatIndex)
                           const isAuthorizedPlayer = address && player.walletAddress.toLowerCase() === address.toLowerCase()
                           const isHandEnded = currentHand.status === 'COMPLETED'
+                          const isFolding = foldingSeats.has(seatIndex)
                           
                           if (!handPlayer) return null
+                          
+                          // Show fold animation when player is folding (cards toss away)
+                          if (isFolding) {
+                            // Show actual cards for authorized player, card backs for others
+                            if (isAuthorizedPlayer && handPlayer.holeCards) {
+                              return (
+                                <div className="table-seat-cards table-seat-cards-folding">
+                                  {handPlayer.holeCards.map((card, idx) => (
+                                    <Card
+                                      key={idx}
+                                      suit={card.suit}
+                                      rank={card.rank}
+                                    />
+                                  ))}
+                                </div>
+                              )
+                            }
+                            return (
+                              <div className="table-seat-cards table-seat-cards-folding">
+                                <Card isBack={true} />
+                                <Card isBack={true} />
+                              </div>
+                            )
+                          }
                           
                           // After hand ends, show hole cards for all non-folded players
                           if (isHandEnded && handPlayer.holeCards && handPlayer.status !== 'FOLDED') {
@@ -1928,6 +2024,19 @@ function Table() {
                         
                         {/* Player Info Box */}
                         <div className={`table-seat-player-info ${position.x > 50 ? 'table-seat-player-info-right' : ''} ${isSeatTurn(seatIndex) ? 'table-seat-player-info-turn' : ''} ${winnerSeats.has(seatIndex) ? 'table-seat-winner-bounce' : ''}`}>
+                          {/* Stand Up Button - positioned at far edge of info box */}
+                          {/* Show when: no active hand, hand completed, player not in current hand, or player has folded */}
+                          {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && 
+                            (!currentHand || currentHand.status === 'COMPLETED' || !getHandPlayerBySeat(seatIndex) || getHandPlayerBySeat(seatIndex)?.status === 'FOLDED') && (
+                              <button
+                                className={`table-seat-stand-up-button ${position.x > 50 ? 'table-seat-stand-up-left' : 'table-seat-stand-up-right'}`}
+                                onClick={handleStandUpClick}
+                                disabled={isStandingUp}
+                                title="Stand up from the table"
+                              >
+                                <FaSignOutAlt />
+                              </button>
+                            )}
                           <div className="table-seat-player-info-content">
                             <a
                               href={`https://twitter.com/${player.twitterHandle.replace('@', '')}`}
@@ -1946,19 +2055,6 @@ function Table() {
                               />
                             )}
                           </div>
-                          {/* Stand Up Button - outside content, aligned to player-info edges */}
-                          {/* Show when: no active hand, hand completed, or player not in current hand (joined mid-hand or can't afford blinds) */}
-                          {isFullyLoggedIn && isUserSeated() && getUserPlayer()?.seatNumber === seatIndex && 
-                            (!currentHand || currentHand.status === 'COMPLETED' || !getHandPlayerBySeat(seatIndex)) && (
-                              <button
-                                className="table-seat-stand-up-button"
-                                onClick={handleStandUpClick}
-                                disabled={isStandingUp}
-                                title="Stand up from the table"
-                              >
-                                Stand Up
-                              </button>
-                            )}
                         </div>
                       </>
                     ) : (

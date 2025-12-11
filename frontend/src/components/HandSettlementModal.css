@@ -1,0 +1,341 @@
+/**
+ * Hand Settlement Modal Styles
+ *
+ * Styling for the post-hand settlement modal that displays winner info,
+ * community cards, hole cards, and countdown to next hand.
+ *
+ * Design principles:
+ * - Dark theme with gold accents (matches existing poker table theme)
+ * - Semi-transparent backdrop to show table beneath
+ * - Responsive sizing for different screen sizes
+ * - Clear visual hierarchy for winner info
+ */
+
+/* Backdrop - semi-transparent overlay that allows clicks to pass through */
+.hand-settlement-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none; /* Allow clicks to pass through to table elements */
+}
+
+/* Modal container - also pointer-events: none so clicks pass through */
+.hand-settlement-modal {
+  background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f0f1a 100%);
+  border: 2px solid #d4af37;
+  border-radius: 16px;
+  padding: 24px 32px;
+  min-width: 380px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 
+    0 0 40px rgba(212, 175, 55, 0.3),
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  pointer-events: none; /* Allow clicks to pass through to table elements */
+}
+
+/* Title */
+.hand-settlement-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #d4af37;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  margin-bottom: 20px;
+  text-shadow: 0 2px 8px rgba(212, 175, 55, 0.5);
+}
+
+/* Winners container */
+.hand-settlement-winners {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* Individual winner row */
+.hand-settlement-winner-row {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+/* Pot label (for split/side pots) */
+.hand-settlement-pot-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+/* Winner content layout */
+.hand-settlement-winner-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Winner info (avatar + details) */
+.hand-settlement-winner-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 180px;
+}
+
+/* Avatar */
+.hand-settlement-winner-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #d4af37;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
+}
+
+.hand-settlement-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hand-settlement-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d4af37;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+/* Winner details (handle + hand rank) */
+.hand-settlement-winner-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hand-settlement-winner-handle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1da1f2;
+}
+
+.hand-settlement-winner-hand-rank {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+/* Winner's hole cards - scale to ~0.4x of base card (48px width) */
+.hand-settlement-winner-hole-cards {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.hand-settlement-winner-hole-cards .card {
+  width: 48px;
+  height: 67px;
+  border-radius: 6px;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.hand-settlement-winner-hole-cards .card:hover {
+  transform: none;
+}
+
+.hand-settlement-winner-hole-cards .card-front {
+  padding: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.hand-settlement-winner-hole-cards .card-corner {
+  font-size: 0.44rem;
+  line-height: 1;
+}
+
+.hand-settlement-winner-hole-cards .card-suit {
+  font-size: 0.56rem;
+  line-height: 1;
+}
+
+.hand-settlement-winner-hole-cards .card-center {
+  padding: 3px;
+}
+
+.hand-settlement-winner-hole-cards .card-rank-center {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+/* Amount won */
+.hand-settlement-winner-amount {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #4ade80;
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.4);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Community cards section */
+.hand-settlement-community {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.hand-settlement-community-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.hand-settlement-community-cards {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* Community cards - scale to ~0.45x of base card (54px width) */
+.hand-settlement-community-cards .card {
+  width: 54px;
+  height: 76px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.hand-settlement-community-cards .card:hover {
+  transform: none;
+}
+
+.hand-settlement-community-cards .card-front {
+  padding: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.hand-settlement-community-cards .card-corner {
+  font-size: 0.5rem;
+  line-height: 1;
+}
+
+.hand-settlement-community-cards .card-suit {
+  font-size: 0.63rem;
+  line-height: 1;
+}
+
+.hand-settlement-community-cards .card-center {
+  padding: 4px;
+}
+
+.hand-settlement-community-cards .card-rank-center {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+/* Countdown */
+.hand-settlement-countdown {
+  text-align: center;
+  font-size: 1rem;
+  color: #888;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .hand-settlement-modal {
+    min-width: unset;
+    width: 95vw;
+    padding: 16px 20px;
+  }
+
+  .hand-settlement-title {
+    font-size: 1.4rem;
+    letter-spacing: 2px;
+  }
+
+  .hand-settlement-winner-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .hand-settlement-winner-info {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .hand-settlement-winner-amount {
+    margin-left: 0;
+    width: 100%;
+    text-align: right;
+  }
+
+  /* Smaller cards on mobile */
+  .hand-settlement-winner-hole-cards .card {
+    width: 40px;
+    height: 56px;
+    border-radius: 5px;
+  }
+
+  .hand-settlement-winner-hole-cards .card-front {
+    padding: 2px;
+  }
+
+  .hand-settlement-winner-hole-cards .card-corner {
+    font-size: 0.38rem;
+  }
+
+  .hand-settlement-winner-hole-cards .card-suit {
+    font-size: 0.48rem;
+  }
+
+  .hand-settlement-winner-hole-cards .card-rank-center {
+    font-size: 1.3rem;
+  }
+
+  .hand-settlement-community-cards .card {
+    width: 44px;
+    height: 62px;
+    border-radius: 5px;
+  }
+
+  .hand-settlement-community-cards .card-front {
+    padding: 3px;
+  }
+
+  .hand-settlement-community-cards .card-corner {
+    font-size: 0.42rem;
+  }
+
+  .hand-settlement-community-cards .card-suit {
+    font-size: 0.52rem;
+  }
+
+  .hand-settlement-community-cards .card-rank-center {
+    font-size: 1.4rem;
+  }
+}
+
