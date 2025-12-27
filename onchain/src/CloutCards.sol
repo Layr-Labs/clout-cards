@@ -124,6 +124,13 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
         uint256 nonce
     );
 
+    /**
+     * @dev Emitted when ETH is added to the contract via trueUp (without crediting any player)
+     * @param sender The address that sent the ETH
+     * @param amount The amount of ETH added (in wei)
+     */
+    event TrueUp(address indexed sender, uint256 amount);
+
 
     ///////////////////////////////////////////////////////////////////////////
     // 4) Storage Variables
@@ -289,6 +296,33 @@ contract CloutCards is Initializable, UUPSUpgradeable, OwnableUpgradeable, EIP71
      */
     receive() external payable {
         _depositFor(msg.sender);
+    }
+
+    /**
+     * @dev Adds ETH to the contract without emitting a Deposited event or crediting any player balance.
+     *
+     * This function is used to "true up" the contract's ETH balance to match the expected
+     * escrow liabilities when there's a shortfall (e.g., due to missed withdrawal events
+     * that allowed over-withdrawals). It allows anyone to donate ETH to make the casino solvent.
+     *
+     * Requirements:
+     * - msg.value > 0
+     *
+     * Effects:
+     * - Increases contract ETH balance by msg.value
+     * - Does NOT update any player's balance mapping
+     * - Does NOT emit Deposited event (to avoid backend processing it as a player deposit)
+     *
+     * Errors:
+     * - {ZeroDeposit} - If msg.value is zero
+     *
+     * Emits:
+     * - {TrueUp}
+     */
+    function trueUp() external payable {
+        uint256 amount = msg.value;
+        if (amount == 0) revert ZeroDeposit();
+        emit TrueUp(msg.sender, amount);
     }
 
     ///////////////////////////////////////////////////////////////////////////
