@@ -332,7 +332,8 @@ async function upgradeProxy(
   const artifact = getContractArtifact('CloutCards');
   const proxy = new ethers.Contract(proxyAddress, artifact.abi, wallet);
   
-  const tx = await proxy.upgradeTo(newImplementationAddress);
+  // UUPS proxies use upgradeToAndCall - pass empty data for no initialization call
+  const tx = await proxy.upgradeToAndCall(newImplementationAddress, '0x');
   console.log(`   Transaction hash: ${tx.hash}`);
   console.log('   Waiting for upgrade...');
   
