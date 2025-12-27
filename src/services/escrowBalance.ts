@@ -171,6 +171,26 @@ export async function addEscrowBalance(
 }
 
 /**
+ * Counts the number of executed withdrawals for a player
+ *
+ * Used to verify sync with contract nonce before signing new withdrawals.
+ * The contract's nonce equals the total number of successful withdrawals,
+ * so if our count doesn't match the contract's nonce, we've missed events.
+ *
+ * @param walletAddress - Ethereum wallet address
+ * @returns Number of withdrawal_executed events for this player
+ */
+export async function countExecutedWithdrawals(walletAddress: string): Promise<number> {
+  const normalizedAddress = walletAddress.toLowerCase();
+  return prisma.event.count({
+    where: {
+      player: normalizedAddress,
+      kind: 'withdrawal_executed',
+    },
+  });
+}
+
+/**
  * Processes a withdrawal execution event
  *
  * This function is called when a WithdrawalExecuted() event is detected from the contract.

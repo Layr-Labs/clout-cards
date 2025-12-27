@@ -2166,6 +2166,12 @@ app.post('/signEscrowWithdrawal', requireWalletAuth({ addressSource: 'query' }),
         sendErrorResponse(res, new ValidationError(error.message), 'Invalid withdrawal amount');
         return;
       }
+
+      // Handle nonce mismatch / blockchain sync errors
+      if (error.message.includes('syncing with the blockchain')) {
+        sendErrorResponse(res, new ConflictError(error.message), 'Withdrawal sync required');
+        return;
+      }
     }
     
     sendErrorResponse(res, error, 'Failed to sign withdrawal');

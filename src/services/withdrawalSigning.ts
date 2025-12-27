@@ -9,7 +9,7 @@
 import { ethers } from 'ethers';
 import { getStringEnv, isProduction } from '../config/env';
 import { withEvent, EventKind } from '../db/events';
-import { getEscrowBalanceWithWithdrawal } from './escrowBalance';
+import { getEscrowBalanceWithWithdrawal, countExecutedWithdrawals } from './escrowBalance';
 import { createCloutCardsFunctionsContract, getContractAddress } from '../utils/contract';
 import { prisma } from '../db/client';
 
@@ -97,6 +97,18 @@ export async function signEscrowWithdrawal(
   } catch (error) {
     console.error('Error calling computeWithdrawDigest:', error);
     throw new Error(`Failed to compute withdrawal digest: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  // Verify we haven't missed any WithdrawalExecuted events
+  // Contract nonce = total successful withdrawals for this player
+  // If our DB count doesn't match, we've missed events and should NOT sign
+  const executedCount = await countExecutedWithdrawals(normalizedAddress);
+  if (nonce !== BigInt(executedCount)) {
+    console.error(`❌ Nonce mismatch for ${normalizedAddress}: contract nonce=${nonce}, db withdrawal_executed count=${executedCount}`);
+    console.error(`   This indicates missed WithdrawalExecuted events. Refusing to sign until synced.`);
+    throw new Error(
+      'Withdrawal temporarily unavailable. The system is syncing with the blockchain. Please try again in a few minutes.'
+    );
   }
 
   // Create payload JSON for the withdrawal request event
