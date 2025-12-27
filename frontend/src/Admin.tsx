@@ -7,7 +7,7 @@ import { Header } from './components/Header'
 import { formatAddress } from './utils/formatAddress'
 import { JsonViewerDialog } from './components/JsonViewerDialog'
 import { getEvents, type Event } from './services/events'
-import { isAdmin, resetLeaderboard, getAccountingSolvency, type SolvencyResult } from './services/admin'
+import { isAdmin, resetLeaderboard, getAccountingSolvency, reprocessEvents, type SolvencyResult, type ReprocessEventsResult } from './services/admin'
 import { AddTableDialog } from './components/AddTableDialog'
 import { TableSessionsDialog } from './components/TableSessionsDialog'
 import { createTable, getPokerTables, updateTableStatus, type PokerTable } from './services/tables'
@@ -43,6 +43,13 @@ function Admin() {
   // Actions tab state
   const [isResetLeaderboardDialogOpen, setIsResetLeaderboardDialogOpen] = useState(false)
   const [isResettingLeaderboard, setIsResettingLeaderboard] = useState(false)
+  // Reprocess events state
+  const [reprocessFromBlock, setReprocessFromBlock] = useState('')
+  const [reprocessToBlock, setReprocessToBlock] = useState('')
+  const [reprocessDryRun, setReprocessDryRun] = useState(true)
+  const [isReprocessing, setIsReprocessing] = useState(false)
+  const [reprocessResult, setReprocessResult] = useState<ReprocessEventsResult | null>(null)
+  const [reprocessError, setReprocessError] = useState<string | null>(null)
   // Accounting tab state
   const [solvencyData, setSolvencyData] = useState<SolvencyResult | null>(null)
   const [isLoadingSolvency, setIsLoadingSolvency] = useState(false)
@@ -261,6 +268,59 @@ function Admin() {
       alert(error instanceof Error ? error.message : 'Failed to reset leaderboard')
     } finally {
       setIsResettingLeaderboard(false)
+    }
+  }
+
+  /**
+   * Handles reprocessing contract events from a block range
+   * Used to catch up on missed deposit/withdrawal events
+   */
+  async function handleReprocessEvents() {
+    if (!address || !signature) {
+      return
+    }
+
+    // Validate fromBlock
+    const fromBlockNum = parseInt(reprocessFromBlock, 10)
+    if (isNaN(fromBlockNum) || fromBlockNum < 0) {
+      setReprocessError('From Block must be a non-negative integer')
+      return
+    }
+
+    // Validate toBlock if provided
+    let toBlockNum: number | undefined
+    if (reprocessToBlock.trim()) {
+      toBlockNum = parseInt(reprocessToBlock, 10)
+      if (isNaN(toBlockNum) || toBlockNum < 0) {
+        setReprocessError('To Block must be a non-negative integer')
+        return
+      }
+      if (toBlockNum < fromBlockNum) {
+        setReprocessError('To Block must be greater than or equal to From Block')
+        return
+      }
+    }
+
+    setIsReprocessing(true)
+    setReprocessError(null)
+    setReprocessResult(null)
+
+    try {
+      const result = await reprocessEvents(
+        {
+          fromBlock: fromBlockNum,
+          toBlock: toBlockNum,
+          dryRun: reprocessDryRun,
+        },
+        signature,
+        address
+      )
+      setReprocessResult(result)
+    } catch (error) {
+      console.error('Failed to reprocess events:', error)
+      setReprocessError(error instanceof Error ? error.message : 'Failed to reprocess events')
+    } finally {
+      setIsReprocessing(false)
     }
   }
 
@@ -579,6 +639,165 @@ function Admin() {
 
                         {/* Actions List */}
                         <div className="admin-actions-list">
+                          {/* Reprocess Events Action */}
+                          <div className="admin-action-card">
+                            <div className="admin-action-card-header">
+                              <h3 className="admin-action-card-title">Reprocess Contract Events</h3>
+                            </div>
+                            <div className="admin-action-card-body">
+                              <p className="admin-action-card-description">
+                                Query the blockchain for Deposited and WithdrawalExecuted events 
+                                from a specific block range. Use this to catch up on missed events 
+                                after server downtime or to recover from sync issues.
+                              </p>
+                              
+                              <div className="admin-reprocess-form">
+                                <div className="admin-reprocess-inputs">
+                                  <div className="admin-reprocess-input-group">
+                                    <label htmlFor="fromBlock">From Block *</label>
+                                    <input
+                                      id="fromBlock"
+                                      type="number"
+                                      min="0"
+                                      value={reprocessFromBlock}
+                                      onChange={(e) => setReprocessFromBlock(e.target.value)}
+                                      placeholder="e.g. 12345678"
+                                      className="admin-reprocess-input"
+                                      disabled={isReprocessing}
+                                    />
+                                  </div>
+                                  <div className="admin-reprocess-input-group">
+                                    <label htmlFor="toBlock">To Block (optional)</label>
+                                    <input
+                                      id="toBlock"
+                                      type="number"
+                                      min="0"
+                                      value={reprocessToBlock}
+                                      onChange={(e) => setReprocessToBlock(e.target.value)}
+                                      placeholder="latest"
+                                      className="admin-reprocess-input"
+                                      disabled={isReprocessing}
+                                    />
+                                  </div>
+                                </div>
+                                
+                                <div className="admin-reprocess-checkbox">
+                                  <input
+                                    id="dryRun"
+                                    type="checkbox"
+                                    checked={reprocessDryRun}
+                                    onChange={(e) => setReprocessDryRun(e.target.checked)}
+                                    disabled={isReprocessing}
+                                  />
+                                  <label htmlFor="dryRun">
+                                    Dry Run (preview changes without applying them)
+                                  </label>
+                                </div>
+
+                                <button
+                                  className="admin-action-button admin-action-button-primary"
+                                  onClick={handleReprocessEvents}
+                                  disabled={isReprocessing || !reprocessFromBlock.trim()}
+                                >
+                                  {isReprocessing ? 'Processing...' : 'Reprocess Events'}
+                                </button>
+                              </div>
+
+                              {/* Error display */}
+                              {reprocessError && (
+                                <div className="admin-reprocess-error">
+                                  {reprocessError}
+                                </div>
+                              )}
+
+                              {/* Results display */}
+                              {reprocessResult && (
+                                <div className="admin-reprocess-results">
+                                  <div className="admin-reprocess-results-header">
+                                    <span className={`admin-reprocess-status ${reprocessResult.success ? 'success' : 'error'}`}>
+                                      {reprocessResult.success ? '✓ Completed' : '✗ Failed'}
+                                    </span>
+                                    {reprocessResult.dryRun && (
+                                      <span className="admin-reprocess-dry-run-badge">DRY RUN</span>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="admin-reprocess-summary">
+                                    <div className="admin-reprocess-summary-row">
+                                      <span>Block Range:</span>
+                                      <span>{reprocessResult.fromBlock.toLocaleString()} - {reprocessResult.toBlock.toLocaleString()}</span>
+                                    </div>
+                                    <div className="admin-reprocess-summary-row">
+                                      <span>Deposits:</span>
+                                      <span>
+                                        <span className="admin-reprocess-count-processed">{reprocessResult.depositsProcessed} processed</span>
+                                        {reprocessResult.depositsSkipped > 0 && (
+                                          <span className="admin-reprocess-count-skipped">, {reprocessResult.depositsSkipped} skipped</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <div className="admin-reprocess-summary-row">
+                                      <span>Withdrawals:</span>
+                                      <span>
+                                        <span className="admin-reprocess-count-processed">{reprocessResult.withdrawalsProcessed} processed</span>
+                                        {reprocessResult.withdrawalsSkipped > 0 && (
+                                          <span className="admin-reprocess-count-skipped">, {reprocessResult.withdrawalsSkipped} skipped</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    {reprocessResult.errors > 0 && (
+                                      <div className="admin-reprocess-summary-row admin-reprocess-summary-errors">
+                                        <span>Errors:</span>
+                                        <span>{reprocessResult.errors}</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Event details table */}
+                                  {reprocessResult.events.length > 0 && (
+                                    <div className="admin-reprocess-events">
+                                      <h4>Event Details</h4>
+                                      <table className="admin-reprocess-events-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Type</th>
+                                            <th>Block</th>
+                                            <th>Player</th>
+                                            <th>Amount (ETH)</th>
+                                            <th>Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {reprocessResult.events.map((event, idx) => (
+                                            <tr key={`${event.txHash}-${idx}`}>
+                                              <td>
+                                                <span className={`admin-reprocess-event-type admin-reprocess-event-type-${event.type}`}>
+                                                  {event.type === 'deposit' ? '💰 Deposit' : '💸 Withdrawal'}
+                                                </span>
+                                              </td>
+                                              <td>{event.blockNumber.toLocaleString()}</td>
+                                              <td className="admin-reprocess-event-player">
+                                                {event.player.slice(0, 6)}...{event.player.slice(-4)}
+                                              </td>
+                                              <td>{(Number(event.amountGwei) / 1e9).toFixed(6)}</td>
+                                              <td>
+                                                <span className={`admin-reprocess-event-status admin-reprocess-event-status-${event.status}`}>
+                                                  {event.status === 'processed' ? '✓' : event.status === 'skipped' ? '⏭️' : '✗'}
+                                                  {' '}{event.status}
+                                                  {event.reason && ` (${event.reason})`}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
                           {/* Reset Leaderboard Action */}
                           <div className="admin-action-card">
                             <div className="admin-action-card-header">

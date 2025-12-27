@@ -991,6 +991,98 @@ app.post('/admin/leaderboard/reset', requireAdminAuth({ addressSource: 'query' }
 });
 
 /**
+ * POST /admin/reprocessEvents
+ *
+ * Reprocesses contract events (Deposited, WithdrawalExecuted) from a specified block range.
+ * Used to catch up on missed events after server downtime or to recover from sync issues.
+ * Requires admin authentication.
+ *
+ * Auth:
+ * - Requires admin signature authentication via requireAdminAuth middleware
+ *
+ * Request:
+ * - Query params:
+ *   - adminAddress: string (required) - Admin wallet address for auth
+ * - Body:
+ *   - fromBlock: number (required) - Starting block number (inclusive)
+ *   - toBlock: number (optional) - Ending block number (inclusive), defaults to latest
+ *   - dryRun: boolean (optional) - If true, preview what would be processed without changes
+ *
+ * Response:
+ * - 200: {
+ *     success: boolean,
+ *     fromBlock: number,
+ *     toBlock: number,
+ *     dryRun: boolean,
+ *     depositsProcessed: number,
+ *     depositsSkipped: number,
+ *     withdrawalsProcessed: number,
+ *     withdrawalsSkipped: number,
+ *     errors: number,
+ *     events: Array<{
+ *       type: 'deposit' | 'withdrawal',
+ *       txHash: string,
+ *       blockNumber: number,
+ *       player: string,
+ *       amountGwei: string,
+ *       nonce?: string,
+ *       status: 'processed' | 'skipped' | 'error',
+ *       reason?: string
+ *     }>
+ *   }
+ *
+ * Error model:
+ * - 400: { error: string; message: string } - Invalid parameters
+ * - 401: { error: string; message: string } - Unauthorized (not admin)
+ * - 500: { error: string; message: string } - RPC or processing error
+ *
+ * Side effects:
+ * - When not dry run: updates escrow balances and creates event records for missed events
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ */
+app.post('/admin/reprocessEvents', requireAdminAuth({ addressSource: 'query' }), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { fromBlock, toBlock, dryRun } = req.body;
+
+    // Validate fromBlock
+    if (fromBlock === undefined) {
+      throw new ValidationError('fromBlock is required');
+    }
+
+    const fromBlockNum = parseInt(String(fromBlock), 10);
+    if (isNaN(fromBlockNum) || fromBlockNum < 0) {
+      throw new ValidationError('fromBlock must be a non-negative integer');
+    }
+
+    // Validate toBlock if provided
+    let toBlockNum: number | undefined;
+    if (toBlock !== undefined) {
+      toBlockNum = parseInt(String(toBlock), 10);
+      if (isNaN(toBlockNum) || toBlockNum < 0) {
+        throw new ValidationError('toBlock must be a non-negative integer');
+      }
+      if (toBlockNum < fromBlockNum) {
+        throw new ValidationError('toBlock must be greater than or equal to fromBlock');
+      }
+    }
+
+    // Validate dryRun
+    const isDryRun = dryRun === true || dryRun === 'true';
+
+    // Import and call the reprocess function
+    const { reprocessEventsFromBlock } = await import('./services/contractListener');
+
+    const result = await reprocessEventsFromBlock(fromBlockNum, toBlockNum, isDryRun);
+
+    res.status(200).json(result);
+  } catch (error) {
+    sendErrorResponse(res, error, 'Failed to reprocess events');
+  }
+});
+
+/**
  * POST /joinTable
  *
  * Allows a fully authenticated user to join a poker table at a specific seat.

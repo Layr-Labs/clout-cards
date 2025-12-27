@@ -179,3 +179,102 @@ export async function getAccountingSolvency(
   });
 }
 
+/**
+ * Result of a single event reprocess attempt
+ */
+export interface ReprocessedEvent {
+  /** Event type */
+  type: 'deposit' | 'withdrawal';
+  /** Transaction hash */
+  txHash: string;
+  /** Block number */
+  blockNumber: number;
+  /** Player wallet address */
+  player: string;
+  /** Amount in gwei */
+  amountGwei: string;
+  /** Withdrawal nonce (only for withdrawals) */
+  nonce?: string;
+  /** Processing status */
+  status: 'processed' | 'skipped' | 'error';
+  /** Reason for skip or error */
+  reason?: string;
+}
+
+/**
+ * Result of reprocessing events from a block range
+ */
+export interface ReprocessEventsResult {
+  /** Whether the operation succeeded */
+  success: boolean;
+  /** Starting block number that was queried */
+  fromBlock: number;
+  /** Ending block number that was queried */
+  toBlock: number;
+  /** Whether this was a dry run */
+  dryRun: boolean;
+  /** Number of deposits that were processed */
+  depositsProcessed: number;
+  /** Number of deposits that were skipped (already processed) */
+  depositsSkipped: number;
+  /** Number of withdrawals that were processed */
+  withdrawalsProcessed: number;
+  /** Number of withdrawals that were skipped (already processed) */
+  withdrawalsSkipped: number;
+  /** Number of errors encountered */
+  errors: number;
+  /** List of individual event results */
+  events: ReprocessedEvent[];
+}
+
+/**
+ * Input for reprocessing events
+ */
+export interface ReprocessEventsInput {
+  /** Starting block number (inclusive) */
+  fromBlock: number;
+  /** Ending block number (inclusive), defaults to latest if not provided */
+  toBlock?: number;
+  /** If true, preview what would be processed without making changes */
+  dryRun: boolean;
+}
+
+/**
+ * Reprocesses contract events (Deposited, WithdrawalExecuted) from a specified block range
+ *
+ * POST /admin/reprocessEvents
+ *
+ * Auth:
+ * - Requires admin signature authentication
+ *
+ * Request:
+ * - Query params: adminAddress
+ * - Headers: Authorization (signature)
+ * - Body: { fromBlock: number, toBlock?: number, dryRun: boolean }
+ *
+ * Response:
+ * - 200: ReprocessEventsResult
+ * - 400: Invalid parameters
+ * - 401: Unauthorized
+ * - 500: Server error
+ *
+ * @param input - Reprocess input parameters
+ * @param signature - Admin session signature
+ * @param adminAddress - Admin wallet address
+ * @returns Promise that resolves to the reprocess result
+ * @throws {Error} If the request fails
+ */
+export async function reprocessEvents(
+  input: ReprocessEventsInput,
+  signature: string,
+  adminAddress: string
+): Promise<ReprocessEventsResult> {
+  return apiClient<ReprocessEventsResult>('/admin/reprocessEvents', {
+    method: 'POST',
+    requireAuth: true,
+    signature,
+    adminAddress,
+    body: JSON.stringify(input),
+  });
+}
+
